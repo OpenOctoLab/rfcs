@@ -2,9 +2,9 @@
 
 
 
-OpenOcto Standards Group (OOSG)                                 S. Yang
-Request for Comments: 0004                                         HFUT
-Category: Standards Track                                September 2026
+OpenOcto Standards Group (OOSG)                                  S. Yang
+Request for Comments: 0004                                          HFUT
+Category: Standards Track                                 September 2026
 
 
                     Octopus Control Protocol (OCP)
@@ -19,7 +19,7 @@ Abstract
    sessions, remote procedure calls, publish/subscribe and a byte-stream
    tunnel, together with one OPTIONAL top-layer transform: compression.
    Authentication is OPTIONAL: the initiator names one method of any
-   kind and the responder either accepts it or fails.  The protocol is
+   kind and the responder either accepts it or fails. The protocol is
    general purpose: its core names no machine, no transport and no
    implementation, and what a peer offers is carried by profiles and by
    descriptors.  Cryptographic protection is deliberately not part of
@@ -41,8 +41,8 @@ Status of This Memo
    Internet Standard and is not a candidate for any level of Internet
    Standard.  Distribution of this document is unlimited.
 
-   Information about the current status of this document, any errata
-   and how to provide feedback on it may be obtained from the OOSG.
+   Information about the current status of this document, any errata and
+   how to provide feedback on it may be obtained from the OOSG.
 
 Copyright Notice
 
@@ -86,8 +86,8 @@ Table of Contents
      5.8.  TUNDATA
      5.9.  TUNSTAT
      5.10. BYE
-     5.11. ACK
-     5.12. ERROR
+     5.11. ERROR
+     5.12. ACK
    6.  Session Establishment and Lifetime
      6.1.  Session Flag Negotiation
      6.2.  Optional Authentication
@@ -120,6 +120,10 @@ Table of Contents
      9.1.  Core Profile
      9.2.  Bus Profile
      9.3.  Topic Namespaces
+       9.3.1.  The Registry
+       9.3.2.  Publishers
+       9.3.3.  Assignment
+       9.3.4.  Using the Topics
    10. Service Primitives
      10.1. Remote Procedure Call
      10.2. Publish and Subscribe
@@ -222,28 +226,28 @@ Table of Contents
    Every frame begins with a sixteen-octet header.  The structure of
    the header is shown in Table 1.
 
-   +=======+=======+============+=====================================+
-   |Offset |Length |Field       |Description                          |
-   +=======+=======+============+=====================================+
-   |0      |3      |magic       |The octets 0x4F 0x43 0x50 ("OCP")    |
-   +-------+-------+------------+-------------------------------------+
-   |3      |1      |version     |Protocol version; 0x01 in this       |
-   |       |       |            |document                             |
-   +-------+-------+------------+-------------------------------------+
-   |4      |1      |type        |Message type (Section 5)             |
-   +-------+-------+------------+-------------------------------------+
-   |5      |1      |flags       |Flag bits (Section 3.2)              |
-   +-------+-------+------------+-------------------------------------+
-   |6      |2      |header_len  |Total length in octets of the       |
-   |       |       |            |header; 0x0010 for the header of     |
-   |       |       |            |this document (Section 3.8)          |
-   +-------+-------+------------+-------------------------------------+
-   |8      |4      |seq         |Sequence number, unsigned 32-bit     |
-   |       |       |            |(Section 3.4)                        |
-   +-------+-------+------------+-------------------------------------+
-   |12     |4      |payload_len |Length in octets of the payload as   |
-   |       |       |            |transmitted                          |
-   +-------+-------+------------+-------------------------------------+
+   +=======+=======+============+======================================+
+   |Offset |Length |Field       |Description                           |
+   +=======+=======+============+======================================+
+   |0      |3      |magic       |The octets 0x4F 0x43 0x50 ("OCP")     |
+   +-------+-------+------------+--------------------------------------+
+   |3      |1      |version     |Protocol version; 0x01 in this        |
+   |       |       |            |document                              |
+   +-------+-------+------------+--------------------------------------+
+   |4      |1      |type        |Message type (Section 5)              |
+   +-------+-------+------------+--------------------------------------+
+   |5      |1      |flags       |Flag bits (Section 3.2)               |
+   +-------+-------+------------+--------------------------------------+
+   |6      |2      |header_len  |Total length in octets of the header; |
+   |       |       |            |0x0010 for the header of this document|
+   |       |       |            |(Section 3.8)                         |
+   +-------+-------+------------+--------------------------------------+
+   |8      |4      |seq         |Sequence number, unsigned 32-bit      |
+   |       |       |            |(Section 3.4)                         |
+   +-------+-------+------------+--------------------------------------+
+   |12     |4      |payload_len |Length in octets of the payload as    |
+   |       |       |            |transmitted                           |
+   +-------+-------+------------+--------------------------------------+
 
                          Table 1: Frame Header
 
@@ -267,17 +271,17 @@ Table of Contents
 
    The flag bits defined by this document are listed in Table 2.
 
-   +=====+======+===========+=========================================+
-   |Bit  |Name  |Scope      |Meaning                                  |
-   +=====+======+===========+=========================================+
-   |0x01 |F_ACK |per-frame  |The sender requests acknowledgement      |
-   |     |      |           |(datagram transports; Section 7.2).      |
-   +-----+------+-----------+-----------------------------------------+
-   |0x02 |F_COMP|session    |The payload is compressed (Section 3.5). |
-   +-----+------+-----------+-----------------------------------------+
-   |0x04 |F_AUTH|session    |This session is authenticated            |
-   |     |      |           |(Section 6.2).                           |
-   +-----+------+-----------+-----------------------------------------+
+   +=====+======+===========+==========================================+
+   |Bit  |Name  |Scope      |Meaning                                   |
+   +=====+======+===========+==========================================+
+   |0x01 |F_ACK |per-frame  |The sender requests acknowledgement       |
+   |     |      |           |(datagram transports; Section 7.2).       |
+   +-----+------+-----------+------------------------------------------+
+   |0x02 |F_COMP|session    |The payload is compressed (Section 3.5).  |
+   +-----+------+-----------+------------------------------------------+
+   |0x04 |F_AUTH|session    |This session is authenticated             |
+   |     |      |           |(Section 6.2).                            |
+   +-----+------+-----------+------------------------------------------+
 
                            Table 2: Flag Bits
 
@@ -289,17 +293,17 @@ Table of Contents
 
    Bits 0x08 and above are not assigned here: they belong to the
    extensions of Section 3.8, of which [RFC0009] assigns the first
-   three.  A session that uses that document reads the flag octet as
-   one set of six bits.
+   three.  A session that uses that document reads the flag octet as one
+   set of six bits.
 
 3.3.  Limits and Negotiation
 
    Each endpoint states the largest payload it can receive in HELLO and
    WELCOME; the effective limit is the smaller of the two values, with
    a default of 1048576 octets.  A frame whose payload exceeds the
-   effective limit MUST be rejected with E_PAYLOAD_TOO_LARGE.  The
-   count is of payload octets only: neither the header nor a trailer
-   added by an extension of Section 3.8 is counted.
+   effective limit MUST be rejected with E_PAYLOAD_TOO_LARGE.  The count
+   is of payload octets only: neither the header nor a trailer added by
+   an extension of Section 3.8 is counted.
 
    On a stream transport, frames are delimited solely by "payload_len";
    there MUST be no padding between frames.  On a datagram transport,
@@ -325,11 +329,11 @@ Table of Contents
 3.5.  Compression
 
    When F_COMP is set, the payload is the compressed form of the CBOR
-   value, produced with the compression algorithm agreed for the
-   session (Section 3.6).  Compression is OPTIONAL per frame; an
-   endpoint MAY compress only payloads that benefit from it.  A payload
-   that cannot be decompressed with the agreed algorithm MUST be
-   rejected with E_DECOMPRESS.
+   value, produced with the compression algorithm agreed for the session
+   (Section 3.6).  Compression is OPTIONAL per frame; an endpoint MAY
+   compress only payloads that benefit from it.  A payload that cannot
+   be decompressed with the agreed algorithm MUST be rejected with
+   E_DECOMPRESS.
 
    Compression is applied before the primitives of [RFC0009] when those
    are used, so what they protect is the compressed octets.
@@ -338,33 +342,32 @@ Table of Contents
 
    Compression takes an algorithm, named by a short string that the
    endpoints agree when the session is established (Section 6.1).  This
-   document specifies the negotiation, not a set of algorithms: any
-   name MAY be agreed by two endpoints that implement it, and the list
-   below is an example.  The name listed is the one used by default.
+   document specifies the negotiation, not a set of algorithms: any name
+   MAY be agreed by two endpoints that implement it, and the list below
+   is an example.  The name listed is the one used by default.
 
    Some typical compression algorithms are shown in Table 3.
 
-   +============+=====================================================+
-   |Name        |Method                                               |
-   +============+=====================================================+
-   |zstd        |Zstandard [IETF-RFC8878]; default                    |
-   +------------+-----------------------------------------------------+
-   |deflate     |zlib "deflate" [IETF-RFC1950]                        |
-   +------------+-----------------------------------------------------+
-   |raw-deflate |"deflate" stream without a wrapper [IETF-RFC1951]    |
-   +------------+-----------------------------------------------------+
+   +============+======================================================+
+   |Name        |Method                                                |
+   +============+======================================================+
+   |zstd        |Zstandard [IETF-RFC8878]; default                     |
+   +------------+------------------------------------------------------+
+   |deflate     |zlib "deflate" [IETF-RFC1950]                         |
+   +------------+------------------------------------------------------+
+   |raw-deflate |"deflate" stream without a wrapper [IETF-RFC1951]     |
+   +------------+------------------------------------------------------+
 
                     Table 3: Compression Algorithms
 
    Names are compared as exact strings and are not registered: an
-   endpoint MAY offer any name it implements, and the responder
-   confirms a name only when it implements the same one with the same
-   parameters.  The parameters a name implies MUST be known to both
-   endpoints before the name is offered.  A name defined outside this
-   document SHOULD begin with "x-" while it is experimental.  Two
-   endpoints that implement the same name differently MUST NOT agree
-   on it; such a name is treated as one the responder does not
-   implement.
+   endpoint MAY offer any name it implements, and the responder confirms
+   a name only when it implements the same one with the same parameters.
+   The parameters a name implies MUST be known to both endpoints before
+   the name is offered.  A name defined outside this document SHOULD
+   begin with "x-" while it is experimental.  Two endpoints that
+   implement the same name differently MUST NOT agree on it; such a name
+   is treated as one the responder does not implement.
 
    An endpoint offers the algorithms it is willing to use in the "algs"
    member of HELLO, most preferred first; the responder states the
@@ -375,31 +378,31 @@ Table of Contents
 
       "algs": {"comp": "zstd"}
 
-   The member and its key are OPTIONAL.  An absent "comp" key means
-   that the endpoint offers only the default, that is, "zstd"; an empty
-   array means that it offers none.  A name an endpoint does not
-   recognise MUST be ignored in an offer and MUST NOT be confirmed.
+   The member and its key are OPTIONAL.  An absent "comp" key means that
+   the endpoint offers only the default, that is, "zstd"; an empty array
+   means that it offers none.  A name an endpoint does not recognise
+   MUST be ignored in an offer and MUST NOT be confirmed.
 
    When the responder implements none of the algorithms offered, the
    F_COMP flag is not agreed and compression is not used.
 
    An endpoint MUST NOT apply an algorithm it did not offer, and MUST
    NOT apply one that WELCOME did not confirm.  A receiver that detects
-   such a frame rejects it with E_UNSUPPORTED, or with E_DECOMPRESS
-   when the mismatch is only visible while the payload is decoded.
+   such a frame rejects it with E_UNSUPPORTED, or with E_DECOMPRESS when
+   the mismatch is only visible while the payload is decoded.
 
-   [RFC0009] adds the keys "enc", "itg" and "ztr" to the same member
-   and specifies the algorithms they name.  An endpoint that does not
-   implement that document ignores those keys in an offer, as it
-   ignores any key it does not define.
+   [RFC0009] adds the keys "enc", "itg" and "ztr" to the same member and
+   specifies the algorithms they name.  An endpoint that does not
+   implement that document ignores those keys in an offer, as it ignores
+   any key it does not define.
 
 3.7.  Streaming Parse
 
-   On a stream transport a receiver accumulates octets and parses
-   frames one at a time, reading "header_len" at offset six to find
-   where the payload begins.  An incomplete frame is not an error: the
-   receiver waits for more octets.  The payload length is explicit, so
-   no escape mechanism is REQUIRED.
+   On a stream transport a receiver accumulates octets and parses frames
+   one at a time, reading "header_len" at offset six to find where the
+   payload begins.  An incomplete frame is not an error: the receiver
+   waits for more octets.  The payload length is explicit, so no escape
+   mechanism is REQUIRED.
 
 3.8.  Extension Points
 
@@ -408,17 +411,17 @@ Table of Contents
 
    *  Flag bits.  Bits 0x08 and above of the flag octet are unassigned
       here.  A receiver MUST ignore a bit it does not know, so a
-      primitive that marks itself on a frame is invisible to an
-      endpoint that has not negotiated it.  [RFC0009] assigns 0x08,
-      0x10 and 0x20.
+      primitive that marks itself on a frame is invisible to an endpoint
+      that has not negotiated it.  [RFC0009] assigns 0x08, 0x10 and
+      0x20.
 
    *  A longer header.  The value of "header_len" states how many octets
-      precede the payload, so a longer header is parsed by the same
-      code that parses this one, and the octets that follow offset
-      sixteen are defined by the document that adds them.  A receiver
-      that does not implement a header length it is offered rejects the
-      session with E_UNSUPPORTED.  [RFC0009] defines a header of
-      thirty-two octets.
+      precede the payload, so a longer header is parsed by the same code
+      that parses this one, and the octets that follow offset sixteen
+      are defined by the document that adds them.  A receiver that does
+      not implement a header length it is offered rejects the session
+      with E_UNSUPPORTED.  [RFC0009] defines a header of thirty-two
+      octets.
 
    *  Trailers.  Octets MAY follow the payload.  Their number is fixed
       by the negotiated algorithm of the primitive that adds them and
@@ -461,41 +464,44 @@ Table of Contents
    Table 7 lists the CBOR types used by this document, the notation
    used for them here, and what each of them carries.
 
-   +============+=================+==================================+
-   |CBOR type   |Notation         |Used for                          |
-   +============+=================+==================================+
-   |unsigned    |7, 305           |identifiers, sequence numbers,    |
-   |            |                 |offsets, lengths, error codes     |
-   +------------+-----------------+----------------------------------+
-   |negative    |-1000            |signed quantities                 |
-   +------------+-----------------+----------------------------------+
-   |byte string |h'42AB'          |opaque octets: bus frames, tunnel |
-   |            |                 |slices, nonces, MACs              |
-   +------------+-----------------+----------------------------------+
-   |text string |"bus.rx"         |names: member keys, topics,       |
-   |            |                 |procedures, tunnels, bus names    |
-   +------------+-----------------+----------------------------------+
-   |array       |[1000, -1000]    |positional argument lists         |
-   +------------+-----------------+----------------------------------+
-   |map         |{"id": 7}        |one message; nested records       |
-   +------------+-----------------+----------------------------------+
-   |boolean     |true, false      |success, half close, destruction  |
-   +------------+-----------------+----------------------------------+
-   |null        |null             |a defined member with no value    |
-   +------------+-----------------+----------------------------------+
-   |float       |1726723200.125   |timestamps and measurements       |
-   +------------+-----------------+----------------------------------+
+   +============+=================+====================================+
+   |CBOR type   |Notation         |Used for                            |
+   +============+=================+====================================+
+   |unsigned    |1024             |identifiers, sequence numbers,      |
+   |            |                 |offsets, lengths, error codes       |
+   +------------+-----------------+------------------------------------+
+   |negative    |-1024            |signed quantities                   |
+   +------------+-----------------+------------------------------------+
+   |byte string |h'DEADBEEF'      |opaque octets: bus frames, tunnel   |
+   |            |                 |slices, nonces, MACs                |
+   +------------+-----------------+------------------------------------+
+   |text string |"bus.rx"         |names: member keys, topics,         |
+   |            |                 |procedures, tunnels, bus names      |
+   +------------+-----------------+------------------------------------+
+   |array       |["rpc","pubsub"] |ordered lists of names and records  |
+   +------------+-----------------+------------------------------------+
+   |map         |{"ok": true}     |one message; records; arguments     |
+   +------------+-----------------+------------------------------------+
+   |boolean     |true, false      |success, half close, destruction    |
+   +------------+-----------------+------------------------------------+
+   |null        |null             |a defined member with no value      |
+   +------------+-----------------+------------------------------------+
+   |float       |3.1415926        |timestamps and measurements         |
+   +------------+-----------------+------------------------------------+
 
                           Table 7: Value Types
 
    Byte strings are written in this document with the CBOR diagnostic
    notation h'...'.  No CBOR tag is defined by this document; a
-   receiver that cannot interpret a tagged value reports E_BAD_PAYLOAD.
+   receiver that cannot interpret a tagged value reports
+   E_BAD_PAYLOAD.
 
    Member keys are text strings and are compared as exact octet
    sequences: a receiver MUST NOT fold case, trim space or apply any
    other normalisation to a key, and MUST NOT treat two keys that
-   differ only in case as the same member.
+   differ only in case as the same member.  The single exception is the
+   "args" member of CALL, whose keys MAY be unsigned integers (Section
+   5.3); those integers are positions and not names.
 
    An integer used as an identifier, offset, length or code is unsigned
    unless the definition of the member says otherwise.
@@ -526,18 +532,21 @@ Table of Contents
 
    Four shapes cover every message of this document.
 
-   1.  Argument list: a map that carries an array of positional values.
+   1.  Argument map: a map whose keys carry the arguments, each under
+       either the name of a parameter or its position.
 
-          {"id": 7, "name": "drive", "args": [1000, -1000]}
+          {"id": 7, "name": "drive", "args": {"left": 1000,
+              "right": -1000}}
+          {"id": 7, "name": "drive", "args": {0: 1000, 1: -1000}}
 
-       The length and the meaning of the array are fixed by the
+       Which keys may appear, and what the values mean, are fixed by the
        procedure, not by this document.
 
    2.  Nested record: a map that describes one object and is carried as
        the value of a member, as a member of another map, or as an
        element of an array.
 
-          {"topic": "bus.rx", "data": {"bus": "main", "addr": 1219,
+          {"topic": "bus.rx", "data": {"bus": "main", "addr": 42,
               "data": h'DEADBEEF'}}
 
    3.  Answer: a map that carries either a value or an error, never
@@ -555,8 +564,10 @@ Table of Contents
    When a payload is written for a new message or a new profile, the
    following conventions apply:
 
-   *  Use a map at the top level.  Use an array only where the order of
-      the values is part of their meaning, as in an argument list.
+   *  Use a map at the top level, and wherever a receiver has to pick
+      one member out of several, as in an argument map.  Use an array
+      only for a homogeneous list whose order is part of its meaning,
+      as in the capability list of HELLO.
 
    *  Use a byte string for anything that is opaque octets.  Never
       carry octets as a text string and never encode them into text,
@@ -599,45 +610,45 @@ Table of Contents
 
    The types of messages are listed in Table 8.
 
-   +=====+============+==========+====================================+
-   |Type |Name        |Direction |Purpose                             |
-   +=====+============+==========+====================================+
-   |0x01 |HELLO       |C to S    |Session initiation; MUST be the     |
-   |     |            |          |first frame.                        |
-   +-----+------------+----------+------------------------------------+
-   |0x02 |WELCOME     |S to C    |Session acceptance: identity,       |
-   |     |            |          |capabilities, agreed flags,         |
-   |     |            |          |authentication answer.              |
-   +-----+------------+----------+------------------------------------+
-   |0x03 |CALL        |either    |Procedure call request (RPC).       |
-   +-----+------------+----------+------------------------------------+
-   |0x04 |RESULT      |either    |Procedure call response (RPC).      |
-   +-----+------------+----------+------------------------------------+
-   |0x05 |EVENT       |either    |Asynchronous notification (PubSub). |
-   +-----+------------+----------+------------------------------------+
-   |0x06 |SUBSCRIBE   |either    |Subscribe to a topic (PubSub).      |
-   +-----+------------+----------+------------------------------------+
-   |0x07 |UNSUBSCRIBE |either    |Unsubscribe from a topic (PubSub).  |
-   +-----+------------+----------+------------------------------------+
-   |0x08 |TUNDATA     |either    |Tunnel data frame (blob tunnel).    |
-   +-----+------------+----------+------------------------------------+
-   |0x09 |TUNSTAT     |either    |Tunnel state frame (blob tunnel).   |
-   +-----+------------+----------+------------------------------------+
-   |0x0A |BYE         |either    |Graceful close.                     |
-   +-----+------------+----------+------------------------------------+
-   |0x0B |ERROR       |either    |Protocol error (Section 5.12).      |
-   +-----+------------+----------+------------------------------------+
-   |0x0C |ACK         |either    |Acknowledges a sequence number      |
-   |     |            |          |(datagrams).                        |
-   +-----+------------+----------+------------------------------------+
+   +=====+============+==========+=====================================+
+   |Type |Name        |Direction |Purpose                              |
+   +=====+============+==========+=====================================+
+   |0x01 |HELLO       |C to S    |Session initiation; MUST be the first|
+   |     |            |          |frame.                               |
+   +-----+------------+----------+-------------------------------------+
+   |0x02 |WELCOME     |S to C    |Session acceptance: identity,        |
+   |     |            |          |capabilities, agreed flags,          |
+   |     |            |          |authentication answer.               |
+   +-----+------------+----------+-------------------------------------+
+   |0x03 |CALL        |either    |Procedure call request (RPC).        |
+   +-----+------------+----------+-------------------------------------+
+   |0x04 |RESULT      |either    |Procedure call response (RPC).       |
+   +-----+------------+----------+-------------------------------------+
+   |0x05 |EVENT       |either    |Asynchronous notification (PubSub).  |
+   +-----+------------+----------+-------------------------------------+
+   |0x06 |SUBSCRIBE   |either    |Subscribe to a topic (PubSub).       |
+   +-----+------------+----------+-------------------------------------+
+   |0x07 |UNSUBSCRIBE |either    |Unsubscribe from a topic (PubSub).   |
+   +-----+------------+----------+-------------------------------------+
+   |0x08 |TUNDATA     |either    |Tunnel data frame (BlobTun).         |
+   +-----+------------+----------+-------------------------------------+
+   |0x09 |TUNSTAT     |either    |Tunnel state frame (BlobTun).        |
+   +-----+------------+----------+-------------------------------------+
+   |0x0A |BYE         |either    |Graceful close.                      |
+   +-----+------------+----------+-------------------------------------+
+   |0x0B |ERROR       |either    |Protocol error (Section 5.12).       |
+   +-----+------------+----------+-------------------------------------+
+   |0x0C |ACK         |either    |Acknowledges a sequence number       |
+   |     |            |          |(datagrams).                         |
+   +-----+------------+----------+-------------------------------------+
 
                          Table 8: Message Types
 
    A message of unknown type MUST be reported with E_UNKNOWN_TYPE and
    MUST NOT by itself terminate the session, so that a later revision
    can add messages.  A receiver MUST ignore unknown members inside a
-   message map.  Each message below is summarised here and is
-   specified in full by the primitive that uses it (Section 10).
+   message map.  Each message below is summarised here and is specified
+   in full by the primitive that uses it (Section 10).
 
 5.1.  HELLO
 
@@ -668,34 +679,34 @@ Table of Contents
 
    The members of HELLO are listed in Table 9.
 
-   +============+==============+======================================+
-   |Field       |Type          |Meaning                               |
-   +============+==============+======================================+
-   |proto       |unsigned      |Protocol version.  A mismatch is      |
-   |            |              |reported with E_BAD_VERSION.          |
-   +------------+--------------+--------------------------------------+
-   |client      |text          |Free-form identifier of the initiator.|
-   |            |              |For logging only; a responder MUST NOT|
-   |            |              |select behaviour by it.               |
-   +------------+--------------+--------------------------------------+
-   |caps        |array of text |Capabilities of the sender (Section   |
-   |            |              |8).  An empty array declares none.    |
-   +------------+--------------+--------------------------------------+
-   |max_payload |unsigned      |Largest payload, in octets, that the  |
-   |            |              |sender can receive (Section 3.3).     |
-   +------------+--------------+--------------------------------------+
-   |flags       |unsigned      |Session flags proposed (Section 6.1). |
-   |            |              |Bits outside the session set MUST be  |
-   |            |              |zero.                                 |
-   +------------+--------------+--------------------------------------+
-   |algs        |map           |OPTIONAL.  Compression algorithms    |
-   |            |              |offered (Section 3.6).  Absent means  |
-   |            |              |only the default of the transform.    |
-   +------------+--------------+--------------------------------------+
-   |auth        |map           |OPTIONAL.  Credential of the method   |
-   |            |              |named by its "method" member (Section |
-   |            |              |6.2).                                 |
-   +------------+--------------+--------------------------------------+
+   +============+==============+=======================================+
+   |Field       |Type          |Meaning                                |
+   +============+==============+=======================================+
+   |proto       |unsigned      |Protocol version.  A mismatch is       |
+   |            |              |reported with E_BAD_VERSION.           |
+   +------------+--------------+---------------------------------------+
+   |client      |text          |Free-form identifier of the initiator. |
+   |            |              |For logging only; a responder MUST NOT |
+   |            |              |select behaviour by it.                |
+   +------------+--------------+---------------------------------------+
+   |caps        |array of text |Capabilities of the sender (Section 8).|
+   |            |              |An empty array declares none.          |
+   +------------+--------------+---------------------------------------+
+   |max_payload |unsigned      |Largest payload, in octets, that the   |
+   |            |              |sender can receive (Section 3.3).      |
+   +------------+--------------+---------------------------------------+
+   |flags       |unsigned      |Session flags proposed (Section 6.1).  |
+   |            |              |Bits outside the session set MUST be   |
+   |            |              |zero.                                  |
+   +------------+--------------+---------------------------------------+
+   |algs        |map           |OPTIONAL.  Compression algorithms      |
+   |            |              |offered (Section 3.6).  Absent means   |
+   |            |              |only the default of the transform.     |
+   +------------+--------------+---------------------------------------+
+   |auth        |map           |OPTIONAL.  Credential of the method    |
+   |            |              |named by its "method" member (Section  |
+   |            |              |6.2).                                  |
+   +------------+--------------+---------------------------------------+
 
                          Table 9: HELLO Fields
 
@@ -719,63 +730,94 @@ Table of Contents
 
    The members of WELCOME are listed in Table 10.
 
-   +============+==============+======================================+
-   |Field       |Type          |Meaning                               |
-   +============+==============+======================================+
-   |proto       |unsigned      |Protocol version; equals that of the  |
-   |            |              |HELLO it accepts.                     |
-   +------------+--------------+--------------------------------------+
-   |session     |text          |Session identifier chosen by the      |
-   |            |              |responder.  Opaque and for correlation|
-   |            |              |only.                                 |
-   +------------+--------------+--------------------------------------+
-   |server      |text          |Free-form identifier of the responder.|
-   +------------+--------------+--------------------------------------+
-   |caps        |array of text |Capabilities of the responder         |
-   |            |              |(Section 8).                          |
-   +------------+--------------+--------------------------------------+
-   |max_payload |unsigned      |Largest payload, in octets, that the  |
-   |            |              |responder can receive.                |
-   +------------+--------------+--------------------------------------+
-   |flags       |unsigned      |Agreed session flags: the intersection|
-   |            |              |with the proposal (Section 6.1).      |
-   +------------+--------------+--------------------------------------+
-   |algs        |map           |OPTIONAL.  The agreed compression     |
-   |            |              |algorithm (Section 3.6).              |
-   +------------+--------------+--------------------------------------+
-   |auth        |map           |OPTIONAL.  "ok" and the proof of the  |
-   |            |              |method, when it defines one (Section  |
-   |            |              |6.2).                                 |
-   +------------+--------------+--------------------------------------+
+   +============+==============+=======================================+
+   |Field       |Type          |Meaning                                |
+   +============+==============+=======================================+
+   |proto       |unsigned      |Protocol version; equals that of the   |
+   |            |              |HELLO it accepts.                      |
+   +------------+--------------+---------------------------------------+
+   |session     |text          |Session identifier chosen by the       |
+   |            |              |responder.  Opaque and for correlation |
+   |            |              |only.                                  |
+   +------------+--------------+---------------------------------------+
+   |server      |text          |Free-form identifier of the responder. |
+   +------------+--------------+---------------------------------------+
+   |caps        |array of text |Capabilities of the responder          |
+   |            |              |(Section 8).                           |
+   +------------+--------------+---------------------------------------+
+   |max_payload |unsigned      |Largest payload, in octets, that the   |
+   |            |              |responder can receive.                 |
+   +------------+--------------+---------------------------------------+
+   |flags       |unsigned      |Agreed session flags: the intersection |
+   |            |              |with the proposal (Section 6.1).       |
+   +------------+--------------+---------------------------------------+
+   |algs        |map           |OPTIONAL.  The agreed compression      |
+   |            |              |algorithm (Section 3.6).               |
+   +------------+--------------+---------------------------------------+
+   |auth        |map           |OPTIONAL.  "ok" and the proof of the   |
+   |            |              |method, when it defines one (Section   |
+   |            |              |6.2).                                  |
+   +------------+--------------+---------------------------------------+
 
                        Table 10: WELCOME Fields
 
 5.3.  CALL
 
-      {"id": 7, "name": "drive", "args": [1000, -1000]}
+      {"id": 7, "name": "drive", "args": {"left": 1000, "right": -1000}}
+      {"id": 7, "name": "drive", "args": {0: 1000, 1: -1000}}
+      {"id": 7, "name": "drive", "args": {0: 1000, "right": -1000}}
 
    The identifier is an unsigned 32-bit value chosen by the caller and
    MUST NOT be reused while a response is outstanding; wrapping is
-   permitted.  Arguments are positional; a request for a name that is
-   not known is answered with an application error in RESULT, not with
-   an ERROR frame.  Either endpoint MAY send CALL, and the receiver MUST
-   answer with RESULT.
+   permitted.  A request for a name that is not known is answered with
+   an application error in RESULT, not with an ERROR frame.  Either
+   endpoint MAY send CALL, and the receiver MUST answer with RESULT.
+
+   "args" is a map and not an array, so that a call can bind a value to
+   a name as well as to a position, and so that a procedure can gain a
+   parameter without changing the meaning of one that exists.  A key
+   says how the value after it is bound:
+
+   *  A text key carries one named argument.  The key is the name of the
+      parameter and is compared exactly, as member keys are (Section
+      4.3).
+
+   *  An unsigned key carries one positional argument.  Positions count
+      from zero among themselves: the unsigned keys of a well-formed map
+      are exactly the integers from 0 to n-1, where n is the number of
+      positional arguments in that map, whatever named arguments stand
+      beside them.  A gap, a key that repeats and a key beyond n-1 each
+      leave the map malformed.
+
+   The two forms MAY appear in one map and this document ranks neither
+   above the other: every key binds one value, whether the caller named
+   it or counted it, and one call MAY carry some arguments named and
+   others positional.  The protocol draws the line at the shape of the
+   map and no further: which keys a procedure accepts, whether it takes
+   one form or the other or a mix of both, and what it does when two
+   keys claim one parameter are decided by the procedure and not here.
+   That answer belongs to discovery (Section 9.1), it is not negotiated,
+   and a handler rejects what it does not accept with an application
+   error in RESULT.
 
    The members of CALL are listed in Table 11.
 
-   +============+==============+======================================+
-   |Field       |Type          |Meaning                               |
-   +============+==============+======================================+
-   |id          |unsigned      |Request identifier; MUST NOT be reused|
-   |            |              |while the call is outstanding (Section|
-   |            |              |5.3).                                 |
-   +------------+--------------+--------------------------------------+
-   |name        |text          |Procedure name, compared exactly      |
-   |            |              |(Section 6.4.2).                      |
-   +------------+--------------+--------------------------------------+
-   |args        |array         |OPTIONAL.  Positional arguments.      |
-   |            |              |Absent and empty mean the same.       |
-   +------------+--------------+--------------------------------------+
+   +============+==============+=======================================+
+   |Field       |Type          |Meaning                                |
+   +============+==============+=======================================+
+   |id          |unsigned      |Request identifier; MUST NOT be reused |
+   |            |              |while the call is outstanding (Section |
+   |            |              |5.3).                                  |
+   +------------+--------------+---------------------------------------+
+   |name        |text          |Procedure name, compared exactly       |
+   |            |              |(Section 6.4.2).                       |
+   +------------+--------------+---------------------------------------+
+   |args        |map           |OPTIONAL.  Arguments.  A text key names|
+   |            |              |a parameter, an unsigned key gives a   |
+   |            |              |position; either form MAY appear beside|
+   |            |              |the other (Section 5.3).  Absent and   |
+   |            |              |empty mean the same.                   |
+   +------------+--------------+---------------------------------------+
 
                          Table 11: CALL Fields
 
@@ -787,26 +829,26 @@ Table of Contents
 
    Exactly one RESULT is sent per CALL.  A response MAY arrive in any
    order relative to other responses on the same session.  The "kind"
-   member is an application-level classification; its values are
-   outside the scope of this document.
+   member is an application-level classification; its values are outside
+   the scope of this document.
 
    The members of RESULT are listed in Table 12.
 
-   +============+==============+======================================+
-   |Field       |Type          |Meaning                               |
-   +============+==============+======================================+
-   |id          |unsigned      |Identifier of the call being answered.|
-   +------------+--------------+--------------------------------------+
-   |ok          |boolean       |true for a success, false for a       |
-   |            |              |failure.                              |
-   +------------+--------------+--------------------------------------+
-   |value       |any           |REQUIRED when "ok" is true.  The      |
-   |            |              |returned value; null when there is    |
-   |            |              |none.                                 |
-   +------------+--------------+--------------------------------------+
-   |error       |map           |REQUIRED when "ok" is false.  The     |
-   |            |              |failure (Section 6.4.2).              |
-   +------------+--------------+--------------------------------------+
+   +============+==============+=======================================+
+   |Field       |Type          |Meaning                                |
+   +============+==============+=======================================+
+   |id          |unsigned      |Identifier of the call being answered. |
+   +------------+--------------+---------------------------------------+
+   |ok          |boolean       |true for a success, false for a        |
+   |            |              |failure.                               |
+   +------------+--------------+---------------------------------------+
+   |value       |any           |REQUIRED when "ok" is true.  The       |
+   |            |              |returned value; null when there is     |
+   |            |              |none.                                  |
+   +------------+--------------+---------------------------------------+
+   |error       |map           |REQUIRED when "ok" is false.  The      |
+   |            |              |failure (Section 6.4.2).               |
+   +------------+--------------+---------------------------------------+
 
                         Table 12: RESULT Fields
 
@@ -820,16 +862,16 @@ Table of Contents
 
    The members of EVENT are listed in Table 13.
 
-   +============+==============+======================================+
-   |Field       |Type          |Meaning                               |
-   +============+==============+======================================+
-   |topic       |text          |Topic the event is published on,      |
-   |            |              |matched exactly.                      |
-   +------------+--------------+--------------------------------------+
-   |data        |any           |OPTIONAL.  Payload.  An absent member |
-   |            |              |means the event carries nothing beyond|
-   |            |              |its topic.                            |
-   +------------+--------------+--------------------------------------+
+   +============+==============+=======================================+
+   |Field       |Type          |Meaning                                |
+   +============+==============+=======================================+
+   |topic       |text          |Topic the event is published on,       |
+   |            |              |matched exactly.                       |
+   +------------+--------------+---------------------------------------+
+   |data        |any           |OPTIONAL.  Payload.  An absent member  |
+   |            |              |means the event carries nothing beyond |
+   |            |              |its topic.                             |
+   +------------+--------------+---------------------------------------+
 
                          Table 13: EVENT Fields
 
@@ -850,16 +892,16 @@ Table of Contents
 
    The members of SUBSCRIBE are listed in Table 14.
 
-   +============+==============+======================================+
-   |Field       |Type          |Meaning                               |
-   +============+==============+======================================+
-   |id          |unsigned      |OPTIONAL.  Correlates the answer, from|
-   |            |              |the numbering space of calls (Section |
-   |            |              |5.6).                                 |
-   +------------+--------------+--------------------------------------+
-   |topic       |text          |Topic to add to the session, matched  |
-   |            |              |exactly.                              |
-   +------------+--------------+--------------------------------------+
+   +============+==============+=======================================+
+   |Field       |Type          |Meaning                                |
+   +============+==============+=======================================+
+   |id          |unsigned      |OPTIONAL.  Correlates the answer, from |
+   |            |              |the numbering space of calls (Section  |
+   |            |              |5.6).                                  |
+   +------------+--------------+---------------------------------------+
+   |topic       |text          |Topic to add to the session, matched   |
+   |            |              |exactly.                               |
+   +------------+--------------+---------------------------------------+
 
                        Table 14: SUBSCRIBE Fields
 
@@ -872,16 +914,16 @@ Table of Contents
 
    The members of UNSUBSCRIBE are listed in Table 15.
 
-   +============+==============+======================================+
-   |Field       |Type          |Meaning                               |
-   +============+==============+======================================+
-   |id          |unsigned      |OPTIONAL.  Correlates the answer, from|
-   |            |              |the numbering space of calls (Section |
-   |            |              |5.6).                                 |
-   +------------+--------------+--------------------------------------+
-   |topic       |text          |Topic to remove from the session,     |
-   |            |              |matched exactly.                      |
-   +------------+--------------+--------------------------------------+
+   +============+==============+=======================================+
+   |Field       |Type          |Meaning                                |
+   +============+==============+=======================================+
+   |id          |unsigned      |OPTIONAL.  Correlates the answer, from |
+   |            |              |the numbering space of calls (Section  |
+   |            |              |5.6).                                  |
+   +------------+--------------+---------------------------------------+
+   |topic       |text          |Topic to remove from the session,      |
+   |            |              |matched exactly.                       |
+   +------------+--------------+---------------------------------------+
 
                       Table 15: UNSUBSCRIBE Fields
 
@@ -893,20 +935,20 @@ Table of Contents
 
    The members of TUNDATA are listed in Table 16.
 
-   +============+==============+======================================+
-   |Field       |Type          |Meaning                               |
-   +============+==============+======================================+
-   |tun         |text          |Tunnel name.  Several tunnels MAY     |
-   |            |              |share one session.                    |
-   +------------+--------------+--------------------------------------+
-   |off         |unsigned      |Offset of the slice within the byte   |
-   |            |              |stream.                               |
-   +------------+--------------+--------------------------------------+
-   |data        |byte string   |The octets of the slice.              |
-   +------------+--------------+--------------------------------------+
-   |eof         |boolean       |OPTIONAL.  End of this direction of   |
-   |            |              |the stream (Section 6.6.5).           |
-   +------------+--------------+--------------------------------------+
+   +============+==============+=======================================+
+   |Field       |Type          |Meaning                                |
+   +============+==============+=======================================+
+   |tun         |text          |Tunnel name.  Several tunnels MAY share|
+   |            |              |one session.                           |
+   +------------+--------------+---------------------------------------+
+   |off         |unsigned      |Offset of the slice within the byte    |
+   |            |              |stream.                                |
+   +------------+--------------+---------------------------------------+
+   |data        |byte string   |The octets of the slice.               |
+   +------------+--------------+---------------------------------------+
+   |eof         |boolean       |OPTIONAL.  End of this direction of the|
+   |            |              |stream (Section 6.6.5).                |
+   +------------+--------------+---------------------------------------+
 
                         Table 16: TUNDATA Fields
 
@@ -921,35 +963,34 @@ Table of Contents
 
    The members of TUNSTAT are listed in Table 17.
 
-   +============+==============+======================================+
-   |Field       |Type          |Meaning                               |
-   +============+==============+======================================+
-   |tun         |text          |Tunnel name.                          |
-   +------------+--------------+--------------------------------------+
-   |open        |map           |OPTIONAL.  {} requests a tunnel,      |
-   |            |              |{"ok": true} accepts it, {"ok": false}|
-   |            |              |refuses (Section 6.6.2).              |
-   +------------+--------------+--------------------------------------+
-   |ack         |unsigned      |OPTIONAL.  Number of octets received  |
-   |            |              |in order.                             |
-   +------------+--------------+--------------------------------------+
-   |window      |unsigned      |OPTIONAL.  Number of octets the peer  |
-   |            |              |MAY still transmit.                   |
-   +------------+--------------+--------------------------------------+
-   |off         |unsigned      |OPTIONAL.  Next offset expected; a    |
-   |            |              |resumption or a retransmission request|
-   |            |              |(Section 6.6.4).                      |
-   +------------+--------------+--------------------------------------+
-   |eof         |boolean       |OPTIONAL.  End of this direction of   |
-   |            |              |the stream (Section 6.6.5).           |
-   +------------+--------------+--------------------------------------+
-   |close       |boolean       |OPTIONAL.  Destroy the tunnel (Section|
-   |            |              |10.3.6).                              |
-   +------------+--------------+--------------------------------------+
-   |error       |map           |OPTIONAL.  Tunnel error {code,        |
-   |            |              |message} from the registry of Appendix|
-   |            |              |A.                                    |
-   +------------+--------------+--------------------------------------+
+   +============+==============+=======================================+
+   |Field       |Type          |Meaning                                |
+   +============+==============+=======================================+
+   |tun         |text          |Tunnel name.                           |
+   +------------+--------------+---------------------------------------+
+   |open        |map           |OPTIONAL.  {} requests a tunnel,       |
+   |            |              |{"ok": true} accepts it, {"ok": false} |
+   |            |              |refuses (Section 6.6.2).               |
+   +------------+--------------+---------------------------------------+
+   |ack         |unsigned      |OPTIONAL.  Number of octets received in|
+   |            |              |order.                                 |
+   +------------+--------------+---------------------------------------+
+   |window      |unsigned      |OPTIONAL.  Number of octets the peer   |
+   |            |              |MAY still transmit.                    |
+   +------------+--------------+---------------------------------------+
+   |off         |unsigned      |OPTIONAL.  Next offset expected; a     |
+   |            |              |resumption or a retransmission request |
+   |            |              |(Section 6.6.4).                       |
+   +------------+--------------+---------------------------------------+
+   |eof         |boolean       |OPTIONAL.  End of this direction of the|
+   |            |              |stream (Section 6.6.5).                |
+   +------------+--------------+---------------------------------------+
+   |close       |boolean       |OPTIONAL.  Destroy the tunnel (Section |
+   |            |              |10.3.6).                               |
+   +------------+--------------+---------------------------------------+
+   |error       |map           |OPTIONAL.  Tunnel error {code, message}|
+   |            |              |from the registry of Appendix A.       |
+   +------------+--------------+---------------------------------------+
 
                         Table 17: TUNSTAT Fields
 
@@ -963,37 +1004,18 @@ Table of Contents
 
    The members of BYE are listed in Table 18.
 
-   +============+==============+======================================+
-   |Field       |Type          |Meaning                               |
-   +============+==============+======================================+
-   |reason      |text          |OPTIONAL.  Human-readable reason for  |
-   |            |              |closing, in English.                  |
-   +------------+--------------+--------------------------------------+
+   +============+==============+=======================================+
+   |Field       |Type          |Meaning                                |
+   +============+==============+=======================================+
+   |reason      |text          |OPTIONAL.  Human-readable reason for   |
+   |            |              |closing, in English.                   |
+   +------------+--------------+---------------------------------------+
 
                           Table 18: BYE Fields
 
-5.11.  ACK
+5.11.  ERROR
 
-      {"ack": 41}
-
-   Confirms receipt of the frame with the given sequence number.  It is
-   sent only in response to a frame that requested acknowledgement, and
-   an ACK frame MUST NOT itself request acknowledgement.
-
-   The members of ACK are listed in Table 19
-
-   +============+==============+======================================+
-   |Field       |Type          |Meaning                               |
-   +============+==============+======================================+
-   |ack         |unsigned      |Sequence number of the frame being    |
-   |            |              |confirmed (Section 3.4).              |
-   +------------+--------------+--------------------------------------+
-
-                          Table 19: ACK Fields
-
-5.12.  ERROR
-
-      {"code": 3, "message": "checksum mismatch"}
+      {"code": 10, "message": "device is busy"}
 
    The code is an integer from the registry in Appendix A; the OPTIONAL
    message is a human-readable explanation in English.  Application
@@ -1001,19 +1023,38 @@ Table of Contents
    application failure leaves the session usable, while a protocol error
    MAY require the session to be closed.
 
-   The members of ERROR are listed in Table 20.
+   The members of ERROR are listed in Table 19.
 
-   +============+==============+======================================+
-   |Field       |Type          |Meaning                               |
-   +============+==============+======================================+
-   |code        |unsigned      |Error code from the registry of       |
-   |            |              |Appendix A.                           |
-   +------------+--------------+--------------------------------------+
-   |message     |text          |OPTIONAL.  Human-readable explanation,|
-   |            |              |in English.                           |
-   +------------+--------------+--------------------------------------+
+   +============+==============+=======================================+
+   |Field       |Type          |Meaning                                |
+   +============+==============+=======================================+
+   |code        |unsigned      |Error code from the registry of        |
+   |            |              |Appendix A.                            |
+   +------------+--------------+---------------------------------------+
+   |message     |text          |OPTIONAL.  Human-readable explanation, |
+   |            |              |in English.                            |
+   +------------+--------------+---------------------------------------+
 
-                         Table 20: ERROR Fields
+                         Table 19: ERROR Fields
+
+5.12.  ACK
+
+      {"ack": 42}
+
+   Confirms receipt of the frame with the given sequence number.  It is
+   sent only in response to a frame that requested acknowledgement, and
+   an ACK frame MUST NOT itself request acknowledgement.
+
+   The members of ACK are listed in Table 20
+
+   +============+==============+=======================================+
+   |Field       |Type          |Meaning                                |
+   +============+==============+=======================================+
+   |ack         |unsigned      |Sequence number of the frame being     |
+   |            |              |confirmed (Section 3.4).               |
+   +------------+--------------+---------------------------------------+
+
+                          Table 20: ACK Fields
 
 6.  Session Establishment and Lifetime
 
@@ -1066,10 +1107,10 @@ Table of Contents
    name is compared as an exact string.  What a name implies, that is,
    the members it uses, the credential it carries, the proof it returns
    and the keys it yields, MUST be known to both endpoints before the
-   name is used.  A name defined outside this document SHOULD begin
-   with "x-" while it is experimental.  Two endpoints that implement
-   the same name differently MUST NOT agree on it; such a name is
-   treated as one the responder does not implement.
+   name is used.  A name defined outside this document SHOULD begin with
+   "x-" while it is experimental.  Two endpoints that implement the same
+   name differently MUST NOT agree on it; such a name is treated as one
+   the responder does not implement.
 
    The choice belongs to the initiator and is not negotiated.  The
    responder either accepts the named method or fails; it MUST NOT
@@ -1095,22 +1136,22 @@ Table of Contents
 
    On success the responder sends WELCOME whose "auth" member carries
    "ok" set to true, the proof of the method when it defines one, and
-   any other member the method defines.  On failure, including the
-   cases where the responder requires authentication but the initiator
+   any other member the method defines.  On failure, including the cases
+   where the responder requires authentication but the initiator
    presented none, where the responder does not implement the named
-   method, where the credential does not verify, and where the
-   responder cannot use the secret the method needs, the responder MUST
-   send E_UNAUTHORIZED and close.  Silent downgrade to an
-   unauthenticated session is prohibited.
+   method, where the credential does not verify, and where the responder
+   cannot use the secret the method needs, the responder MUST send
+   E_UNAUTHORIZED and close.  Silent downgrade to an unauthenticated
+   session is prohibited.
 
    One method is given below as an example.  It is not required and an
    implementation MAY ignore it.
 
    *  "hmac": the initiator presents a nonce and a MAC over that nonce,
-      so that the secret is not revealed.  The nonce is generated by
-      the initiator and SHOULD be at least 16 octets of unpredictable
-      data.  The responder answers with a nonce of its own and a MAC
-      over both nonces, which the initiator MUST verify.
+      so that the secret is not revealed.  The nonce is generated by the
+      initiator and SHOULD be at least 16 octets of unpredictable data.
+      The responder answers with a nonce of its own and a MAC over both
+      nonces, which the initiator MUST verify.
 
          {"method": "hmac", "nonce": h'...', "mac": h'...'}
          mac = HMAC-SHA256(secret, "OCP-HELLO" || client || nonce)
@@ -1177,9 +1218,9 @@ Table of Contents
        arguments.
 
    2.  The receiver looks up the name and executes what it names.  It
-       answers once, with RESULT carrying the same identifier and
-       either "ok" set to true together with the returned value, or
-       "ok" set to false together with an "error" object.
+       answers once, with RESULT carrying the same identifier and either
+       "ok" set to true together with the returned value, or "ok" set to
+       false together with an "error" object.
 
    3.  The caller matches the answer to the call by the identifier.
 
@@ -1196,14 +1237,20 @@ Table of Contents
       returns nothing answers with null.  A failure carries an "error"
       object; the two never appear in one RESULT.
 
-   *  An unknown procedure, a wrong number of arguments and a failure
-      inside the procedure are all answered in RESULT and MUST NOT be
-      answered with ERROR (Section 5.12): what is in question is the
-      call, not the session.
+   *  An unknown procedure, a form of arguments the procedure does not
+      accept, a name it does not define, a wrong number of arguments and
+      a failure inside the procedure are all answered in RESULT and MUST
+      NOT be answered with ERROR (Section 5.12): what is in question is
+      the call, not the session.
 
-   *  A procedure name is compared exactly.  An absent "args" and an
-      empty array mean the same, and the length of the arguments is
-      fixed by the procedure and not by this document.
+   *  A procedure name is compared exactly, and so is the key of a named
+      argument.  An absent "args" and an empty map mean the same.  Which
+      keys a procedure accepts, whether named ones, positional ones or a
+      mix of the two, is fixed by the procedure and not by this
+      document: nothing here forbids a caller from mixing the forms, and
+      how a handler reads such a map, including one in which two keys
+      claim one parameter, is decided by the handler and answered in
+      RESULT.
 
    *  A RESULT whose identifier matches no outstanding call MUST be
       ignored.  This is what makes a late answer harmless.
@@ -1217,8 +1264,8 @@ Table of Contents
       Once the answer has arrived, the identifier is free again.
 
    *  Subscriptions draw from the same space (Section 5.6), so the
-      answer to a subscription can never be mistaken for the answer of
-      a call and one table of outstanding requests is enough.
+      answer to a subscription can never be mistaken for the answer of a
+      call and one table of outstanding requests is enough.
 
 6.4.4.  Order, Concurrency and Time
 
@@ -1228,16 +1275,16 @@ Table of Contents
    *  Answers MAY arrive in any order.  A caller that needs an order
       MUST wait for one answer before sending the next call.
 
-   *  Nothing bounds how long an answer may take, and no cancellation
-      is defined.  A caller that abandons a call ignores the RESULT
-      when it arrives.
+   *  Nothing bounds how long an answer may take, and no cancellation is
+      defined.  A caller that abandons a call ignores the RESULT when it
+      arrives.
 
 6.5.  Publish and Subscribe
 
    Either endpoint MAY publish and either MAY subscribe; the two roles
    are independent of each other and of the roles of Section 6.1.  The
-   members are listed in Sections 5.5 to 5.7; this section describes
-   how they are used.
+   members are listed in Sections 5.5 to 5.7; this section describes how
+   they are used.
 
 6.5.1.  The Exchange
 
@@ -1284,13 +1331,13 @@ Table of Contents
 
 6.5.3.  Delivery
 
-   *  An event is delivered only to sessions that have subscribed to
-      its topic, and only after the subscription has been answered.
+   *  An event is delivered only to sessions that have subscribed to its
+      topic, and only after the subscription has been answered.
 
    *  On a reliable transport the events of one topic are delivered in
-      the order they were published.  The events of different topics
-      MAY interleave in any order, and so may an event and the answer
-      of a call.
+      the order they were published.  The events of different topics MAY
+      interleave in any order, and so may an event and the answer of a
+      call.
 
    *  An event carries no identifier and is never answered: there is no
       RESULT, no ERROR and no acknowledgement at this level, whatever
@@ -1313,10 +1360,9 @@ Table of Contents
    The blob tunnel carries raw byte streams, for example firmware
    images, media streams, log uploads and vendor extensions.  Several
    tunnels MAY exist on one session at a time, distinguished by name.
-   The tunnel defines no compression and no protection of its own:
-   those are provided by the frame layer (Sections 3.5 and 3.8) and
-   therefore apply to tunnel traffic as they apply to every other
-   message.
+   The tunnel defines no compression and no protection of its own: those
+   are provided by the frame layer (Sections 3.5 and 3.8) and therefore
+   apply to tunnel traffic as they apply to every other message.
 
 6.6.1.  Messages
 
@@ -1372,8 +1418,8 @@ Table of Contents
       overlapping slices are trimmed.
 
    *  The receiver sends TUNSTAT with the current acknowledgement and
-      window as needed; a receiver MAY coalesce these answers.  A
-      window of zero stops transmission until the window grows.
+      window as needed; a receiver MAY coalesce these answers.  A window
+      of zero stops transmission until the window grows.
 
    *  Acknowledged data MAY be released by the sender.  Unacknowledged
       data MUST be retained so that it can be retransmitted.
@@ -1406,21 +1452,20 @@ Table of Contents
 
 6.6.7.  Recommended Defaults
 
-   +=======================+==================+=======================+
-   |Parameter              |Recommended value |Meaning                |
-   +=======================+==================+=======================+
-   |receive window         |65536 octets      |Advertised credit.     |
-   +-----------------------+------------------+-----------------------+
-   |slice size             |8192 octets       |Maximum TUNDATA        |
-   |                       |                  |payload.               |
-   +-----------------------+------------------+-----------------------+
-   |receive buffer         |262144 octets     |Bound on               |
-   |                       |                  |received-but-unconsumed|
-   |                       |                  |bytes.                 |
-   +-----------------------+------------------+-----------------------+
-   |retransmit request     |0.2 s             |Throttle for gap       |
-   |interval               |                  |notifications.         |
-   +-----------------------+------------------+-----------------------+
+   +=======================+==================+========================+
+   |Parameter              |Recommended value |Meaning                 |
+   +=======================+==================+========================+
+   |receive window         |65536 octets      |Advertised credit.      |
+   +-----------------------+------------------+------------------------+
+   |slice size             |8192 octets       |Maximum TUNDATA payload.|
+   +-----------------------+------------------+------------------------+
+   |receive buffer         |262144 octets     |Bound on                |
+   |                       |                  |received-but-unconsumed |
+   |                       |                  |bytes.                  |
+   +-----------------------+------------------+------------------------+
+   |retransmit request     |0.2 s             |Throttle for gap        |
+   |interval               |                  |notifications.          |
+   +-----------------------+------------------+------------------------+
 
                  Table 21: Recommended Tunnel Defaults
 
@@ -1429,7 +1474,7 @@ Table of Contents
    A heartbeat is one call to the core instruction "ping" with the
    sender's current time:
 
-      CALL   {"id": 5, "name": "ping", "args": [1726723200.125]}
+      CALL   {"id": 5, "name": "ping", "args": {0: 1726723200.125}}
       RESULT {"id": 5, "ok": true,
               "value": {"t": 1726723200.125, "time": 1726723200.126,
                         "uptime": 42.5}}
@@ -1456,14 +1501,14 @@ Table of Contents
 7.2.  Datagram Transport
 
    One datagram carries exactly one frame, and each frame is processed
-   on its own.  A sender MAY request acknowledgement for
-   important frames by setting F_ACK, and MAY retransmit with the same
-   sequence number on timeout; a receiver SHOULD deduplicate
-   retransmits by sequence number and type.  Frames whose loss is
-   tolerable need not request acknowledgement.  A single frame,
-   including header and trailer, SHOULD NOT exceed 1200 octets so as to
-   avoid fragmentation.  Bulk data SHOULD use a stream transport
-   together with the tunnel primitive.
+   on its own.  A sender MAY request acknowledgement for important
+   frames by setting F_ACK, and MAY retransmit with the same sequence
+   number on timeout; a receiver SHOULD deduplicate retransmits by
+   sequence number and type.  Frames whose loss is tolerable need not
+   request acknowledgement.  A single frame, including header and
+   trailer, SHOULD NOT exceed 1200 octets so as to avoid fragmentation.
+   Bulk data SHOULD use a stream transport together with the tunnel
+   primitive.
 
    Session establishment is not a property of the transport: HELLO and
    WELCOME are ordinary frames and MAY be carried by datagrams.  The
@@ -1483,8 +1528,8 @@ Table of Contents
    provide it.  Three points are particular to an unreliable transport:
 
    *  A frame carries everything needed to process it: its length is in
-      the header and, when [RFC0009] is in use, its nonce material is
-      in the extended header, so no frame depends on another and a lost
+      the header and, when [RFC0009] is in use, its nonce material is in
+      the extended header, so no frame depends on another and a lost
       frame does not make the frames that follow it undecodable.
 
    *  A retransmission carries the same octets as the frame it repeats,
@@ -1506,20 +1551,19 @@ Table of Contents
 7.3.  Other Transports
 
    The protocol makes no assumption about the octet transport.  A new
-   binding only has to provide delimited frames and to state whether
-   the transport is reliable.
+   binding only has to provide delimited frames and to state whether the
+   transport is reliable.
 
 7.4.  Recommended Port and URI Scheme
 
    The RECOMMENDED port for a TCP or a UDP binding is 6286.  The digits
    are a mnemonic: on a telephone keypad the letters of the sixth, the
-   second, the eighth and the sixth key spell O, C, T and O.  The
-   number is a convenience and not a requirement.  A deployment MAY use
-   any port, and an endpoint learns the port of its peer from
-   configuration or from service discovery, never from the protocol
-   itself.  The value is not registered with IANA (Section 13).
-   [RFC0010] recommends another port for a session that runs inside a
-   secure transport.
+   second, the eighth and the sixth key spell O, C, T and O.  The number
+   is a convenience and not a requirement.  A deployment MAY use any
+   port, and an endpoint learns the port of its peer from configuration
+   or from service discovery, never from the protocol itself.  The value
+   is not registered with IANA (Section 13).  [RFC0010] recommends
+   another port for a session that runs inside a secure transport.
 
    One URI scheme is used for a session of this document, by
    configuration files, by tools and by logs [RFC0007].  It is not part
@@ -1528,55 +1572,63 @@ Table of Contents
       ocp://host[:port]      cleartext; port defaults to 6286
 
    A session inside a secure transport has a scheme of its own, which
-   [RFC0010] defines; a tool that is given that scheme MUST NOT treat
-   it as this one.
+   [RFC0010] defines; a tool that is given that scheme MUST NOT treat it
+   as this one.
 
 8.  Capabilities
 
    A session declares exactly three capabilities, which are shown in
    Table 8.
 
-   +===========+======================================================+
-   |Capability |Meaning                                               |
-   +===========+======================================================+
-   |rpc        |Supports CALL and RESULT; carries heartbeats and      |
-   |           |discovery.                                            |
-   +-----------+------------------------------------------------------+
-   |pubsub     |Supports SUBSCRIBE and EVENT.                         |
-   +-----------+------------------------------------------------------+
-   |blobtun    |Supports TUNSTAT and TUNDATA.                         |
-   +-----------+------------------------------------------------------+
+   +===========+=======================================================+
+   |Capability |Meaning                                                |
+   +===========+=======================================================+
+   |rpc        |Supports CALL and RESULT; carries heartbeats and       |
+   |           |discovery.                                             |
+   +-----------+-------------------------------------------------------+
+   |pubsub     |Supports SUBSCRIBE and EVENT.                          |
+   +-----------+-------------------------------------------------------+
+   |blobtun    |Supports TUNSTAT and TUNDATA.                          |
+   +-----------+-------------------------------------------------------+
 
                          Table 22: Capabilities
 
    The effective set is the intersection of the two endpoints'
    declarations.  Anything not listed here is carried by one of these
    three: heartbeats and discovery are calls, and the bus profile is
-   calls plus topics.  Authentication and compression are session
-   flags, and confidentiality, integrity and per-frame verification are
+   calls plus topics.  Authentication and compression are session flags,
+   and confidentiality, integrity and per-frame verification are
    extensions of Section 3.8.
 
 9.  Service Profiles
 
 9.1.  Core Profile
 
-   +==================+=======================+=======================+
-   |Instruction       |Signature              |Meaning                |
-   +==================+=======================+=======================+
-   |ping              |(t) -> {t, time,       |Heartbeat              |
-   |                  |uptime}                |(Section 6.7).         |
-   +------------------+-----------------------+-----------------------+
-   |list_instructions |() -> [{name, args,    |Discovery: the         |
-   |                  |help}]                 |instruction list.      |
-   +------------------+-----------------------+-----------------------+
-   |device_status     |() -> str              |Human-readable status  |
-   |                  |                       |of the peer.           |
-   +------------------+-----------------------+-----------------------+
-   |poll_events       |() -> [{name, id,      |Drains the queued      |
-   |                  |data}]                 |events of the peer.    |
-   +------------------+-----------------------+-----------------------+
+   +==================+=======================+========================+
+   |Instruction       |Signature              |Meaning                 |
+   +==================+=======================+========================+
+   |ping              |(t) -> {t, time,       |Heartbeat               |
+   |                  |uptime}                |(Section 6.7).          |
+   +------------------+-----------------------+------------------------+
+   |list_instructions |() -> [{name, args,    |Discovery: the          |
+   |                  |help}]                 |instruction list.       |
+   +------------------+-----------------------+------------------------+
+   |device_status     |() -> str              |Human-readable status of|
+   |                  |                       |the peer.               |
+   +------------------+-----------------------+------------------------+
+   |poll_events       |() -> [{name, id,      |Drains the queued events|
+   |                  |data}]                 |of the peer.            |
+   +------------------+-----------------------+------------------------+
 
                   Table 23: Core Profile Instructions
+
+   The "args" member of a list entry names the parameters of the
+   instruction, in positional order.  A caller MAY use those names as
+   the keys of "args"; the entry states no preference between the forms,
+   and an instruction whose entry names no parameters can only be called
+   by position.  A handler decides for itself whether it takes one form,
+   the other or a mix of both, and refuses what it does not take in
+   RESULT.  "help" is a short text meant for a human.
 
 9.2.  Bus Profile
 
@@ -1586,11 +1638,11 @@ Table of Contents
 
       {"bus": "main", "addr": 42, "data": h'4200000000000042'}
 
-     The bus name is defined by the responder's descriptor.  The
-     address is opaque: an integer identifier for a CAN bus, a port
-     name for a serial bus, or another value for another bus.  The data
-     is a byte string; the maximum length is a property of the bus
-     (eight octets for a classical CAN bus).
+     The bus name is defined by the responder's descriptor.  The address
+     is opaque: an integer identifier for a CAN bus, a port name for a
+     serial bus, or another value for another bus.  The data is a byte
+     string; the maximum length is a property of the bus (eight octets
+     for a classical CAN bus).
 
    * Receiving: an event on the topic "bus.rx" whose data has the same
      shape.  A peer MAY additionally offer a pull-based interface
@@ -1598,39 +1650,161 @@ Table of Contents
 
 9.3.  Topic Namespaces
 
-   +==================+============+==================================+
-   |Topic             |Publisher   |Data                              |
-   +==================+============+==================================+
-   |bus.rx            |bus profile |A received bus frame.             |
-   +------------------+------------+----------------------------------+
-   |device.param      |peer        |A parameter value {name, value,   |
-   |                  |            |bus}.                             |
-   +------------------+------------+----------------------------------+
-   |device.event      |peer        |A named device event.             |
-   +------------------+------------+----------------------------------+
-   |device.fault      |peer        |A device fault; a consumer SHOULD |
-   |                  |            |latch it.                         |
-   +------------------+------------+----------------------------------+
-   |device.connection |peer        |A connection-state change.        |
-   +------------------+------------+----------------------------------+
-   |daemon.event      |daemon      |A daemon lifecycle event {event,  |
-   |                  |            |data}.                            |
-   +------------------+------------+----------------------------------+
-   |blobtun.data      |tunnel      |Tunnel bytes {tun, data, len}.    |
-   +------------------+------------+----------------------------------+
-   |blobtun.close     |tunnel      |Tunnel destroyed {tun, error}.    |
-   +------------------+------------+----------------------------------+
-   |core.instructions |responder   |New instruction list.             |
-   +------------------+------------+----------------------------------+
-   |log.<name>        |any         |Structured logging (extension     |
-   |                  |            |point).                           |
-   +------------------+------------+----------------------------------+
+9.3.1.  The Registry
+
+   The topics of this document, of the profiles of Section 9 and of
+   [RFC0006] are listed in Table 24.  The columns are the topic name,
+   the component that publishes it and the shape of "data" in the EVENT
+   of Section 5.5.  A shape is informative: it belongs to the topic, and
+   a consumer MUST ignore a member it does not know (Section 11).
+
+   +==================+============+===================================+
+   |Topic             |Publisher   |Data                               |
+   +==================+============+===================================+
+   |bus.rx            |bus profile |A received bus frame.              |
+   +------------------+------------+-----------------------------------+
+   |bus.tx            |bus profile |A transmitted bus frame {bus, addr,|
+   |                  |            |data}.                             |
+   +------------------+------------+-----------------------------------+
+   |bus.error         |bus profile |A bus error {bus, error}.          |
+   +------------------+------------+-----------------------------------+
+   |device.param      |peer        |A parameter value {name, value,    |
+   |                  |            |bus}.                              |
+   +------------------+------------+-----------------------------------+
+   |device.event      |peer        |A named device event.              |
+   +------------------+------------+-----------------------------------+
+   |device.fault      |peer        |A device fault; a consumer SHOULD  |
+   |                  |            |latch it.                          |
+   +------------------+------------+-----------------------------------+
+   |device.cleared    |peer        |A latched fault was cleared        |
+   |                  |            |{name, bus}.                       |
+   +------------------+------------+-----------------------------------+
+   |device.connection |peer        |A connection-state change.         |
+   +------------------+------------+-----------------------------------+
+   |device.descriptor |peer        |The descriptor changed {id,        |
+   |                  |            |version}; re-read discovery.       |
+   +------------------+------------+-----------------------------------+
+   |device.status     |peer        |A status report; the value of the  |
+   |                  |            |device_status instruction.         |
+   +------------------+------------+-----------------------------------+
+   |daemon.event      |daemon      |A daemon lifecycle event {event,   |
+   |                  |            |data}.                             |
+   +------------------+------------+-----------------------------------+
+   |daemon.bus        |daemon      |A bus was added or removed {bus}.  |
+   +------------------+------------+-----------------------------------+
+   |daemon.config     |daemon      |A configuration change {section,   |
+   |                  |            |keys}.                             |
+   +------------------+------------+-----------------------------------+
+   |blobtun.open      |tunnel      |Tunnel established {tun, window}.  |
+   +------------------+------------+-----------------------------------+
+   |blobtun.data      |tunnel      |Tunnel bytes {tun, data, len}.     |
+   +------------------+------------+-----------------------------------+
+   |blobtun.state     |tunnel      |Tunnel state {tun, ack, window,    |
+   |                  |            |off, eof}.                         |
+   +------------------+------------+-----------------------------------+
+   |blobtun.close     |tunnel      |Tunnel destroyed {tun, error}.     |
+   +------------------+------------+-----------------------------------+
+   |core.instructions |responder   |New instruction list.              |
+   +------------------+------------+-----------------------------------+
+   |core.session      |peer        |A session state change {state,     |
+   |                  |            |reason}.                           |
+   +------------------+------------+-----------------------------------+
+   |core.heartbeat    |peer        |A heartbeat report {rtt, uptime}.  |
+   +------------------+------------+-----------------------------------+
+   |core.error        |peer        |A protocol error {code, message}.  |
+   +------------------+------------+-----------------------------------+
+   |log.<name>        |any         |Structured logging (extension      |
+   |                  |            |point).                            |
+   +------------------+------------+-----------------------------------+
+   |x.<name>          |any         |Private use; never assigned by this|
+   |                  |            |this series.                       |
+   +------------------+------------+-----------------------------------+
 
                        Table 24: Topic Namespaces
 
-   The prefixes "bus.", "device.", "core.", "blobtun." and "log." are
-   reserved.  A topic whose name begins with an underscore is reserved
-   for future standard extensions.
+9.3.2.  Publishers
+
+   The Publisher column names a role and not an implementation.
+
+   *  "peer": the endpoint that owns the device or the bus being
+      reported on.
+
+   *  "daemon": the host process of [RFC0006], which speaks for the
+      buses and the devices it holds.
+
+   *  "bus profile": the component that implements Section 9.2.
+
+   *  "tunnel": the machinery of Section 6.6, for the tunnel whose
+      name appears in the data.
+
+   *  "responder": the endpoint that answered HELLO (Section 6.1).
+
+   *  "any": no restriction; the topic is an extension point.
+
+   A publisher MAY republish on a topic what it received from
+   elsewhere, exactly as [RFC0006] republishes the reports of a peer
+   (Section 6.4); it MUST NOT invent an event for a topic it does not
+   own.  A republished event carries the data of the original, and a
+   consumer cannot tell the two apart unless the data says so.
+
+9.3.3.  Assignment
+
+   The prefixes "bus.", "device.", "daemon.", "core.", "blobtun." and
+   "log." are reserved, and so is every name listed in Table 24.  A
+   topic whose name begins with an underscore is reserved for future
+   standard extensions.
+
+   *  Matching is exact (Section 6.5.2).  No wildcard and no prefix
+      matching is defined, so "bus.*" names one topic and not the
+      family.
+
+   *  A name under a reserved prefix that is not listed is unassigned.
+      A publisher MUST NOT publish it, a subscriber MUST NOT expect it,
+      and subscribing to it fails.
+
+   *  Names are assigned only by a document of this series.  An
+      application MUST NOT use a reserved prefix for a topic of its own,
+      and MUST NOT read a meaning into a reserved name that it does not
+      find in Table 24.
+
+   *  "x." is reserved for private use.  A topic under it is
+      application-defined, is never assigned by this series and MAY be
+      used by anyone; two applications that meet on one session agree on
+      its meaning between themselves.
+
+   *  A topic whose first label is none of these is application-defined.
+      It SHOULD be named after the application that owns it, so that two
+      applications cannot collide.
+
+9.3.4.  Using the Topics
+
+   *  An event reports a fact and not a state (Section 10.2): it says
+      that something happened.  The present value is asked for with a
+      call, and a consumer that has missed events recovers that way.
+
+   *  Delivery is best effort (Section 6.5.3).  A consumer that cannot
+      afford to miss an event subscribes and also drains "poll_events"
+      (Section 9.1), which carries the same facts.
+
+   *  "device.fault" is latched.  A consumer SHOULD hold the fault until
+      "device.cleared" arrives for the same name and bus, or until the
+      fault is cleared by a call [RFC0002].  A latched fault is not
+      repeated.
+
+   *  "bus.rx" is the floor and not a summary: a frame is reported there
+      when nothing else claims it, so nothing that arrived disappears
+      [RFC0006].
+
+   *  "core.instructions" announces that the instruction set of the
+      responder changed.  A consumer re-reads discovery (Section 6.7)
+      and MUST NOT go on using the list it cached.
+
+   *  "log.<name>" carries one record of a named facility.  Severity and
+      time belong to the data and not to the name, so one subscription
+      yields every severity of that facility.
+
+   *  A subscription belongs to one session and is stated again after
+      every reconnect (Section 6.5.2).
 
 10. Service Primitives
 
@@ -1656,23 +1830,27 @@ Table of Contents
 
    A call asks the peer to execute one named instruction and to report
    the outcome.  The caller sends CALL with an identifier, a procedure
-   name and positional arguments; the receiver answers with exactly one
-   RESULT carrying the same identifier.  The procedure, and the rules
-   it obeys, are specified in Section 6.4.
+   name and arguments given by name or by position; the receiver answers
+   with exactly one RESULT carrying the same identifier.  The procedure,
+   and the rules it obeys, are specified in Section 6.4.
 
-   The procedure is specified in Section 6.4 and the members in
-   Sections 5.3 and 5.4.  What follows is why the primitive has the
-   shape it has, and how an application is expected to use it.
+   The procedure is specified in Section 6.4 and the members in Sections
+   5.3 and 5.4.  What follows is why the primitive has the shape it has,
+   and how an application is expected to use it.
 
    *  The protocol stays out of the procedure.  Names and arguments are
       opaque to it and the set of procedures belongs to the peer, so
       adding one is not a change to this document and needs no new
       version.
 
+   *  Arguments are keyed, so either form can carry them.  A name keeps
+      its meaning when a procedure gains a parameter and lets a peer
+      reject what it does not define, rather than read a value in the
+      wrong position; a position keeps the common case short.
+
    *  A refusal is an outcome and not an accident.  It travels with the
-      answer on purpose: a peer that loses one call still has a
-      session, and a proxy can pass a failure on without understanding
-      it.
+      answer on purpose: a peer that loses one call still has a session,
+      and a proxy can pass a failure on without understanding it.
 
    *  The answer is self-contained.  Identifier, name and outcome ride
       in the message, so no side table is needed to interpret a reply,
@@ -1714,9 +1892,9 @@ Table of Contents
    do both.  The procedure, and the rules it obeys, are specified in
    Section 6.5.
 
-   The procedure is specified in Section 6.5 and the members in
-   Sections 5.5 to 5.7.  What follows is why the primitive has the
-   shape it has, and how an application is expected to use it.
+   The procedure is specified in Section 6.5 and the members in Sections
+   5.5 to 5.7.  What follows is why the primitive has the shape it has,
+   and how an application is expected to use it.
 
    *  Asking is answered, publishing is not.  A subscription is a
       request and someone is waiting for it; an event is a notification
@@ -1728,14 +1906,13 @@ Table of Contents
       keeps nothing that can go stale and an idle topic costs nothing.
 
    *  There is no broker.  The two roles meet directly over the session
-      that exchanged HELLO and WELCOME; anything wider is an
-      application relaying events, which keeps the primitive small and
-      the trust boundary obvious.
+      that exchanged HELLO and WELCOME; anything wider is an application
+      relaying events, which keeps the primitive small and the trust
+      boundary obvious.
 
-   *  Topics are names and not patterns.  Matching is exact, so the
-      cost of delivering one does not grow with the number of topics,
-      and no peer can be made to match against a pattern it never
-      agreed to.
+   *  Topics are names and not patterns.  Matching is exact, so the cost
+      of delivering one does not grow with the number of topics, and no
+      peer can be made to match against a pattern it never agreed to.
 
    *  Push is cheap and the pull path carries the same data.  An
       application MAY use either without changing what it receives, so
@@ -1750,11 +1927,11 @@ Table of Contents
    *  subscribe once after a session is established, and again after
       every reconnect;
 
-   *  keep "data" small and self-describing, since its shape belongs
-      to the topic and not to this document;
+   *  keep "data" small and self-describing, since its shape belongs to
+     the topic and not to this document;
 
-   *  treat a missing event as normal rather than as a failure, and
-      pull instead where a gap matters;
+   *  treat a missing event as normal rather than as a failure, and pull
+      instead where a gap matters;
 
    *  not publish faster than the slowest consumer can absorb, since
       this primitive offers no flow control, unlike Section 6.6.
@@ -1767,14 +1944,14 @@ Table of Contents
    establishment, flow control, retransmission and teardown, is
    specified in Section 6.6.
 
-   The procedure is specified in Section 6.6 and the members in
-   Sections 5.8 and 5.9.  What follows is why the primitive has the
-   shape it has, and how an application is expected to use it.
+   The procedure is specified in Section 6.6 and the members in Sections
+   5.8 and 5.9.  What follows is why the primitive has the shape it has,
+   and how an application is expected to use it.
 
-   *  One mechanism for every byte stream.  Whatever does not fit in
-      one frame and does not need the request and answer shape is a
-      tunnel: firmware, logs, media, and anything a vendor adds later,
-      so a profile gains bulk transfer without new message types.
+   *  One mechanism for every byte stream.  Whatever does not fit in one
+      frame and does not need the request and answer shape is a tunnel:
+      firmware, logs, media, and anything a vendor adds later, so a
+      profile gains bulk transfer without new message types.
 
    *  Nothing is invented twice.  Compression comes from the frame layer
       (Section 3.5), and so does every protection that [RFC0009] adds,
@@ -1818,9 +1995,8 @@ Table of Contents
        evolution is carried by the capability set and by the rule that
        unknown material is ignored.
 
-   2.  New message types use unused type values.  An implementation
-       that receives an unknown type reports E_UNKNOWN_TYPE and
-       continues.
+   2.  New message types use unused type values.  An implementation that
+      receives an unknown type reports E_UNKNOWN_TYPE and continues.
 
    3.  New flag bits are only added, never redefined; unknown bits MUST
        be ignored.  Session-scope bits are negotiated.  Bits 0x08 and
@@ -1834,10 +2010,10 @@ Table of Contents
        octet remains 0x01 and interoperability with an earlier draft of
        the frame layer is not offered.
 
-   6.  Transform algorithms are named freely (Section 3.6).  An
-       endpoint that does not recognise a name ignores it in an offer
-       and MUST NOT use it.  A new name MUST NOT reuse the meaning of
-       an existing one.
+   6.  Transform algorithms are named freely (Section 3.6).  An endpoint
+       that does not recognise a name ignores it in an offer and MUST
+       NOT use it.  A new name MUST NOT reuse the meaning of an existing
+       one.
 
    7.  Authentication methods are named freely (Section 6.2): any name
        MAY be agreed, an endpoint that does not implement it rejects the
@@ -1846,8 +2022,8 @@ Table of Contents
 
    8.  A longer header is added by a document of the series and is
        selected by the value of "header_len" (Section 3.8).  Adding one
-       does not change the header defined here, and a receiver that
-       does not implement it rejects the session with E_UNSUPPORTED.
+       does not change the header defined here, and a receiver that does
+       not implement it rejects the session with E_UNSUPPORTED.
 
    9.  An extension of Section 3.8 is OPTIONAL and is negotiated in
        HELLO and WELCOME.  An endpoint that does not implement one
@@ -1855,17 +2031,17 @@ Table of Contents
 
 12. Security Considerations
 
-   *  This document carries cleartext.  A session that uses no
-      extension of Section 3.8 is unauthenticated and unencrypted, and
-      is appropriate only for a controlled environment.  Nothing here
+   *  This document carries cleartext.  A session that uses no extension
+      of Section 3.8 is unauthenticated and unencrypted, and is
+      appropriate only for a controlled environment.  Nothing here
       detects a change to a frame or hides what a frame says.
 
    *  An authenticated session is as strong as the method that was used
       (Section 6.2).  A method that returns a proof authenticates the
       responder to the initiator as well; a method that returns none
       does not, and the initiator then relies on the transport for that
-      direction.  A method whose credential reveals the secret SHOULD
-      be combined with [RFC0009] or with [RFC0010].
+      direction.  A method whose credential reveals the secret SHOULD be
+      combined with [RFC0009] or with [RFC0010].
 
    *  A deployment that needs confidentiality, integrity or per-frame
       verification uses one of the two extensions and not both:
@@ -1892,8 +2068,8 @@ Table of Contents
    IANA.
 
    The namespaces this document defines are maintained by this series,
-   and a value is added to one of them only by a document of the
-   series, under the rules of Section 11.  They are:
+   and a value is added to one of them only by a document of the series,
+   under the rules of Section 11.  They are:
 
    *  Message type values (Section 5).
 
@@ -1967,44 +2143,43 @@ Table of Contents
 
 Appendix A.  Error Code Registry
 
-   +=======+====================+=====================================+
-   |Code   |Name                |Meaning                              |
-   +=======+====================+=====================================+
-   |0x0000 |E_INTERNAL          |Internal error.                      |
-   +-------+--------------------+-------------------------------------+
-   |0x0001 |E_BAD_MAGIC         |Magic octets are wrong.              |
-   +-------+--------------------+-------------------------------------+
-   |0x0002 |E_BAD_VERSION       |Protocol version is not supported.   |
-   +-------+--------------------+-------------------------------------+
-   |0x0003 |E_HELLO_EXPECTED    |The first frame was not HELLO.       |
-   +-------+--------------------+-------------------------------------+
-   |0x0004 |E_UNKNOWN_TYPE      |Message type is not known.           |
-   +-------+--------------------+-------------------------------------+
-   |0x0005 |E_BAD_PAYLOAD       |Payload is not a decodable CBOR      |
-   |       |                    |value.                               |
-   +-------+--------------------+-------------------------------------+
-   |0x0006 |E_PAYLOAD_TOO_LARGE |Payload exceeds the negotiated limit.|
-   +-------+--------------------+-------------------------------------+
-   |0x0007 |E_SESSION_EXPIRED   |The session is no longer usable.     |
-   +-------+--------------------+-------------------------------------+
-   |0x0008 |E_UNSUPPORTED       |A requested feature is not supported.|
-   +-------+--------------------+-------------------------------------+
-   |0x0009 |E_RATE_LIMITED      |The peer is being rate limited.      |
-   +-------+--------------------+-------------------------------------+
-   |0x000A |E_BUSY              |The peer is busy, or a request timed |
-   |       |                    |out.                                 |
-   +-------+--------------------+-------------------------------------+
-   |0x000B |E_UNAUTHORIZED      |Authentication is missing, wrong or  |
-   |       |                    |unusable.                            |
-   +-------+--------------------+-------------------------------------+
-   |0x000C |E_NO_TUNNEL         |The tunnel is unknown or not         |
-   |       |                    |established.                         |
-   +-------+--------------------+-------------------------------------+
-   |0x000D |E_TUNNEL_RESET      |The tunnel was reset, or the offset  |
-   |       |                    |cannot be served.                    |
-   +-------+--------------------+-------------------------------------+
-   |0x000E |E_DECOMPRESS        |The compressed payload is malformed. |
-   +-------+--------------------+-------------------------------------+
+   +=======+====================+======================================+
+   |Code   |Name                |Meaning                               |
+   +=======+====================+======================================+
+   |0x0000 |E_INTERNAL          |Internal error.                       |
+   +-------+--------------------+--------------------------------------+
+   |0x0001 |E_BAD_MAGIC         |Magic octets are wrong.               |
+   +-------+--------------------+--------------------------------------+
+   |0x0002 |E_BAD_VERSION       |Protocol version is not supported.    |
+   +-------+--------------------+--------------------------------------+
+   |0x0003 |E_HELLO_EXPECTED    |The first frame was not HELLO.        |
+   +-------+--------------------+--------------------------------------+
+   |0x0004 |E_UNKNOWN_TYPE      |Message type is not known.            |
+   +-------+--------------------+--------------------------------------+
+   |0x0005 |E_BAD_PAYLOAD       |Payload is not a decodable CBOR value.|
+   +-------+--------------------+--------------------------------------+
+   |0x0006 |E_PAYLOAD_TOO_LARGE |Payload exceeds the negotiated limit. |
+   +-------+--------------------+--------------------------------------+
+   |0x0007 |E_SESSION_EXPIRED   |The session is no longer usable.      |
+   +-------+--------------------+--------------------------------------+
+   |0x0008 |E_UNSUPPORTED       |A requested feature is not supported. |
+   +-------+--------------------+--------------------------------------+
+   |0x0009 |E_RATE_LIMITED      |The peer is being rate limited.       |
+   +-------+--------------------+--------------------------------------+
+   |0x000A |E_BUSY              |The peer is busy, or a request timed  |
+   |       |                    |out.                                  |
+   +-------+--------------------+--------------------------------------+
+   |0x000B |E_UNAUTHORIZED      |Authentication is missing, wrong or   |
+   |       |                    |unusable.                             |
+   +-------+--------------------+--------------------------------------+
+   |0x000C |E_NO_TUNNEL         |The tunnel is unknown or not          |
+   |       |                    |established.                          |
+   +-------+--------------------+--------------------------------------+
+   |0x000D |E_TUNNEL_RESET      |The tunnel was reset, or the offset   |
+   |       |                    |cannot be served.                     |
+   +-------+--------------------+--------------------------------------+
+   |0x000E |E_DECOMPRESS        |The compressed payload is malformed.  |
+   +-------+--------------------+--------------------------------------+
 
                      Table 25: Error Code Registry
 
@@ -2033,17 +2208,17 @@ Appendix A.  Error Code Registry
    them.  A document of the series that needs more adds them after it,
    so the core never grows into the range of an extension and an
    extension never takes a code the core already owns: [RFC0009] starts
-   at 0x000F.  Once a code has been published it is never renumbered
-   and its number is never reused.
+   at 0x000F.  Once a code has been published it is never renumbered and
+   its number is never reused.
 
 Appendix B.  Test Vectors
 
 B.1.  Minimal session
 
    No authentication, no compression and no extension of Section 3.8.
-   The header of the first frame, octet by octet: 4F 43 50 are the
-   magic octets, 01 the version, 01 the type HELLO, 00 no flags, 00 10
-   the header length of sixteen octets, 00 00 00 00 the first sequence
+   The header of the first frame, octet by octet: 4F 43 50 are the magic
+   octets, 01 the version, 01 the type HELLO, 00 no flags, 00 10 the
+   header length of sixteen octets, 00 00 00 00 the first sequence
    number and 00 00 00 1F a payload of thirty-one octets.
 
       C to S  HELLO   {"proto":1, "client":"octo-test", "caps":["rpc",
@@ -2053,7 +2228,7 @@ B.1.  Minimal session
       S to C  WELCOME {"proto":1,"session":"s1","server":"octod-test",
                        "caps":["rpc", "blobtun"],
                        "max_payload":1048576, "flags":0}
-      C to S  CALL    {"id":1,"name":"list_instructions","args":[]}
+      C to S  CALL    {"id":1,"name":"list_instructions","args":{}}
       S to C  RESULT  {"id":1,"ok":true,"value":[]}
 
 B.2.  Compression
