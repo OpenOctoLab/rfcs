@@ -311,11 +311,12 @@ Table of Contents
 
 7.2.  Credentials
 
-   A session MAY be authenticated and MAY be encrypted or compressed
-   [RFC0004].  Credentials and the two transforms are configured on
-   both endpoints independently; they are negotiated at connection
-   set-up, and a mismatch MUST fail the connection rather than silently
-   proceeding in cleartext.
+   A session MAY be authenticated and MAY be compressed [RFC0004], and
+   MAY be protected either by the frame-layer primitives of [RFC0009] or
+   by a secure transport [RFC0010].  Credentials and the transforms are
+   configured on both endpoints independently; they are negotiated at
+   connection set-up, and a mismatch MUST fail the connection rather
+   than silently proceeding in cleartext.
 
 7.3.  Start Policy
 

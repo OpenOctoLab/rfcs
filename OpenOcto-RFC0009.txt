@@ -1,0 +1,974 @@
+
+
+OpenOcto Standards Group (OOSG)                                  S. Yang
+Request for Comments: 0009                                          HFUT
+Category: Standards Track                                 September 2026
+
+
+         Primitive Security Extensions of OCP
+
+Abstract
+
+   This document adds three OPTIONAL primitives to the frame layer of
+   the Octopus Control Protocol [RFC0004]: integrity, which appends a
+   check computed over the frame as transmitted; encryption, which
+   replaces the payload with an AEAD ciphertext; and zero-trust
+   verification, which appends a second, independently keyed tag so
+   that every frame is verified on its own rather than trusted because
+   a session was established.  To carry what they need it defines an
+   extended frame header of thirty-two octets, which adds a key epoch
+   and a per-frame initialization vector to the sixteen of the core;
+   it specifies the key schedule that turns the master secret of an
+   authentication method into per-direction keys, and the rules for
+   rotating a key without a re-handshake.  No message, no primitive and
+   no state of [RFC0004] is changed.  These primitives are an
+   alternative to carrying the session over a secure transport
+   [RFC0010], and the two are not used together.
+
+Status of This Memo
+
+   This is a Standards Track document of the OpenOcto Standards (OOS)
+   series.
+
+   This document is a product of the OpenOcto Standards Group (OOSG).
+   It represents the consensus of the OOSG community, has received
+   public review and has been approved for publication.  It is not an
+   Internet Standard and is not a candidate for any level of Internet
+   Standard.  Distribution of this document is unlimited.
+
+   Information about the current status of this document, any errata
+   and how to provide feedback on it may be obtained from the OOSG.
+
+Copyright Notice
+
+   Copyright (c) 2026 OOSG and the persons identified as the document
+   authors.  All rights reserved.
+
+   This document is distributed under the MIT License: permission is
+   granted, free of charge, to use, copy, modify, merge, publish,
+   distribute, sublicense and/or sell copies of this document, subject
+   to the inclusion of the above notice in all such copies.  The
+   document is provided without warranty of any kind.  Code Components
+   extracted from this document are subject to the same terms.
+
+Table of Contents
+
+   1.  Introduction
+   2.  Conventions
+   3.  The Extended Header
+     3.1.  Layout
+     3.2.  Flag Bits
+     3.3.  When the Extended Header Is Used
+   4.  Integrity
+   5.  Encryption
+     5.1.  Key
+     5.2.  Nonce
+     5.3.  Associated Data
+   6.  Zero-Trust Verification
+   7.  The Key Schedule
+     7.1.  The Master Secret
+     7.2.  Derivation
+     7.3.  Epochs and Rotation
+     7.4.  Uniqueness and Replay
+   8.  Algorithm Selection
+   9.  Negotiation
+   10. Processing Order
+   11. Interaction with Other Documents
+   12. Security Considerations
+   13. IANA Considerations
+   14. References
+     14.1. Normative References
+     14.2. Informative References
+   Appendix A.  Error Codes
+   Appendix B.  Test Vectors
+     B.1.  Extended Header
+     B.2.  Cipher and Derivation
+     B.3.  A Protected Frame
+     B.4.  Negotiation
+   Authors' Addresses
+
+1.  Introduction
+
+   [RFC0004] is deliberately plain.  Its frame layer carries cleartext
+   and names no cipher, and Section 3.8 of that document reserves three
+   extension points for the protection it does not define.  This
+   document fills all three.
+
+   *  A longer header, of thirty-two octets, which adds a key epoch and
+      a per-frame initialization vector to the sixteen octets of the
+      core header.
+
+   *  Three flag bits, 0x08, 0x10 and 0x20, one per primitive.
+
+   *  The trailers that follow the payload: the integrity trailer and,
+      behind it, the zero-trust tag.
+
+   What this document does not do matters as much as what it does.  It
+   specifies no authentication method, no handshake and no key
+   agreement.  The secret it needs comes from the method named in
+   [RFC0004], Section 6.2, or from configuration, and an endpoint that
+   holds no such secret cannot use encryption or zero-trust
+   verification at all.  It changes no message of [RFC0004]: an
+   implementation of that document interoperates with one of this
+   document by ignoring everything added here.
+
+   The three primitives are independent of one another.
+
+   *  Integrity detects corruption.  It is the cheapest of the three
+      and is the only one that needs no key, so it is what a
+      microcontroller uses on a link that is trusted but noisy.
+
+   *  Encryption provides confidentiality and, through its AEAD tag,
+      integrity as well.  It hides the payload and authenticates the
+      header, and it is the only one of the three that changes the
+      payload.
+
+   *  Zero-trust verification authenticates a frame with a key that is
+      used for nothing else, so that every frame is proved on its own
+      rather than accepted because a session was established earlier.
+      It is the only one of the three that MUST appear on every frame
+      once it has been agreed.
+
+   A deployment chooses the combination it needs, and chooses it per
+   session, in the same exchange that negotiates compression and
+   authentication (Section 9).
+
+   The alternative is [RFC0010], which puts the whole session inside
+   TLS or QUIC and leaves this document unused.  The two solve the same
+   problem at different layers.  Which one a deployment wants, and what
+   each costs, is discussed in Section 11.
+
+2.  Conventions
+
+   The key words of [IETF-RFC2119] and [IETF-RFC8174] apply.  [RFC0004]
+   is normative for this document: the frame, the value layer, the
+   messages and the session of that document are used unchanged, and a
+   term defined there has the same meaning here.  All multi-octet
+   integers are in network byte order (big-endian).  Bits and bytes are
+   numbered from zero.
+
+   Three terms are particular to this document:
+
+   primitive    one of the three transforms defined here: integrity,
+                encryption, zero-trust verification;
+
+   trailer      the octets that follow the payload, which is what
+                distinguishes a primitive from compression: compression
+                changes the payload in place, a primitive adds octets
+                after it;
+
+   epoch        the value of the header "key_id" field, which selects
+                one key per direction (Section 7.3).
+
+   A "direction" is one of the two labels "client-to-server" and
+   "server-to-client".  The two directions derive independent keys from
+   the same secret, and a frame is always protected with the key of the
+   direction it travels in.
+
+3.  The Extended Header
+
+3.1.  Layout
+
+   The extended header is the core header of [RFC0004] followed by
+   sixteen further octets, and "header_len" is therefore 0x0020.  Its
+   structure is shown in Table 1.
+
+   +=======+=======+============+=====================================+
+   |Offset |Length |Field       |Description                          |
+   +=======+=======+============+=====================================+
+   |0      |16     |core        |The header of [RFC0004], Section 3.1,|
+   |       |       |            |with "header_len" set to 0x0020      |
+   +-------+-------+------------+-------------------------------------+
+   |16     |4      |key_id      |Key epoch of the frame (Section 7.3) |
+   +-------+-------+------------+-------------------------------------+
+   |20     |8      |frame_iv    |Per-frame initialization vector: a   |
+   |       |       |            |fresh unpredictable value for every  |
+   |       |       |            |frame (Section 5.2)                  |
+   +-------+-------+------------+-------------------------------------+
+   |28     |4      |reserved    |MUST be zero; ignored by the         |
+   |       |       |            |receiver                             |
+   +-------+-------+------------+-------------------------------------+
+
+                    Table 1: The Extended Frame Header
+
+   The core prefix is parsed first, so a receiver finds "header_len" at
+   offset six before it knows which form it holds; the octets from
+   sixteen onwards are then read only when "header_len" says they are
+   there.  The extended frame layout is shown in Figure 1.
+
+         +-----------+-------------+------------------------+
+         | header    | payload     | trailer (as agreed)    |
+         | 32 octets | payload_len | F_ITG then F_ZTR       |
+         +-----------+-------------+------------------------+
+
+                Figure 1: Layout of an Extended Frame
+
+   The reserved octets exist so that the extension octets are aligned
+   and so that a later document of the series has somewhere to put a
+   field without another header form.  A sender MUST set them to zero
+   and a receiver MUST ignore them.
+
+3.2.  Flag Bits
+
+   The flag bits defined by this document are listed in Table 2.  They
+   follow the three bits of [RFC0004], so a session that uses both
+   documents reads the flag octet as one set of six bits.
+
+   +=====+======+===========+=========================================+
+   |Bit  |Name  |Scope      |Meaning                                  |
+   +=====+======+===========+=========================================+
+   |0x08 |F_ENC |session    |The payload is encrypted (Section 5).    |
+   +-----+------+-----------+-----------------------------------------+
+   |0x10 |F_ITG |per-frame  |An integrity trailer follows the payload,|
+   |     |      |           |computed over the header and payload as  |
+   |     |      |           |transmitted (Section 4).                 |
+   +-----+------+-----------+-----------------------------------------+
+   |0x20 |F_ZTR |per-frame  |A zero-trust verification trailer        |
+   |     |      |           |follows the payload (Section 6).         |
+   +-----+------+-----------+-----------------------------------------+
+
+                           Table 2: Flag Bits
+
+   F_ENC is session scope: it joins the session flag set of [RFC0004],
+   Section 3.2, is proposed in HELLO, is confirmed in WELCOME, and
+   applies to the whole session.  F_ITG and F_ZTR are per-frame and are
+   not negotiated as bits; what is negotiated is the algorithm each
+   uses (Section 9), which then bounds what a frame may carry.
+
+   A receiver MUST ignore a bit it does not know, and MUST ignore a bit
+   it does know whose primitive was not agreed.  A frame that carries
+   F_ENC, F_ITG or F_ZTR when the corresponding primitive was not
+   agreed MUST be rejected with E_UNSUPPORTED.
+
+3.3.  When the Extended Header Is Used
+
+   The header form is a property of the session and is negotiated once.
+
+   *  HELLO and WELCOME are always carried in the core form, of sixteen
+      octets, because the form in use is not yet agreed while they are
+      exchanged.
+
+   *  Every frame after WELCOME uses the agreed form: the core form
+      when no primitive was agreed, the extended form when one was.
+
+   *  The initiator offers the extended form in the "hdr" member of
+      HELLO, as an array of the forms it implements, most preferred
+      first.  The responder states the agreed form in the same member
+      of WELCOME, as a single string.  The only value defined by this
+      document is "ext"; the core form is written "core" and is what an
+      absent member means.
+
+   *  A responder MUST NOT confirm "ext" unless it also confirms at
+      least one primitive, and MUST NOT confirm a primitive unless it
+      also confirms "ext".  A header form is not a property anyone
+      wants on its own: its two fields exist only to feed the
+      primitives.
+
+   *  A receiver MUST reject with E_UNSUPPORTED any frame whose
+      "header_len" is not the length that was agreed, or is a length it
+      does not implement.  A frame is never parsed under a form that
+      was not negotiated, so an attacker cannot make a peer read a
+      longer header than it agreed to.
+
+   The "hdr" member is carried by HELLO and by WELCOME and by no other
+   message.  An endpoint that does not implement this document ignores
+   it, as [RFC0004] requires of any member it does not define, and
+   answers with the core form.
+
+4.  Integrity
+
+   When F_ITG is set, the octets that follow the payload are the
+   integrity trailer, produced with the integrity algorithm agreed for
+   the session (Section 8).  The number of octets is fixed by the
+   algorithm and is never carried in the frame: both endpoints know it
+   from the negotiation.
+
+   The trailer is computed over the header and the payload as
+   transmitted, that is, after compression and after encryption, so a
+   check covers exactly the octets that were sent.  A receiver computes
+   the same value over the octets it received and compares; a mismatch
+   is E_BAD_ITG and the frame is discarded.
+
+   A frame carrying F_ENC is already authenticated by its AEAD tag, so
+   F_ITG MUST NOT be set on an encrypted frame.  Every frame SHOULD be
+   protected by one of the two:
+
+   *  On an unreliable transport every frame MUST be encrypted or carry
+      F_ITG, because a frame that arrives corrupted is otherwise
+      indistinguishable from one that arrives from an attacker.
+
+   *  On a stream transport every frame SHOULD be one or the other.
+
+   A receiver that does not implement the agreed integrity algorithm
+   MUST reject the frame with E_UNSUPPORTED rather than skip the check.
+
+   An integrity algorithm MAY be keyed.  A keyed one, such as a MAC,
+   takes its key from the schedule of Section 7.2 with the info label
+   "OCP-ITG/<dir>"; an unkeyed one, such as crc32, takes none.  An
+   unkeyed algorithm detects corruption and not forgery: it is a check
+   on the link, not a proof of origin, and a deployment that needs the
+   latter uses encryption, zero-trust verification or a keyed
+   algorithm.
+
+5.  Encryption
+
+   When F_ENC is set, the payload is the concatenation of the AEAD
+   ciphertext and its tag, produced with the encryption algorithm
+   agreed for the session (Section 8).  The tag length is fixed by the
+   algorithm and the payload length includes it, so "payload_len" of an
+   encrypted frame is longer than that of the same value in cleartext.
+
+   The plaintext is the payload that [RFC0004] would have sent, after
+   compression if F_COMP is set.  Compression therefore happens first
+   and the primitive protects the compressed octets (Section 10).
+
+5.1.  Key
+
+   The key is the value derived for the sending direction and for the
+   epoch named by the header "key_id" (Section 7).  Its length is fixed
+   by the algorithm; an algorithm asking for fewer octets takes the
+   leading octets of the derived key, and an implementation MUST NOT
+   offer an algorithm whose key is longer than the material the
+   schedule can derive, which is 32 octets.
+
+5.2.  Nonce
+
+   The nonce is twelve octets.
+
+   *  The leading four octets are the nonce prefix derived for the
+      sending direction and the epoch of "key_id" (Section 7.2).
+
+   *  The trailing eight octets are the bitwise XOR of the header
+      "frame_iv" and the frame "seq", both taken as unsigned 64-bit
+      big-endian integers, where "seq" is zero-extended to 64 bits and
+      therefore occupies the low four octets.
+
+   Mixing the unpredictable per-frame "frame_iv" with the unique "seq"
+   gives a nonce that is private yet guaranteed never to repeat within
+   a (direction, epoch) pair, even if "frame_iv" were ever to collide,
+   because "seq" is itself never reused within the window that
+   [RFC0004], Section 3.4, defines.  An algorithm with a shorter nonce
+   uses the leading octets of this value; one with a longer nonce is
+   used with the nonce construction specified for it.
+
+   A sender MUST take "frame_iv" from a source that is unpredictable to
+   an attacker.  A value that repeats, that is a counter, or that is
+   derived from data an attacker can observe MUST NOT be used.
+
+5.3.  Associated Data
+
+   The associated data is the header as transmitted, in full: all
+   "header_len" octets of it, including the magic, the type, the flags,
+   the sequence number, the length, the epoch and the initialization
+   vector.  Because the header form is agreed before the first
+   protected frame is sent, both endpoints know this length, and
+   because the whole header is covered, no octet of the header can be
+   altered without detection.
+
+   A receiver that does not hold the key of the epoch, that does not
+   implement the agreed algorithm, or that fails the tag check, MUST
+   reject the frame with E_DECRYPT and MUST NOT fall back to cleartext
+   interpretation.  A frame with F_ENC MUST NOT be sent unless
+   encryption was agreed (Section 9).
+
+6.  Zero-Trust Verification
+
+   When F_ZTR is set, a zero-trust verification trailer follows the
+   payload, behind the integrity trailer when there is one.  It is
+   produced with the zero-trust algorithm agreed for the session
+   (Section 8), whose tag length is fixed and known to both endpoints.
+
+   The covered octets are the header as transmitted, the payload as
+   transmitted, and any integrity trailer that precedes the ZTR
+   trailer.  The tag is therefore a keyed authentication over the exact
+   octets that were sent: no part of the header, of the payload or of
+   an integrity trailer can be altered without detection.
+
+   The primitive embodies the zero-trust principle that a frame is
+   verified rather than trusted because a session was established.  Its
+   key is derived with a label of its own (Section 7.2), so it is
+   cryptographically independent of the encryption key: an attacker who
+   learns the encryption key still cannot forge a tag, and a component
+   that is given the encryption key alone cannot either.
+
+   F_ZTR MAY be set on an encrypted frame; it is computed over the
+   ciphertext and adds a second, independently keyed authentication.
+   Unlike F_ITG it is not redundant with F_ENC, and the two MAY be
+   combined.
+
+   Because the primitive is only meaningful when it covers everything,
+   its use is all or nothing.  When a "ztr" algorithm was agreed, the
+   sender MUST set F_ZTR on every frame after WELCOME and the receiver
+   MUST verify the tag of every frame.  A frame that lacks F_ZTR, or
+   whose tag is missing, is of the wrong length, or fails to verify,
+   MUST be rejected and the session terminated with E_UNAUTHORIZED.
+
+7.  The Key Schedule
+
+7.1.  The Master Secret
+
+   Every key of this document descends from one master secret.  The
+   secret comes from one of two places:
+
+   1.  The authentication method of [RFC0004], Section 6.2.  A method
+       that is to enable encryption or zero-trust verification MUST
+       yield a master secret; a method MAY perform key agreement and
+       yield what it produces.  The method is chosen by the initiator
+       and is opaque to this document, which reads nothing but the
+       secret.
+
+   2.  Configuration.  A deployment MAY install the same secret on both
+       endpoints out of band.
+
+   When neither is available, no key exists.  A responder MUST NOT
+   confirm "enc" or "ztr" in that case (Section 9), and a session that
+   has no key is a cleartext session whatever its HELLO offered.
+
+7.2.  Derivation
+
+   Keys are derived with HKDF-SHA256 [IETF-RFC5869].  The salt is the
+   concatenation of the two nonces the authentication method exchanged,
+   in the order client nonce then server nonce, or empty when the
+   method exchanged none; the input key material is the master secret.
+   Let prk be HKDF-Extract(salt, secret).
+
+   Each key is then HKDF-Expand(prk, info, L), where info is the
+   concatenation of
+
+      <label> || 0x00 || epoch
+
+   and where <label> is one of the labels below, 0x00 is a single NUL
+   octet, and epoch is the value of "key_id" as four octets, unsigned
+   and big-endian.
+
+   +===================+======+=======================================+
+   |Label              |L     |Yields                                 |
+   +===================+======+=======================================+
+   |OCP-SESSION/<dir>  |algo  |The AEAD key of the direction and      |
+   |                   |      |epoch (Section 5.1)                    |
+   +-------------------+------+---------------------------------------+
+   |OCP-NONCE/<dir>    |4     |The nonce prefix of the direction and  |
+   |                   |      |epoch (Section 5.2)                    |
+   +-------------------+------+---------------------------------------+
+   |OCP-ZTR/<dir>      |algo  |The zero-trust key of the direction    |
+   |                   |      |and epoch (Section 6)                  |
+   +-------------------+------+---------------------------------------+
+   |OCP-ITG/<dir>      |algo  |The integrity key of the direction and |
+   |                   |      |epoch, for a keyed integrity algorithm |
+   |                   |      |(Section 4)                            |
+   +-------------------+------+---------------------------------------+
+
+                      Table 3: Derivation Labels
+
+   In a label, <dir> is the text "client-to-server" or
+   "server-to-client" for the direction the key protects.  The length
+   marked "algo" is the key length the agreed algorithm asks for, up to
+   32 octets.
+
+   Three properties follow from this construction and are the point of
+   it.  The two directions never share a key or a nonce prefix, because
+   the label differs.  Two epochs never share one, because the epoch
+   enters the info string, so rotating a key yields an independent one
+   with no handshake.  The zero-trust key is independent of the
+   encryption key, so compromising one does not compromise the other.
+
+7.3.  Epochs and Rotation
+
+   The header "key_id" field is the epoch.  A sender that wishes to
+   rotate increments "key_id" and derives the keys of that epoch as in
+   Section 7.2; it MAY switch epochs mid-session, at any frame
+   boundary, without a re-handshake and without telling the peer.
+
+   A receiver tracks the highest epoch it has accepted and accepts
+   frames whose "key_id" lies within a window of it, so that reordered
+   and in-flight frames of the previous epoch still decrypt; the
+   RECOMMENDED window is the last accepted epoch and the next four.  A
+   frame whose epoch is older than the window, or far in the future, is
+   rejected with E_DECRYPT.
+
+   Rotation is what gives a session forward secrecy: a key that is
+   compromised exposes the traffic of its epoch and of the epochs
+   behind it in the window, and nothing else.  A deployment that needs
+   more than that rotates more often; one that never rotates has one
+   epoch for the whole session.
+
+   The epoch selects one key per direction.  Each endpoint numbers its
+   own epochs: "key_id" is written by the sender of the frame and read
+   against that sender's window, so the two directions MAY be at
+   different epochs at the same time.
+
+7.4.  Uniqueness and Replay
+
+   A (key, nonce) pair MUST NOT repeat within a (direction, epoch)
+   pair.  The construction of Section 5.2 guarantees this while "seq"
+   is unique, which [RFC0004], Section 3.4, bounds at 2^31 frames; an
+   endpoint MUST open a new session rather than exceed that bound, and
+   MUST NOT reuse an epoch for a second run of sequence numbers.
+
+   Protection against replay is a separate question, and this document
+   only helps with it:
+
+   *  A receiver SHOULD reject a frame whose sequence number it has
+      already accepted, unless the octets are identical to the frame it
+      accepted under that number, so that a recorded frame cannot be
+      replayed into a session.  A frame that repeats a sequence number
+      with different octets is rejected with E_REPLAYED.
+
+   *  A receiver SHOULD count the frames it rejects for a failed check
+      and terminate the session when the count passes a threshold,
+      since a stream of forgeries is an attack and not a noisy link.
+
+   *  Reordering is tolerated: a frame is processed on its own and does
+      not depend on the frames around it.
+
+8.  Algorithm Selection
+
+   Each primitive takes an algorithm, named by a short string that the
+   endpoints agree when the session is established.  This document
+   specifies the negotiation, not a set of algorithms: any name MAY be
+   agreed by two endpoints that implement it, and the lists below are
+   examples.  The names listed are the ones used by default.
+
+   Some typical encryption algorithms are shown in Table 4.
+
+   +==================+====+======+====+==============================+
+   |Name              |Key |Nonce |Tag |Definition                    |
+   +==================+====+======+====+==============================+
+   |chacha20-poly1305 |32  |12    |16  |[IETF-RFC8439]; default       |
+   +------------------+----+------+----+------------------------------+
+   |aes-256-gcm       |32  |12    |16  |[IETF-RFC5116]                |
+   +------------------+----+------+----+------------------------------+
+   |aes-128-gcm       |16  |12    |16  |[IETF-RFC5116]                |
+   +------------------+----+------+----+------------------------------+
+
+                     Table 4: Encryption Algorithms
+
+   Some typical integrity algorithms are shown in Table 5.
+
+   +=================+========+========+=============================+
+   |Name             |Length  |Keyed   |Definition                   |
+   +=================+========+========+=============================+
+   |crc32            |4       |no      |CRC-32, polynomial           |
+   |                 |        |        |0x04C11DB7, initial and      |
+   |                 |        |        |final inversion              |
+   |                 |        |        |[IETF-RFC1952]; default      |
+   +-----------------+--------+--------+-----------------------------+
+   |crc32c           |4       |no      |CRC-32C, polynomial          |
+   |                 |        |        |0x1EDC6F41 [IETF-RFC3385]    |
+   +-----------------+--------+--------+-----------------------------+
+   |hmac-sha256-128  |16      |yes     |HMAC-SHA256 [IETF-RFC2104]   |
+   |                 |        |        |over the covered octets,     |
+   |                 |        |        |first 16 octets              |
+   +-----------------+--------+--------+-----------------------------+
+
+                     Table 5: Integrity Algorithms
+
+   Some typical zero-trust verification algorithms are shown in
+   Table 6.
+
+   +=================+========+=======================================+
+   |Name             |Length  |Definition                             |
+   +=================+========+=======================================+
+   |hmac-sha256-128  |16      |HMAC-SHA256 [IETF-RFC2104] over the    |
+   |                 |        |covered octets, first 16 octets;       |
+   |                 |        |default                                |
+   +-----------------+--------+---------------------------------------+
+   |hmac-sha256      |32      |HMAC-SHA256, full tag                  |
+   +-----------------+--------+---------------------------------------+
+
+                     Table 6: Zero-Trust Algorithms
+
+   Names are compared as exact strings and are not registered: an
+   endpoint MAY offer any name it implements, and the responder
+   confirms a name only when it implements the same one with the same
+   parameters.  The parameters a name implies, that is, key length,
+   nonce length, tag length and trailer length, MUST be known to both
+   endpoints before the name is offered.  A name defined outside this
+   document SHOULD begin with "x-" while it is experimental.  Two
+   endpoints that implement the same name differently MUST NOT agree
+   on it; such a name is treated as one the responder does not
+   implement.
+
+   An endpoint MUST NOT apply an algorithm it did not offer, and MUST
+   NOT apply one that WELCOME did not confirm.  A receiver that detects
+   such a frame rejects it with E_UNSUPPORTED, or with E_DECOMPRESS,
+   E_DECRYPT or E_BAD_ITG when the mismatch is only visible while the
+   frame is decoded.
+
+9.  Negotiation
+
+   The primitives are negotiated in the same exchange as every other
+   session property, and by two members of HELLO and of WELCOME.
+
+   The "algs" member of [RFC0004], Section 3.6, gains three keys:
+   "enc", "itg" and "ztr".  An endpoint offers a list per key, most
+   preferred first, and the responder confirms one name per key.  The
+   "hdr" member, defined in Section 3.3, carries the header form.  An
+   offer and the confirmation it produces, for example:
+
+      "hdr": ["ext"],
+      "algs": {"comp": ["zstd"],
+               "enc": ["chacha20-poly1305", "aes-256-gcm"],
+               "itg": ["crc32"],
+               "ztr": ["hmac-sha256-128"]}
+
+      "hdr": "ext",
+      "algs": {"comp": "zstd",
+               "enc": "chacha20-poly1305",
+               "itg": "crc32",
+               "ztr": "hmac-sha256-128"}
+
+   The rules of the exchange are those of [RFC0004], Section 6.1, with
+   the following additions.
+
+   1.  An absent "enc", "itg" or "ztr" key means that the endpoint does
+       not offer that primitive.  This differs from the "comp" key,
+       whose absence means the default algorithm is offered: a
+       primitive is never switched on by silence.  An empty array means
+       the same as an absent key.
+
+   2.  The responder confirms at most one name per key, and only a name
+       the initiator offered.  A key that the responder does not
+       confirm, or confirms with a name the initiator does not
+       implement, means the primitive is not used.
+
+   3.  The responder MUST NOT confirm "enc" or "ztr" when it has no key
+       available, that is, when the session is not authenticated and no
+       secret was configured out of band (Section 7.1).  It MUST clear
+       the key instead.  Confirming a primitive without a key would
+       produce a session that fails on its first protected frame.
+
+   4.  The responder MUST NOT confirm a primitive unless it confirms
+       "hdr" as "ext", and MUST NOT confirm "ext" unless it confirms a
+       primitive (Section 3.3).
+
+   5.  F_ENC is session scope and follows the agreed flag set: once
+       "enc" is confirmed, every frame after WELCOME is encrypted.
+       F_ITG and F_ZTR are per-frame.  F_ZTR, once agreed, MUST be set
+       on every frame (Section 6); F_ITG is set on the frames the
+       sender chooses, within the rules of Section 4, and MUST NOT be
+       set on a frame that is encrypted.
+
+   6.  An initiator that requires a primitive that WELCOME does not
+       confirm MUST close the session rather than continue without it;
+       it MAY first send ERROR with E_UNSUPPORTED.  Which primitive is
+       required is deployment policy, and a responder that requires one
+       refuses the session when HELLO does not offer it.
+
+   7.  A peer cannot make an endpoint use less than it requires.  An
+       endpoint that requires encryption offers only encryption, and
+       closes when WELCOME confirms another algorithm or none.  An
+       offer is not a downgrade path, because the responder's answer is
+       either a name the initiator offered or nothing at all.
+
+   The members added by this document are listed in Table 7.
+
+   +============+==============+======================================+
+   |Member      |Type          |Meaning                               |
+   +============+==============+======================================+
+   |hdr         |array of text |HELLO only.  Header forms offered,    |
+   |            |              |most preferred first (Section 3.3).   |
+   +------------+--------------+--------------------------------------+
+   |hdr         |text          |WELCOME only.  The agreed header form:|
+   |            |              |"core" or "ext".                      |
+   +------------+--------------+--------------------------------------+
+   |algs.enc    |array, text   |HELLO: encryption algorithms offered. |
+   |            |              |WELCOME: the agreed one.              |
+   +------------+--------------+--------------------------------------+
+   |algs.itg    |array, text   |As above, for integrity.              |
+   +------------+--------------+--------------------------------------+
+   |algs.ztr    |array, text   |As above, for zero-trust verification.|
+   +------------+--------------+--------------------------------------+
+
+              Table 7: Members Added to HELLO and WELCOME
+
+10. Processing Order
+
+   A sender builds a frame in this order.
+
+   1.  Value: encode one CBOR value ([RFC0004], Section 4).
+
+   2.  Compression, when F_COMP is set ([RFC0004], Section 3.5).
+
+   3.  Encryption, when F_ENC is set: the octets of step 2 become the
+       plaintext and the AEAD tag is appended to the payload
+       (Section 5).
+
+   4.  Integrity, when F_ITG is set: append the trailer over the header
+       and the payload as they now stand (Section 4).
+
+   5.  Zero-trust, when F_ZTR is set: append the tag over the header,
+       the payload and any integrity trailer (Section 6).
+
+   A receiver reverses the order.
+
+   1.  Integrity: verify the trailer; a mismatch is E_BAD_ITG.
+
+   2.  Zero-trust: verify the tag; a missing, malformed or failing tag
+       is E_UNAUTHORIZED when a "ztr" algorithm was agreed, and
+       E_UNSUPPORTED otherwise.
+
+   3.  Encryption: decrypt the payload; a failure is E_DECRYPT.
+
+   4.  Compression: decompress the payload; a failure is E_DECOMPRESS.
+
+   5.  Value: decode one CBOR value; a failure is E_BAD_PAYLOAD.
+
+   The order is what makes the primitives worth having: a frame whose
+   check fails never reaches the decompressor and never reaches the
+   decoder, so a decoder is never asked to parse octets whose origin
+   has not been established.  Steps 3 to 5 are those of [RFC0004],
+   Section 4.5, unchanged.
+
+11. Interaction with Other Documents
+
+   [RFC0004]  is the base.  Nothing in it changes: the messages, the
+      three service primitives, the tunnel and the session state
+      machine are as they are, and an implementation of that document
+      alone interoperates with one of this document by ignoring every
+      member and every bit added here.  What this document adds is
+      negotiated per session and is applied to frames only after it has
+      been agreed.
+
+   [RFC0010]  puts the whole session inside TLS or QUIC.  It solves
+      the same problem one layer lower and is an alternative to this
+      document, not an addition to it.  An endpoint that runs OCP over
+      a secure transport MUST NOT offer "hdr" and MUST NOT offer "enc",
+      "itg" or "ztr"; an endpoint that receives a WELCOME confirming
+      any of them over such a transport MUST close the session with
+      E_UNSUPPORTED.  Protecting a payload twice costs octets and
+      cycles, hides nothing that was not already hidden, and leaves two
+      places to make a mistake instead of one.  A deployment chooses
+      one of the two: this document when the transport cannot be
+      changed or when the frames themselves must be verifiable, and
+      [RFC0010] when it can.
+
+   [RFC0005] and [RFC0006]  configure the device side.  A descriptor
+      declares what an endpoint offers, and an implementation SHOULD
+      let an operator state which primitives are required; a daemon
+      that is configured to require encryption and cannot negotiate it
+      refuses the session rather than serving it in cleartext.
+
+12. Security Considerations
+
+   *  Security rests on the authentication method.  This document
+      performs no key agreement: whoever holds the master secret can
+      read and forge every frame of a session, and a method that yields
+      a weak secret yields a weak session.  A deployment that wants
+      forward secrecy across sessions needs a method that provides it.
+
+   *  An unauthenticated session has no key, so encryption and
+      zero-trust verification MUST NOT be agreed on one unless a secret
+      was configured out of band (Section 7.1).  Integrity without a
+      key is then the only primitive available, and it detects
+      corruption only.
+
+   *  "frame_iv" MUST be unpredictable (Section 5.2).  A counter, a
+      timestamp or a value an attacker can guess makes the nonce
+      predictable, which for these algorithms is catastrophic rather
+      than merely weak.
+
+   *  A failed check MUST be treated as an error and MUST NOT be
+      reinterpreted as cleartext.  An implementation SHOULD bound the
+      number of failures it tolerates before it terminates the session.
+
+   *  An unkeyed integrity algorithm detects corruption and not
+      forgery.  A deployment that needs to know who sent a frame uses
+      encryption, zero-trust verification or a keyed integrity
+      algorithm.
+
+   *  Encryption hides the payload and authenticates the header.  It
+      does not hide that a frame was sent, when it was sent, how long
+      its payload is, or what type it is: "payload_len" and "type" are
+      in the header, and the header is not encrypted.  An observer of
+      an encrypted session still learns the shape of the traffic.
+
+   *  Compression runs before encryption.  Where an attacker can
+      control part of a payload that also contains a secret, the
+      length of the ciphertext is a channel; an application SHOULD NOT
+      put attacker-controlled data and a secret in one compressed
+      payload.
+
+   *  Key rotation limits the damage of a compromise but does not
+      remove it within the window a receiver accepts (Section 7.3).
+      The window is a trade between tolerating reordering and forgetting
+      old keys, and the value in this document is a recommendation.
+
+   *  Sequence numbers and nonces are finite.  An endpoint MUST open a
+      new session before it exceeds the bound of [RFC0004], Section
+      3.4, and MUST NOT reuse an epoch for a second pass over the
+      sequence space.
+
+   *  On an unreliable transport every frame MUST be protected
+      (Section 4).  Replay is not prevented by a keyed primitive on its
+      own; the receiver's sequence-number check is what does it
+      (Section 7.4).
+
+   *  A device implementation is subject to the usual side channels:
+      timing of a comparison, power drawn while a tag is computed, and
+      the address of a key in memory.  This document cannot remove
+      them, but it does require that a tag comparison be over the full
+      tag and not stop at the first differing octet.
+
+13. IANA Considerations
+
+   This document has no IANA actions.  It requests no name, no number
+   and no code point, and it establishes no registry administered by
+   IANA.
+
+   It takes three values from the namespaces of [RFC0004], which that
+   document maintains, and adds one code to its error registry, all
+   under the rules of [RFC0004], Section 11:
+
+   *  Flag bits 0x08, 0x10 and 0x20 (Section 3.2).
+
+   *  The header length 0x0020 (Section 3.1).
+
+   *  The error code E_REPLAYED (Appendix A).
+
+   The namespaces of algorithm names are not maintained at all.  A name
+   in one of them is chosen by agreement between the two endpoints of
+   one session, carries no meaning beyond that session, and is never
+   registered:
+
+   *  Encryption algorithm names (Section 8).
+
+   *  Integrity algorithm names (Section 8).
+
+   *  Zero-trust algorithm names (Section 8).
+
+14. References
+
+14.1. Normative References
+
+   Each document below is an IETF publication.  Its tag carries the
+   IETF- prefix so that it cannot be confused with a document of this
+   series, which is listed in Section 14.2.
+
+   [RFC0004]  "Octopus Control Protocol (OCP)", this series.
+
+   [IETF-RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, IETF RFC 2119, March 1997.
+
+   [IETF-RFC5869]  Krawczyk, H. and P. Eronen, "HMAC-based Extract-and-
+              Expand Key Derivation Function (HKDF)", IETF RFC 5869, May
+              2010.
+
+   [IETF-RFC8439]  Nir, Y. and A. Langley, "ChaCha20 and Poly1305 for
+              IETF Protocols", IETF RFC 8439, June 2018.
+
+   [IETF-RFC5116]  McGrew, D., "An Interface and Algorithms for
+              Authenticated Encryption", IETF RFC 5116, January 2008.
+
+   [IETF-RFC2104]  Krawczyk, H., Bellare, M., and R. Canetti, "HMAC:
+              Keyed-Hashing for Message Authentication", IETF RFC 2104,
+              February 1997.
+
+   [IETF-RFC1952]  Deutsch, P., "GZIP file format specification version
+              4.3", IETF RFC 1952, May 1996.
+
+   [IETF-RFC3385]  Sheinwald, D., Satran, J., Thaler, P., and V.
+              Cavanna, "Internet Protocol Small Computer System
+              Interface (iSCSI) Cyclic Redundancy Check (CRC)/Checksum
+              Considerations", IETF RFC 3385, September 2002.
+
+14.2. Informative References
+
+   [RFC0010]  "OCP over Secure Transport", this series.
+
+   [RFC0002]  "OpenOcto Ecosystem Architecture", this series.
+
+   [RFC0005]  "The OpenOcto Device Descriptor Format", this series.
+
+   [RFC0006]  "OpenOcto Device Daemon Behaviour", this series.
+
+Appendix A.  Error Codes
+
+   This document adds three codes to the registry of [RFC0004],
+   Appendix A, and reuses one.  They follow the code of that document
+   that has the largest value, 0x000E, so the core keeps the low range
+   and an extension never takes a number the core owns.
+
+   +=======+====================+=====================================+
+   |Code   |Name                |Meaning                              |
+   +=======+====================+=====================================+
+   |0x000F |E_BAD_ITG           |Integrity trailer does not match.    |
+   +-------+--------------------+-------------------------------------+
+   |0x0010 |E_DECRYPT           |Decryption or tag verification       |
+   |       |                    |failed, or there is no key for the   |
+   |       |                    |epoch of the frame.                  |
+   +-------+--------------------+-------------------------------------+
+   |0x0011 |E_REPLAYED          |The frame repeats a sequence number  |
+   |       |                    |already accepted with other octets.  |
+   +-------+--------------------+-------------------------------------+
+
+                     Table 8: Error Codes Added
+
+   The code this document reuses is E_UNAUTHORIZED (0x000B), which
+   [RFC0004] defines for authentication and which the zero-trust
+   primitive reports for a tag that is missing, malformed or does not
+   verify.  The two uses are one code because both mean the same thing:
+   the origin of the frame could not be established.
+
+   A session that uses none of these primitives sends none of these
+   codes, and an implementation of [RFC0004] alone need not know them.
+
+Appendix B.  Test Vectors
+
+B.1.  Extended Header
+
+   A RESULT frame of the forty-third frame sent by the responder, on a
+   session that agreed the extended header and encryption, with epoch 1
+   and a payload of forty-eight octets, that is, thirty-two octets of
+   ciphertext and a tag of sixteen:
+
+      4F 43 50 01 04 08 00 20 00 00 00 2A 00 00 00 30
+      00 00 00 01 7A 3C 9E 11 5B D0 42 8F 00 00 00 00
+
+   Reading it field by field: 4F 43 50 are the magic octets, 01 the
+   version, 04 the type RESULT, 08 the flag F_ENC, 00 20 the header
+   length of thirty-two octets, 00 00 00 2A the sequence number 42, 00
+   00 00 30 the payload length of forty-eight octets, 00 00 00 01 the
+   epoch, 7A 3C 9E 11 5B D0 42 8F the initialization vector and 00 00
+   00 00 the reserved octets.
+
+B.2.  Cipher and Derivation
+
+   A conforming implementation MUST reproduce the published test
+   vectors of every encryption algorithm it offers: of [IETF-RFC8439]
+   for chacha20-poly1305, of [IETF-RFC5116] for the AES-GCM algorithms,
+   and of [IETF-RFC5869] for HKDF; for example, the Poly1305 vector
+   with key
+   "85d6be7857556d337f4452fe42d506a80103808afb0db2fd4abff6af4149f51b"
+   and message "Cryptographic Forum Research Group" yields the tag
+   "a8061dc1305136c6c22b8baf0c0127a9".
+
+B.3.  A Protected Frame
+
+   With an encryption algorithm agreed and a key, a frame with F_ENC
+   set is not decodable without that key, and yields E_DECRYPT when
+   decrypted with a different key, under a different epoch, or when any
+   octet of the ciphertext is altered.  The nonce is the nonce prefix
+   of the direction and epoch followed by the XOR of "frame_iv" and
+   "seq" (Section 5.2); the additional authenticated data is the whole
+   header, so altering one octet of the header also yields E_DECRYPT.
+
+   With an integrity algorithm agreed, a frame with F_ITG set whose
+   payload is altered yields E_BAD_ITG.  With a zero-trust algorithm
+   agreed, a frame without F_ZTR is rejected and the session is
+   terminated with E_UNAUTHORIZED.
+
+B.4.  Negotiation
+
+   A HELLO that offers "hdr" as ["ext"] and names only primitives the
+   responder does not implement is answered with a WELCOME whose "hdr"
+   is "core" and in which the corresponding keys of "algs" are absent;
+   a HELLO that names one the responder implements is answered with
+   "hdr" as "ext" and with that name.  A HELLO that offers "hdr" but no
+   primitive is answered with "core", and a HELLO that offers a
+   primitive but no "hdr" is answered without that primitive.
+
+Authors' Addresses
+
+   Shining Yang
+   HFUT

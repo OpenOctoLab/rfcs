@@ -13,19 +13,22 @@ Abstract
 
    OCP is the session protocol of the OpenOcto ecosystem: a symmetric,
    binary and transport-independent general purpose robot control
-   protocol in which a thirty-two-octet header carries a message type,
-   a flag octet, a sequence number and a per-frame initialization
-   vector, and the payload is a single CBOR value.  Above the frame
-   layer the protocol provides sessions, remote procedure calls,
-   publish/subscribe and a byte-stream tunnel, together with three
-   OPTIONAL top-layer transforms: integrity, compression and
-   encryption, and an OPTIONAL per-frame zero-trust verification
-   trailer appended after the payload.  Authentication is OPTIONAL: the
-   initiator names one method of any kind and the responder either
-   accepts it or fails.  The protocol is general purpose: its core
-   names no machine, no transport and no implementation, and what a
-   peer offers is carried by profiles and by descriptors.  The
-   RECOMMENDED port for a TCP or a UDP binding is 6286.
+   protocol in which a sixteen-octet header carries a message type, a
+   flag octet, a sequence number and a payload length, and the payload
+   is a single CBOR value.  Above the frame layer the protocol provides
+   sessions, remote procedure calls, publish/subscribe and a byte-stream
+   tunnel, together with one OPTIONAL top-layer transform: compression.
+   Authentication is OPTIONAL: the initiator names one method of any
+   kind and the responder either accepts it or fails.  The protocol is
+   general purpose: its core names no machine, no transport and no
+   implementation, and what a peer offers is carried by profiles and by
+   descriptors.  Cryptographic protection is deliberately not part of
+   this document.  It is added by one of two extensions: the frame-layer
+   primitives of [RFC0009], which also define a longer header, or a
+   secure transport carrying the whole session [RFC0010].  The two are
+   alternatives and are not used together.  The RECOMMENDED port for a
+   TCP or a UDP binding is 6286; [RFC0010] recommends another for a
+   secure transport.
 
 Status of This Memo
 
@@ -63,11 +66,9 @@ Table of Contents
      3.3.  Limits and Negotiation
      3.4.  Sequence Numbers
      3.5.  Compression
-     3.6.  Encryption
-     3.7.  Integrity
-     3.8.  Zero-Trust Verification
-     3.9.  Algorithm Selection
-     3.10. Streaming Parse
+     3.6.  Algorithm Selection
+     3.7.  Streaming Parse
+     3.8.  Extension Points
    4.  Value Layer
      4.1.  One Value per Frame
      4.2.  Value Types
@@ -113,7 +114,7 @@ Table of Contents
      7.1.  Stream Transport
      7.2.  Datagram Transport
      7.3.  Other Transports
-     7.4.  Recommended Port
+     7.4.  Recommended Port and URI Scheme
    8.  Capabilities
    9.  Service Profiles
      9.1.  Core Profile
@@ -133,10 +134,8 @@ Table of Contents
    Appendix B.  Test Vectors
      B.1.  Minimal Session
      B.2.  Compression
-     B.3.  Encryption
-     B.4.  Cipher and Derivation
-     B.5.  Tunnel Establishment
-     B.6.  Algorithm Negotiation
+     B.3.  Tunnel Establishment
+     B.4.  Algorithm Negotiation
    Authors' Addresses
 
 1.  Introduction
@@ -192,6 +191,15 @@ Table of Contents
       telemetry and alarms are events, and firmware, logs and media
       streams are tunnels; no fourth pattern is needed.
 
+   *  Plain by default.  The core carries cleartext: it provides no
+      confidentiality, no integrity and no per-frame verification, and
+      it names no cipher.  A deployment that needs any of them adds one
+      of two extensions, and the two are alternatives rather than
+      layers: the frame-layer primitives of [RFC0009], which also
+      define a longer header, or a secure transport that carries the
+      whole session [RFC0010].  Adding either leaves every section of
+      this document as it is.
+
    A deployment therefore narrows the protocol rather than extending
    it: a robot is integrated by publishing a descriptor and by
    implementing the profiles it needs, and this document is unchanged
@@ -211,7 +219,7 @@ Table of Contents
 
 3.1.  Header
 
-   Every frame begins with a thirty-two-octet header. The structure of
+   Every frame begins with a sixteen-octet header.  The structure of
    the header is shown in Table 1.
 
    +=======+=======+============+=====================================+
@@ -226,75 +234,72 @@ Table of Contents
    +-------+-------+------------+-------------------------------------+
    |5      |1      |flags       |Flag bits (Section 3.2)              |
    +-------+-------+------------+-------------------------------------+
-   |6      |2      |key_id      |Key epoch identifier (Section 3.6);  |
-   |       |       |            |MUST be zero unless key rotation is  |
-   |       |       |            |in use                               |
+   |6      |2      |header_len  |Total length in octets of the       |
+   |       |       |            |header; 0x0010 for the header of     |
+   |       |       |            |this document (Section 3.8)          |
    +-------+-------+------------+-------------------------------------+
-   |8      |8      |seq         |Sequence number, unsigned 64-bit,    |
-   |       |       |            |monotonic within the session         |
+   |8      |4      |seq         |Sequence number, unsigned 32-bit     |
+   |       |       |            |(Section 3.4)                        |
    +-------+-------+------------+-------------------------------------+
-   |16     |8      |frame_iv    |Per-frame initialization vector: a   |
-   |       |       |            |fresh random value for every frame   |
-   |       |       |            |(Section 3.6)                        |
-   +-------+-------+------------+-------------------------------------+
-   |24     |4      |payload_len |Length in octets of the payload as   |
+   |12     |4      |payload_len |Length in octets of the payload as   |
    |       |       |            |transmitted                          |
-   +-------+-------+------------+-------------------------------------+
-   |28     |4      |reserved    |MUST be zero; ignored by the         |
-   |       |       |            |receiver                             |
    +-------+-------+------------+-------------------------------------+
 
                          Table 1: Frame Header
 
-   The frame layout is shown in Figure 1.
+   The header is packed: no field is padded, no octet is reserved and
+   the payload begins at the octet named by "header_len".  The frame
+   layout is shown in Figure 1.
 
-         +----------+-------------+------------------------+
-         | header   | payload     | trailer (as agreed)    |
-         | 32 bytes | payload_len | F_ITG then F_ZTR       |
-         +----------+-------------+------------------------+
+         +-----------+-------------+------------------------+
+         | header    | payload     | trailer (as agreed)    |
+         | header_len| payload_len | none in this document  |
+         +-----------+-------------+------------------------+
 
                          Figure 1: Frame Layout
 
+   The magic octets and "header_len" let a receiver find the payload
+   before it knows which extensions are in use, because "header_len" is
+   at the same offset in every header form.  This document defines one
+   form, of sixteen octets; [RFC0009] defines a longer one.
+
 3.2.  Flag Bits
 
-   The flag bits are defined in Table 2.
+   The flag bits defined by this document are listed in Table 2.
 
    +=====+======+===========+=========================================+
    |Bit  |Name  |Scope      |Meaning                                  |
    +=====+======+===========+=========================================+
-   |0x01 |F_ITG |per-frame  |An integrity trailer follows the payload,|
-   |     |      |           |computed over the header and payload as  |
-   |     |      |           |transmitted (Section 3.7).               |
-   +-----+------+-----------+-----------------------------------------+
-   |0x02 |F_ACK |per-frame  |The sender requests acknowledgement      |
+   |0x01 |F_ACK |per-frame  |The sender requests acknowledgement      |
    |     |      |           |(datagram transports; Section 7.2).      |
    +-----+------+-----------+-----------------------------------------+
-   |0x04 |F_COMP|session    |The payload is compressed (Section 3.5). |
+   |0x02 |F_COMP|session    |The payload is compressed (Section 3.5). |
    +-----+------+-----------+-----------------------------------------+
-   |0x08 |F_ENC |session    |The payload is encrypted (Section 3.6).  |
-   +-----+------+-----------+-----------------------------------------+
-   |0x10 |F_AUTH|session    |This session is authenticated            |
+   |0x04 |F_AUTH|session    |This session is authenticated            |
    |     |      |           |(Section 6.2).                           |
-   +-----+------+-----------+-----------------------------------------+
-   |0x20 |F_ZTR |per-frame  |A zero-trust verification trailer        |
-   |     |      |           |follows the payload, computed over the   |
-   |     |      |           |frame as transmitted (Section 3.7.1).    |
    +-----+------+-----------+-----------------------------------------+
 
                            Table 2: Flag Bits
 
-   The three session-scope bits form the session flag set.  They are
+   The two session-scope bits form the session flag set.  They are
    proposed in HELLO, confirmed as an intersection in WELCOME, and
    marked on each frame according to what was actually applied.  The
    per-frame bits are not negotiated.  A receiver MUST ignore flag bits
    it does not know.
+
+   Bits 0x08 and above are not assigned here: they belong to the
+   extensions of Section 3.8, of which [RFC0009] assigns the first
+   three.  A session that uses that document reads the flag octet as
+   one set of six bits.
 
 3.3.  Limits and Negotiation
 
    Each endpoint states the largest payload it can receive in HELLO and
    WELCOME; the effective limit is the smaller of the two values, with
    a default of 1048576 octets.  A frame whose payload exceeds the
-   effective limit MUST be rejected with E_PAYLOAD_TOO_LARGE.
+   effective limit MUST be rejected with E_PAYLOAD_TOO_LARGE.  The
+   count is of payload octets only: neither the header nor a trailer
+   added by an extension of Section 3.8 is counted.
 
    On a stream transport, frames are delimited solely by "payload_len";
    there MUST be no padding between frames.  On a datagram transport,
@@ -302,124 +307,40 @@ Table of Contents
 
 3.4.  Sequence Numbers
 
-   Each endpoint maintains its own 64-bit sequence space.  Every frame
-   sent, including responses, increments the counter by one.  The sequence
-   number is an unsigned 64-bit integer; the space is large enough that
-   wrapping need never be accommodated within the lifetime of a session,
-   and an implementation MUST NOT reuse a number it has already sent in
-   that session.  Sequence numbers are used for loss detection on
+   Each endpoint maintains its own 32-bit sequence space.  Every frame
+   sent, including responses, increments the counter by one, modulo
+   2^32.  A sender MUST NOT reuse a number within a window of 2^31 of
+   the numbers it has already sent, and an endpoint that is about to
+   send the 2^31st frame of a session MUST close that session with BYE
+   and open a new one rather than wrap around.
+
+   Sequence numbers are compared with the serial number arithmetic of
+   [IETF-RFC1982], which is defined for exactly this space: a number is
+   before another when the difference of the two, taken modulo 2^32, is
+   less than 2^31.  Sequence numbers are used for loss detection on
    datagram transports, for correlating acknowledgements, for log
-   correlation, and as part of the additional authenticated data of
-   encrypted frames.
+   correlation, and, when [RFC0009] is in use, as part of the nonce of
+   every frame.
 
 3.5.  Compression
 
    When F_COMP is set, the payload is the compressed form of the CBOR
    value, produced with the compression algorithm agreed for the
-   session (Section 3.8).  Compression is OPTIONAL per frame; an
+   session (Section 3.6).  Compression is OPTIONAL per frame; an
    endpoint MAY compress only payloads that benefit from it.  A payload
    that cannot be decompressed with the agreed algorithm MUST be
    rejected with E_DECOMPRESS.
 
-   Compression is applied before encryption when both are used.
+   Compression is applied before the primitives of [RFC0009] when those
+   are used, so what they protect is the compressed octets.
 
-3.6.  Encryption
+3.6.  Algorithm Selection
 
-   When F_ENC is set, the payload is the concatenation of the AEAD
-   ciphertext and its tag, produced with the encryption algorithm
-   agreed for the session (Section 3.8).  The tag length is fixed by
-   the algorithm, and the payload length includes it.
-
-   *  Key: the value derived for the sending direction and the header
-      "key_id" epoch, as described in Section 6.2.  Its length is fixed
-      by the algorithm; an algorithm asking for fewer octets takes the
-      leading octets of the derived key, and an implementation MUST NOT
-      offer an algorithm whose key is longer than the material it can
-      derive.  The header "key_id" field selects which derived key is
-      used (Section 3.1); it enters the key-derivation context so that
-      distinct epochs yield distinct keys, supporting key rotation and
-      forward secrecy without a re-handshake.
-
-   *  Nonce: twelve octets.  The leading four octets are the nonce prefix
-      derived for the sending direction and "key_id" epoch (Section
-      6.2); the trailing eight octets are the bitwise XOR of the header
-      "frame_iv" and the frame "seq", both taken as unsigned 64-bit
-      big-endian integers.  Mixing the unpredictable per-frame
-      "frame_iv" with the unique, monotonic "seq" gives a nonce that is
-      private yet guaranteed never to repeat within a (direction, epoch)
-      pair even if "frame_iv" were ever to collide, because "seq" is
-      itself never reused.  An algorithm with a shorter nonce uses the
-      leading octets of this value; one with a longer nonce is used with
-      the nonce construction specified for it.
-
-   *  Associated data: the first twelve octets of the frame header, as
-      transmitted.  (With the layout of Section 3.1 these are magic,
-      version, type, flags, key_id and the high four octets of seq; the
-      rule is the fixed length, so changing the header does not change
-      the AAD.)
-
-   A frame with F_ENC MUST NOT be sent unless encryption was negotiated
-   (Section 6.1).  A receiver that does not hold the session key, that
-   does not implement the agreed algorithm, or that fails the tag
-   check, MUST reject the frame with E_DECRYPT and MUST NOT fall back
-   to cleartext interpretation.
-
-3.7.  Integrity
-
-   When F_ITG is set, the octets following the payload are the
-   integrity trailer, produced with the integrity algorithm agreed for
-   the session (Section 3.8).  The number of octets is fixed by the
-   algorithm.  The trailer is computed over the header and the payload
-   as transmitted, after compression and encryption, so integrity
-   covers the octets actually sent.
-
-   Confidentiality and integrity are orthogonal, but a frame carrying
-   F_ENC is already integrity-protected by its AEAD tag, so F_ITG MUST
-   NOT be set on an encrypted frame.  Every frame MUST be
-   integrity-protected: on an unreliable transport the frame MUST be
-   either encrypted or carry F_ITG; on a stream transport it SHOULD be
-   one or the other.  A cleartext frame whose check fails MUST be
-   reported with E_BAD_ITG.  A receiver that does not implement the
-   agreed algorithm MUST reject the frame with E_UNSUPPORTED.
-
-3.8.  Zero-Trust Verification
-
-   When F_ZTR is set, a zero-trust verification trailer follows the
-   integrity trailer (if any), produced with the zero-trust algorithm
-   agreed for the session (Section 3.8).  The number of octets is fixed
-   by the algorithm.  The trailer authenticates the frame independently
-   of session state, embodying the zero-trust principle that every
-   frame is verified rather than trusted because a session was
-   established.
-
-   The covered octets are the frame header, the payload as transmitted,
-   and any integrity trailer that precedes the ZTR trailer.  The tag is
-   therefore a keyed authentication over the exact octets that were
-   sent, so neither header, payload nor integrity trailer can be
-   altered without detection.
-
-   F_ZTR MAY be set on an encrypted frame; it is computed over the
-   ciphertext and provides a second, independently keyed authentication
-   layer in addition to the AEAD tag.  Unlike F_ITG, F_ZTR is not
-   redundant with F_ENC and the two MAY be combined.
-
-   F_ZTR MUST NOT be set unless a "ztr" algorithm was agreed in the
-   session "algs".  A frame that carries F_ZTR when none was agreed
-   MUST be rejected with E_UNSUPPORTED.  When a "ztr" algorithm is
-   agreed, the sender MUST set F_ZTR on every frame and the receiver
-   MUST verify the tag of every frame; a frame that lacks F_ZTR, or
-   whose tag is missing, of the wrong length, or fails to verify, MUST
-   be rejected and the session terminated with E_UNAUTHORIZED.
-
-3.9.  Algorithm Selection
-
-   Compression, encryption, integrity and zero-trust verification each take
-   an algorithm, named
-   by a short string that the endpoints agree when the session is
-   established (Section 6.1).  This document specifies the
-   negotiation, not a set of algorithms: any name MAY be agreed by two
-   endpoints that implement it, and the lists below are examples.  The
-   names listed are the ones used by default.
+   Compression takes an algorithm, named by a short string that the
+   endpoints agree when the session is established (Section 6.1).  This
+   document specifies the negotiation, not a set of algorithms: any
+   name MAY be agreed by two endpoints that implement it, and the list
+   below is an example.  The name listed is the one used by default.
 
    Some typical compression algorithms are shown in Table 3.
 
@@ -435,63 +356,10 @@ Table of Contents
 
                     Table 3: Compression Algorithms
 
-   Some typical encryption algorithms are shown in Table 4.
-
-   +==================+====+======+====+==============================+
-   |Name              |Key |Nonce |Tag |Definition                    |
-   +==================+====+======+====+==============================+
-   |chacha20-poly1305 |32  |12    |16  |[IETF-RFC8439]; default       |
-   +------------------+----+------+----+------------------------------+
-   |aes-256-gcm       |32  |12    |16  |[IETF-RFC5116]                |
-   +------------------+----+------+----+------------------------------+
-   |aes-128-gcm       |16  |12    |16  |[IETF-RFC5116]                |
-   +------------------+----+------+----+------------------------------+
-
-                     Table 4: Encryption Algorithms
-
-   Some typical integrity algorithms are shown in Table 5.
-
-   +=======+=======+==================================================+
-   |Name   |Length |Definition                                        |
-   +=======+=======+==================================================+
-   |crc32  |4      |CRC-32, polynomial 0x04C11DB7 with initial and    |
-   |       |       |final inversion [IETF-RFC1952]; default           |
-   +-------+-------+--------------------------------------------------+
-   |crc32c |4      |CRC-32C, polynomial 0x1EDC6F41 [IETF-RFC3385]     |
-   +-------+-------+--------------------------------------------------+
-
-                     Table 5: Integrity Algorithms
-
-   Some typical zero-trust verification algorithms are shown in
-   Table 6.
-
-   +=================+========+=======================================+
-   |Name             |Length  |Definition                             |
-   +=================+========+=======================================+
-   |hmac-sha256-128  |16      |HMAC-SHA256 [IETF-RFC2104] over the    |
-   |                 |        |covered octets, first 16 octets;       |
-   |                 |        |default                                |
-   +-----------------+--------+---------------------------------------+
-                     Table 6: Zero-Trust Algorithms
-
-   The covered octets are the frame header, the payload as transmitted,
-   and any integrity trailer that precedes the ZTR trailer.  The key is
-   the per-direction zero-trust key: the same master secret the
-   authentication method establishes in Section 6.2, derived with
-   HKDF-SHA256 [IETF-RFC5869] and the info label "OCP-ZTR/<dir>"
-   extended with a NUL octet and the "key_id" epoch, where <dir> is
-   "client-to-server" or "server-to-client".  This mirrors the
-   encryption-key derivation of Section 6.2 but with a distinct label,
-   so the ZTR key is cryptographically independent of the encryption
-   key: an attacker who learns the encryption key still cannot forge a
-   ZTR tag.  A deployment MAY instead use a key established entirely
-   out of band; in that case the derivation is replaced by that key.
-
    Names are compared as exact strings and are not registered: an
    endpoint MAY offer any name it implements, and the responder
    confirms a name only when it implements the same one with the same
-   parameters.  The parameters a name implies, that is, key length,
-   nonce length, tag length and trailer length, MUST be known to both
+   parameters.  The parameters a name implies MUST be known to both
    endpoints before the name is offered.  A name defined outside this
    document SHOULD begin with "x-" while it is experimental.  Two
    endpoints that implement the same name differently MUST NOT agree
@@ -500,50 +368,73 @@ Table of Contents
 
    An endpoint offers the algorithms it is willing to use in the "algs"
    member of HELLO, most preferred first; the responder states the
-   agreed algorithm of each transform in the same member of WELCOME.
-   An offer and the confirmation it produces, for example:
+   agreed algorithm in the same member of WELCOME.  An offer and the
+   confirmation it produces, for example:
 
-      "algs": {"comp": ["zstd", "deflate"],
-               "enc": ["chacha20-poly1305", "aes-256-gcm"],
-               "itg": ["crc32", "crc32c"],
-               "ztr": ["hmac-sha256-128"]}
+      "algs": {"comp": ["zstd", "deflate"]}
 
-      "algs": {"comp": "zstd",
-               "enc": "chacha20-poly1305",
-               "itg": "crc32",
-               "ztr": "hmac-sha256-128"}
+      "algs": {"comp": "zstd"}
 
-   The member and each of its keys are OPTIONAL.  An absent "comp",
-   "enc", "itg" key means that the endpoint offers only the default of
-   that transform, that is, "deflate", "chacha20-poly1305" or "crc32";
-   an absent "ztr" key means the endpoint offers no zero-trust
-   verification.  An empty array means that it offers none.  A name an
-   endpoint does not recognise MUST be ignored in an offer and MUST NOT
-   be confirmed.
+   The member and its key are OPTIONAL.  An absent "comp" key means
+   that the endpoint offers only the default, that is, "zstd"; an empty
+   array means that it offers none.  A name an endpoint does not
+   recognise MUST be ignored in an offer and MUST NOT be confirmed.
 
-   The "ztr" algorithm is offered independently of authentication, but
-   its key is the master secret the authentication method establishes
-   in Section 6.2 (or an out-of-band key, Section 3.8).  A session that
-   negotiates "ztr" while performing no authentication (F_AUTH unset)
-   therefore MUST use an out-of-band zero-trust key; otherwise no key
-   is available from which to derive a tag.
-
-   When the responder implements none of the algorithms offered for a
-   transform, the corresponding session flag is not agreed and the
-   transform is not used.
+   When the responder implements none of the algorithms offered, the
+   F_COMP flag is not agreed and compression is not used.
 
    An endpoint MUST NOT apply an algorithm it did not offer, and MUST
-   NOT apply one that WELCOME did not confirm.  A receiver that
-   detects such a frame rejects it with E_UNSUPPORTED, or with
-   E_DECOMPRESS or E_DECRYPT when the mismatch is only visible while
-   the payload is decoded.
+   NOT apply one that WELCOME did not confirm.  A receiver that detects
+   such a frame rejects it with E_UNSUPPORTED, or with E_DECOMPRESS
+   when the mismatch is only visible while the payload is decoded.
 
-3.10. Streaming Parse
+   [RFC0009] adds the keys "enc", "itg" and "ztr" to the same member
+   and specifies the algorithms they name.  An endpoint that does not
+   implement that document ignores those keys in an offer, as it
+   ignores any key it does not define.
+
+3.7.  Streaming Parse
 
    On a stream transport a receiver accumulates octets and parses
-   frames one at a time.  An incomplete frame is not an error: the
-   receiver waits for more octets.  The header size is fixed and the
-   payload length is explicit, so no escape mechanism is REQUIRED.
+   frames one at a time, reading "header_len" at offset six to find
+   where the payload begins.  An incomplete frame is not an error: the
+   receiver waits for more octets.  The payload length is explicit, so
+   no escape mechanism is REQUIRED.
+
+3.8.  Extension Points
+
+   Three things may be added to the frame layer by another document of
+   this series, and this document defines none of them.
+
+   *  Flag bits.  Bits 0x08 and above of the flag octet are unassigned
+      here.  A receiver MUST ignore a bit it does not know, so a
+      primitive that marks itself on a frame is invisible to an
+      endpoint that has not negotiated it.  [RFC0009] assigns 0x08,
+      0x10 and 0x20.
+
+   *  A longer header.  The value of "header_len" states how many octets
+      precede the payload, so a longer header is parsed by the same
+      code that parses this one, and the octets that follow offset
+      sixteen are defined by the document that adds them.  A receiver
+      that does not implement a header length it is offered rejects the
+      session with E_UNSUPPORTED.  [RFC0009] defines a header of
+      thirty-two octets.
+
+   *  Trailers.  Octets MAY follow the payload.  Their number is fixed
+      by the negotiated algorithm of the primitive that adds them and
+      is never carried in the frame, so both endpoints know it from the
+      negotiation.  This document defines none.
+
+   An extension is negotiated in HELLO and WELCOME like any other
+   session property (Section 6.1), and is applied to a frame only after
+   it has been agreed.  A frame that carries a header form, a flag bit
+   or a trailer that was not agreed is rejected with E_UNSUPPORTED.
+
+   All of the security of the frame layer lives in these extensions.
+   The primitives of [RFC0009] add confidentiality, integrity and
+   per-frame verification to the frames themselves; [RFC0010] puts the
+   whole session inside a secure transport instead.  This document
+   carries cleartext.
 
 4.  Value Layer
 
@@ -688,27 +579,18 @@ Table of Contents
    A receiver reverses the transforms of Section 3 before it decodes
    the value:
 
-   1.  Integrity: verify the trailer (Section 3.7); a mismatch is
-       E_BAD_ITG.
-
-   2.  Zero-trust: verify the F_ZTR trailer (Section 3.7.1); a missing,
-       malformed or failing tag is E_UNAUTHORIZED when a "ztr"
-       algorithm was agreed, or E_UNSUPPORTED otherwise.
-
-   3.  Encryption: decrypt the payload (Section 3.6); a failure is
-       E_DECRYPT.
-
-   4.  Compression: decompress the payload (Section 3.5); a failure is
+   1.  Compression: decompress the payload (Section 3.5); a failure is
        E_DECOMPRESS.
 
-   5.  Value: decode one CBOR value; a failure is E_BAD_PAYLOAD.
+   2.  Value: decode one CBOR value; a failure is E_BAD_PAYLOAD.
 
-   The order matters: a frame that fails an integrity or a cipher check
-   is discarded before its octets reach the decoder, so a decoder is
-   never asked to parse octets whose origin is not established.  A
-   value-level failure is E_BAD_PAYLOAD; the frame is discarded and the
-   session continues, since a bad payload is the fault of one frame and
-   not of the session.
+   The primitives of [RFC0009], when they are in use, precede these two
+   steps, so a frame whose integrity or cipher check fails never
+   reaches the decompressor and a decoder is never asked to parse
+   octets whose origin is not established.  A value-level failure is
+   E_BAD_PAYLOAD; the frame is discarded and the session continues,
+   since a bad payload is the fault of one frame and not of the
+   session.
 
    A decoder MUST NOT reject a value merely because it uses a legal but
    non-canonical CBOR encoding (Section 2).
@@ -768,18 +650,18 @@ Table of Contents
                                     // initiator
         "caps": ["rpc", "pubsub", "blobtun"],
         "max_payload": 1048576,
-        "flags": 12,                // proposed session flags;
-                                    // F_COMP|F_ENC = 0x0C
-        "algs": {"comp": ["deflate", "zstd"],
-                 "enc": ["chacha20-poly1305"],
-                 "itg": ["crc32"]}  // OPTIONAL; offered
-                                    // algorithms (Section 3.8)
+        "flags": 2,                 // proposed session flags;
+                                    // F_COMP = 0x02
+        "algs": {"comp": ["zstd", "deflate"]}
+                                    // OPTIONAL; offered algorithms
+                                    // (Section 3.6)
         "auth": { ... }             // OPTIONAL; absent when no
                                     // authentication is used
       }
 
-   The "algs" member offers the algorithms of the three transforms and
-   is specified in Section 3.8.
+   The "algs" member offers the compression algorithms and is specified
+   in Section 3.6.  [RFC0009] and [RFC0010] each define further members
+   that this message carries when they are in use.
 
    A first frame that is not HELLO MUST be answered with
    E_HELLO_EXPECTED, after which the responder SHOULD close.
@@ -806,9 +688,9 @@ Table of Contents
    |            |              |Bits outside the session set MUST be  |
    |            |              |zero.                                 |
    +------------+--------------+--------------------------------------+
-   |algs        |map           |OPTIONAL.  Algorithms offered (Section|
-   |            |              |3.8).  Absent means only the default  |
-   |            |              |of each transform.                    |
+   |algs        |map           |OPTIONAL.  Compression algorithms    |
+   |            |              |offered (Section 3.6).  Absent means  |
+   |            |              |only the default of the transform.    |
    +------------+--------------+--------------------------------------+
    |auth        |map           |OPTIONAL.  Credential of the method   |
    |            |              |named by its "method" member (Section |
@@ -826,11 +708,9 @@ Table of Contents
         "server": "octod-1.0",
         "caps": ["rpc", "pubsub", "blobtun"],
         "max_payload": 1048576,
-        "flags": 12,                // agreed session flags
-        "algs": {"comp": "deflate",
-                 "enc": "chacha20-poly1305",
-                 "itg": "crc32"}    // agreed algorithms
-                                    (Section 3.8)
+        "flags": 2,                 // agreed session flags
+        "algs": {"comp": "zstd"}    // agreed algorithm
+                                    (Section 3.6)
         "auth": { "ok": true, "nonce": h'...', "mac": h'...' }
       }
 
@@ -860,8 +740,8 @@ Table of Contents
    |flags       |unsigned      |Agreed session flags: the intersection|
    |            |              |with the proposal (Section 6.1).      |
    +------------+--------------+--------------------------------------+
-   |algs        |map           |OPTIONAL.  One agreed algorithm per   |
-   |            |              |transform (Section 3.8).              |
+   |algs        |map           |OPTIONAL.  The agreed compression     |
+   |            |              |algorithm (Section 3.6).              |
    +------------+--------------+--------------------------------------+
    |auth        |map           |OPTIONAL.  "ok" and the proof of the  |
    |            |              |method, when it defines one (Section  |
@@ -1140,31 +1020,35 @@ Table of Contents
 6.1.  Session Flag Negotiation
 
    1.  The initiator lists the session flags it wants in HELLO: the
-       authentication bit if it will authenticate, the compression bit
-       if it wants compression, the encryption bit if it wants
-       encryption, and the integrity bit if it checks integrity. For
-       each of the three transforms it lists the algorithms it is
-       willing to use in the "algs" member (Section 3.8).
+       authentication bit if it will authenticate and the compression
+       bit if it wants compression.  For compression it lists the
+       algorithms it is willing to use in the "algs" member
+       (Section 3.6).  An extension of Section 3.8 adds its own member
+       to the same message and is negotiated by the same exchange;
+       [RFC0009] states the one it adds.
 
    2.  The responder answers with the intersection of the proposed bits
-       and the bits it supports, in WELCOME, and with one algorithm for
-       each transform: the first entry of the initiator's list that it
-       also implements, or the default when the member or its key is
-       absent.
+       and the bits it supports, in WELCOME, and with one compression
+       algorithm: the first entry of the initiator's list that it also
+       implements, or the default when the member or its key is absent.
 
    3.  The agreed set is the WELCOME value.  Each frame thereafter marks
        the bits it actually applies.  Compression MAY vary per frame;
-       authentication, encryption and the agreed algorithms apply to the
-       whole session.
+       authentication and every agreed extension apply to the whole
+       session.
 
    4.  A transform whose offers have no algorithm in common is not
-       agreed and its flag is cleared.  The initiator MUST fail the
-       connection when that transform is encryption, or when it is
-       integrity on a datagram transport; otherwise it proceeds without
-       the transform.
+       agreed and its flag is cleared; the initiator proceeds without
+       it.
 
-   5.  A frame MUST NOT set F_ENC unless encryption was agreed, and MUST
-       NOT set F_AUTH unless authentication succeeded.
+   5.  A frame MUST NOT set F_AUTH unless authentication succeeded, and
+       MUST NOT set a flag bit, a header length or a trailer that the
+       agreement does not cover.  Such a frame is rejected with
+       E_UNSUPPORTED.
+
+   6.  An initiator that requires an extension that WELCOME does not
+       confirm MUST close the session rather than continue without it.
+       Which extension is required, if any, is deployment policy.
 
 6.2.  Optional Authentication
 
@@ -1203,14 +1087,11 @@ Table of Contents
        defines no proof is complete once the responder has accepted the
        credential.
 
-   3.  Yield the key material of the session.  A method that is to
-       enable encryption MUST yield the master secret from which the
-       AEAD keys are derived (Section 3.6), two keys, one per
-       direction, each of the length the agreed encryption algorithm
-       requires.  The same master secret also seeds the per-direction
-       zero-trust keys (Section 3.8): a method that is to enable
-       zero-trust verification MUST therefore yield a master secret, or
-       zero-trust MUST use a key established out of band (Section 3.8).
+   3.  Yield key material.  A method MAY yield a master secret.  This
+       document never uses one; [RFC0009] specifies the keys that are
+       derived from it, the session properties that require it and the
+       rules for rotating it.  A method that yields no secret is
+       complete for every purpose of this document.
 
    On success the responder sends WELCOME whose "auth" member carries
    "ok" set to true, the proof of the method when it defines one, and
@@ -1238,35 +1119,12 @@ Table of Contents
          mac = HMAC-SHA256(secret, "OCP-WELCOME" || client_nonce ||
              server_nonce)
 
-   Both examples derive, for each direction and each "key_id" epoch, a
-   single protection bundle from the shared secret with HKDF-SHA256
-   [IETF-RFC5869]: the AEAD key (32 octets, or the length the algorithm
-   requires) followed by a four-octet nonce prefix.  The salt is the
-   concatenation of the two nonces, or empty when no nonce was
-   exchanged; the info label is "OCP-SESSION/<dir>" for the key and
-   "OCP-NONCE/<dir>" for the prefix, each extended with a single NUL
-   octet and the "key_id" epoch value, where <dir> is
-   "client-to-server" or "server-to-client".  The separation by both
-   direction and epoch means a rotated epoch, or the opposite
-   direction, yields an independent key and prefix, so a (key, nonce)
-   pair is never shared; the receiver accepts only epochs within a
-   small window of the one it last accepted, enabling rekey without a
-   re-handshake and providing forward secrecy.
-
-   The "key_id" field of the header is the key epoch.  A sender that
-   wishes to rotate keys increments "key_id" and derives the new
-   protection bundle for that epoch as above; it may switch epochs
-   mid-session without a re-handshake.  A receiver tracks the highest
-   epoch it has accepted and accepts frames whose "key_id" lies within
-   a small window (for example the last accepted epoch and the next
-   few) so that reordered or in-flight frames of the previous epoch
-   still decrypt, while old and far-future epochs are rejected with
-   E_DECRYPT.  Rotating the epoch yields a new, independent key and
-   nonce prefix, so a compromise of one epoch does not expose traffic
-   protected under another: this is the protocol's forward secrecy.
-
-   Deriving keys does not by itself enable encryption: encryption is
-   enabled only when F_ENC was agreed.
+   The key material a method yields, when it yields any, is used by
+   [RFC0009] and by nothing in this document: that document derives the
+   per-direction keys from it, states which properties require it and
+   gives the rules for rotating it.  An endpoint that does not use that
+   document ignores the secret entirely, and an endpoint that offers no
+   method at all is unaffected by this paragraph.
 
 6.3.  Lifetime
 
@@ -1455,10 +1313,10 @@ Table of Contents
    The blob tunnel carries raw byte streams, for example firmware
    images, media streams, log uploads and vendor extensions.  Several
    tunnels MAY exist on one session at a time, distinguished by name.
-   The tunnel defines no integrity, compression or encryption of its
-   own: those are provided by the frame layer (Sections 3.5, 3.6 and
-   3.7) and therefore apply to tunnel traffic as they apply to every
-   other message.
+   The tunnel defines no compression and no protection of its own:
+   those are provided by the frame layer (Sections 3.5 and 3.8) and
+   therefore apply to tunnel traffic as they apply to every other
+   message.
 
 6.6.1.  Messages
 
@@ -1597,8 +1455,8 @@ Table of Contents
 
 7.2.  Datagram Transport
 
-   One datagram carries exactly one frame, and each frame is integrity
-   checked as a whole.  A sender MAY request acknowledgement for
+   One datagram carries exactly one frame, and each frame is processed
+   on its own.  A sender MAY request acknowledgement for
    important frames by setting F_ACK, and MAY retransmit with the same
    sequence number on timeout; a receiver SHOULD deduplicate
    retransmits by sequence number and type.  Frames whose loss is
@@ -1620,19 +1478,17 @@ Table of Contents
       no frame for an application-defined interval; the next datagram
       then opens a new session with a new HELLO.
 
-   Authentication (Section 6.2) and encryption (Section 3.6) therefore
-   apply to a datagram session exactly as they apply to a stream
-   session, and neither requires a lower layer to provide them.  Three
-   points are particular to an unreliable transport:
+   Authentication (Section 6.2) applies to a datagram session exactly
+   as it applies to a stream session and requires no lower layer to
+   provide it.  Three points are particular to an unreliable transport:
 
-   *  Each datagram is verified and decrypted on its own: the AEAD
-      nonce combines the per-direction, per-epoch nonce prefix with the
-      per-frame "frame_iv" XOR "seq" (Section 3.6), so no frame depends
-      on another and a lost frame does not make the frames that follow
-      it undecodable.
+   *  A frame carries everything needed to process it: its length is in
+      the header and, when [RFC0009] is in use, its nonce material is
+      in the extended header, so no frame depends on another and a lost
+      frame does not make the frames that follow it undecodable.
 
    *  A retransmission carries the same octets as the frame it repeats,
-      hence the same frame_iv, the same nonce and the same ciphertext.
+      and therefore the same length and the same nonce material.
       Accepting it twice changes nothing, which is what the
       deduplication above already prevents.
 
@@ -1641,8 +1497,11 @@ Table of Contents
       accepted under that number, so that a recorded frame cannot be
       replayed into an authenticated session.
 
-   The octet budget above is counted after encryption and after the
-   integrity trailer, so enabling either leaves less room for payload.
+   Confidentiality and integrity are not provided by this document.  A
+   datagram session that needs them uses the primitives of [RFC0009] or
+   a secure transport [RFC0010]; neither changes any rule above.  The
+   octet budget above is counted after any trailer of Section 3.8, so
+   enabling one leaves less room for payload.
 
 7.3.  Other Transports
 
@@ -1650,7 +1509,7 @@ Table of Contents
    binding only has to provide delimited frames and to state whether
    the transport is reliable.
 
-7.4.  Recommended Port
+7.4.  Recommended Port and URI Scheme
 
    The RECOMMENDED port for a TCP or a UDP binding is 6286.  The digits
    are a mnemonic: on a telephone keypad the letters of the sixth, the
@@ -1659,6 +1518,18 @@ Table of Contents
    any port, and an endpoint learns the port of its peer from
    configuration or from service discovery, never from the protocol
    itself.  The value is not registered with IANA (Section 13).
+   [RFC0010] recommends another port for a session that runs inside a
+   secure transport.
+
+   One URI scheme is used for a session of this document, by
+   configuration files, by tools and by logs [RFC0007].  It is not part
+   of the protocol and no endpoint parses one at run time.
+
+      ocp://host[:port]      cleartext; port defaults to 6286
+
+   A session inside a secure transport has a scheme of its own, which
+   [RFC0010] defines; a tool that is given that scheme MUST NOT treat
+   it as this one.
 
 8.  Capabilities
 
@@ -1680,9 +1551,10 @@ Table of Contents
 
    The effective set is the intersection of the two endpoints'
    declarations.  Anything not listed here is carried by one of these
-   three: heartbeats and discovery are calls, the bus profile is calls
-   plus topics, and authentication, compression and encryption are
-   session flags.
+   three: heartbeats and discovery are calls, and the bus profile is
+   calls plus topics.  Authentication and compression are session
+   flags, and confidentiality, integrity and per-frame verification are
+   extensions of Section 3.8.
 
 9.  Service Profiles
 
@@ -1904,10 +1776,10 @@ Table of Contents
       tunnel: firmware, logs, media, and anything a vendor adds later,
       so a profile gains bulk transfer without new message types.
 
-   *  Nothing is invented twice.  Integrity, compression and encryption
-      come from the frame layer (Sections 3.5 to 3.7), so a tunnel is
-      protected exactly as every other message is and needs no
-      cryptography of its own.
+   *  Nothing is invented twice.  Compression comes from the frame layer
+      (Section 3.5), and so does every protection that [RFC0009] adds,
+      so a tunnel is protected exactly as every other message is and
+      needs no cryptography of its own.
 
    *  Offsets are what make a stream recoverable.  Because each slice
       says where it belongs, a gap can be filled and a transfer can
@@ -1951,13 +1823,18 @@ Table of Contents
        continues.
 
    3.  New flag bits are only added, never redefined; unknown bits MUST
-       be ignored.  Session-scope bits are negotiated.
+       be ignored.  Session-scope bits are negotiated.  Bits 0x08 and
+       above are assigned by the extensions of Section 3.8 and by no
+       other document.
 
    4.  Unknown fields in a message map MUST be ignored.
 
-   5.  A breaking change increments the version octet.
+   5.  A breaking change increments the version octet once the protocol
+       has been published.  While this document is a draft the version
+       octet remains 0x01 and interoperability with an earlier draft of
+       the frame layer is not offered.
 
-   6.  Transform algorithms are named freely (Section 3.8).  An
+   6.  Transform algorithms are named freely (Section 3.6).  An
        endpoint that does not recognise a name ignores it in an offer
        and MUST NOT use it.  A new name MUST NOT reuse the meaning of
        an existing one.
@@ -1967,24 +1844,34 @@ Table of Contents
        attempt, and a new name MUST NOT reuse the meaning of an existing
        one.
 
+   8.  A longer header is added by a document of the series and is
+       selected by the value of "header_len" (Section 3.8).  Adding one
+       does not change the header defined here, and a receiver that
+       does not implement it rejects the session with E_UNSUPPORTED.
+
+   9.  An extension of Section 3.8 is OPTIONAL and is negotiated in
+       HELLO and WELCOME.  An endpoint that does not implement one
+       ignores the members that carry it and continues with the core.
+
 12. Security Considerations
 
-   *  Without F_AUTH the session is cleartext and unauthenticated,
-      which is appropriate only for a controlled environment.
+   *  This document carries cleartext.  A session that uses no
+      extension of Section 3.8 is unauthenticated and unencrypted, and
+      is appropriate only for a controlled environment.  Nothing here
+      detects a change to a frame or hides what a frame says.
 
    *  An authenticated session is as strong as the method that was used
       (Section 6.2).  A method that returns a proof authenticates the
       responder to the initiator as well; a method that returns none
       does not, and the initiator then relies on the transport for that
       direction.  A method whose credential reveals the secret SHOULD
-      be combined with encryption or with a secure transport.
+      be combined with [RFC0009] or with [RFC0010].
 
-   *  F_ENC protects the payload and the header's type, flags and
-      sequence number through the associated data.  Payload length and
-      the fact that a frame was sent remain observable.
-
-   *  A failed tag check MUST be treated as an error and MUST NOT be
-      interpreted as cleartext.
+   *  A deployment that needs confidentiality, integrity or per-frame
+      verification uses one of the two extensions and not both:
+      [RFC0009] protects the frames themselves, and [RFC0010] puts the
+      session inside a secure transport.  What each costs, and when each
+      is appropriate, is discussed there.
 
    *  Algorithm selection is an intersection of offers.  An endpoint
       that requires a particular algorithm MUST offer only that
@@ -1992,12 +1879,8 @@ Table of Contents
       another.  An offer is not a downgrade path: a peer cannot make an
       endpoint use an algorithm it did not accept.
 
-   *  The integrity trailer detects corruption, not forgery: it is not
-      a substitute for F_ENC.
-
-   *  Deployments that require stronger guarantees than the above MAY
-      replace the transport with TLS or DTLS; the frame layer is
-      unchanged.
+   *  A receiver MUST NOT interpret as cleartext a frame it has
+      rejected, whatever the reason for the rejection.
 
    *  An endpoint SHOULD bind the loopback address unless remote access
       is intended.
@@ -2014,7 +1897,11 @@ Table of Contents
 
    *  Message type values (Section 5).
 
-   *  Flag bits (Section 3.2).
+   *  Flag bits (Section 3.2).  Bits 0x08 and above are assigned by the
+      documents that define the extensions of Section 3.8.
+
+   *  Header lengths, that is, the values of "header_len"
+      (Section 3.8).
 
    *  Capability names (Section 8).
 
@@ -2026,13 +1913,16 @@ Table of Contents
    is chosen by agreement between the two endpoints of one session,
    carries no meaning beyond that session, and is never registered:
 
-   *  Transform algorithm names (Section 3.8).
+   *  Transform algorithm names (Section 3.6 and [RFC0009]).
 
    *  Authentication method names (Section 6.2).
 
    No port number is requested.  The RECOMMENDED port of Section 7.4 is
    a convenience of this document and not an assignment: a deployment
-   MAY use it and is equally free to use another.
+   MAY use it and is equally free to use another.  The URI scheme "ocp"
+   is not registered either; it is a convention of this series, and the
+   scheme of a secure session is registered nowhere and defined by
+   [RFC0010].
 
 14. References
 
@@ -2046,19 +1936,11 @@ Table of Contents
               Representation (CBOR)", STD 94, IETF RFC 8949, December
               2020.
 
-   [IETF-RFC8439]  Nir, Y. and A. Langley, "ChaCha20 and Poly1305 for
-              IETF Protocols", IETF RFC 8439, June 2018.
-
-   [IETF-RFC5869]  Krawczyk, H. and P. Eronen, "HMAC-based Extract-and-
-              Expand Key Derivation Function (HKDF)", IETF RFC 5869, May
-              2010.
-
-   [IETF-RFC2104]  Krawczyk, H., Bellare, M., and R. Canetti, "HMAC:
-              Keyed-Hashing for Message Authentication", IETF RFC 2104,
-              February 1997.
-
    [IETF-RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
               Requirement Levels", BCP 14, IETF RFC 2119, March 1997.
+
+   [IETF-RFC1982]  Elz, R. and R. Bush, "Serial Number Arithmetic",
+              IETF RFC 1982, August 1996.
 
    [IETF-RFC1950]  Deutsch, P. and J-L. Gailly, "ZLIB Compressed Data
               Format Specification version 3.3", IETF RFC 1950, May
@@ -2067,20 +1949,9 @@ Table of Contents
    [IETF-RFC1951]  Deutsch, P., "DEFLATE Compressed Data Format
               Specification version 1.3", IETF RFC 1951, May 1996.
 
-   [IETF-RFC1952]  Deutsch, P., "GZIP file format specification version
-              4.3", IETF RFC 1952, May 1996.
-
    [IETF-RFC8878]  Collet, Y. and M. Kucherawy, "Zstandard Compression
               and the application/zstd Media Type", IETF RFC 8878,
               February 2021.
-
-   [IETF-RFC5116]  McGrew, D., "An Interface and Algorithms for
-              Authenticated Encryption", IETF RFC 5116, January 2008.
-
-   [IETF-RFC3385]  Sheinwald, D., Satran, J., Thaler, P., and V.
-              Cavanna, "Internet Protocol Small Computer System
-              Interface (iSCSI) Cyclic Redundancy Check (CRC)/Checksum
-              Considerations", IETF RFC 3385, September 2002.
 
 14.2. Informative References
 
@@ -2089,6 +1960,10 @@ Table of Contents
    [RFC0006]  "OpenOcto Device Daemon Behaviour", this series.
 
    [RFC0005]  "The OpenOcto Device Descriptor Format", this series.
+
+   [RFC0009]  "Primitive Security Extensions of OCP", this series.
+
+   [RFC0010]  "OCP over Secure Transport", this series.
 
 Appendix A.  Error Code Registry
 
@@ -2101,7 +1976,7 @@ Appendix A.  Error Code Registry
    +-------+--------------------+-------------------------------------+
    |0x0002 |E_BAD_VERSION       |Protocol version is not supported.   |
    +-------+--------------------+-------------------------------------+
-   |0x0003 |E_BAD_ITG           |Integrity trailer does not match.    |
+   |0x0003 |E_HELLO_EXPECTED    |The first frame was not HELLO.       |
    +-------+--------------------+-------------------------------------+
    |0x0004 |E_UNKNOWN_TYPE      |Message type is not known.           |
    +-------+--------------------+-------------------------------------+
@@ -2119,41 +1994,62 @@ Appendix A.  Error Code Registry
    |0x000A |E_BUSY              |The peer is busy, or a request timed |
    |       |                    |out.                                 |
    +-------+--------------------+-------------------------------------+
-   |0x000B |E_HELLO_EXPECTED    |The first frame was not HELLO.       |
-   +-------+--------------------+-------------------------------------+
-   |0x000C |E_UNAUTHORIZED      |Authentication is missing, wrong or  |
+   |0x000B |E_UNAUTHORIZED      |Authentication is missing, wrong or  |
    |       |                    |unusable.                            |
    +-------+--------------------+-------------------------------------+
-   |0x000D |E_NO_TUNNEL         |The tunnel is unknown or not         |
+   |0x000C |E_NO_TUNNEL         |The tunnel is unknown or not         |
    |       |                    |established.                         |
    +-------+--------------------+-------------------------------------+
-   |0x000E |E_TUNNEL_RESET      |The tunnel was reset, or the offset  |
+   |0x000D |E_TUNNEL_RESET      |The tunnel was reset, or the offset  |
    |       |                    |cannot be served.                    |
    +-------+--------------------+-------------------------------------+
-   |0x000F |E_DECRYPT           |Decryption or tag verification       |
-   |       |                    |failed, or no key.                   |
-   +-------+--------------------+-------------------------------------+
-   |0x0010 |E_DECOMPRESS        |The compressed payload is malformed. |
+   |0x000E |E_DECOMPRESS        |The compressed payload is malformed. |
    +-------+--------------------+-------------------------------------+
 
                      Table 25: Error Code Registry
+
+   The codes are in five groups, lowest first, and the same order is
+   used wherever they are listed:
+
+   *  0x0000 to 0x0003: the session cannot be read at all, because the
+      octets are not a frame, the version is not served, or the session
+      was not opened.
+
+   *  0x0004 to 0x0006: one frame and the value it carries.
+
+   *  0x0007 to 0x000B: a peer refuses what was asked of it, because
+      the session has ended, the feature is not supported, the peer is
+      limiting or busy, or the caller is not authorised.
+
+   *  0x000C and 0x000D: a tunnel.
+
+   *  0x000E: a transform.
 
    The same registry is used by the "error" member of tunnel state
    frames.  A stream parser that simply needs more octets is not a
    protocol error and MUST NOT be reported as one.
 
+   These are all the codes of this document, and 0x000E is the last of
+   them.  A document of the series that needs more adds them after it,
+   so the core never grows into the range of an extension and an
+   extension never takes a code the core already owns: [RFC0009] starts
+   at 0x000F.  Once a code has been published it is never renumbered
+   and its number is never reused.
+
 Appendix B.  Test Vectors
 
 B.1.  Minimal session
 
-   No authentication, no compression, no encryption. Below is a short
-   example of this.
+   No authentication, no compression and no extension of Section 3.8.
+   The header of the first frame, octet by octet: 4F 43 50 are the
+   magic octets, 01 the version, 01 the type HELLO, 00 no flags, 00 10
+   the header length of sixteen octets, 00 00 00 00 the first sequence
+   number and 00 00 00 1F a payload of thirty-one octets.
 
       C to S  HELLO   {"proto":1, "client":"octo-test", "caps":["rpc",
                        "pubsub"],
                        "max_payload":1048576,"flags":0}
-              header: 4F 43 50 01 01 00 00 00 00 00 00 00 00 00 00 00
-                      00 00 00 00 00 00 00 00 00 00 00 1F 00 00 00 00
+              header: 4F 43 50 01 01 00 00 10 00 00 00 00 00 00 00 1F
       S to C  WELCOME {"proto":1,"session":"s1","server":"octod-test",
                        "caps":["rpc", "blobtun"],
                        "max_payload":1048576, "flags":0}
@@ -2166,39 +2062,20 @@ B.2.  Compression
    4096 zero octets are smaller with F_COMP set than without it, and
    decoding with F_COMP set reproduces the original value.
 
-B.3.  Encryption
-
-   With an encryption algorithm agreed and a key, a frame with F_ENC
-   set is not decodable without that key, and yields E_DECRYPT when
-   decrypted with a different key or when any octet of the ciphertext
-   is altered.     The AEAD nonce is the per-direction, per-epoch nonce
-   prefix (Section 6.2) followed by the bitwise XOR of the header
-   "frame_iv" and the frame "seq" (Section 3.6); the additional
-   authenticated data is the first twelve octets of the header.
-
-B.4.  Cipher and Derivation
-
-   A conforming implementation MUST reproduce the published test
-   vectors of every encryption algorithm it offers: of [IETF-RFC8439]
-   for chacha20-poly1305, of [IETF-RFC5116] for the AES-GCM algorithms,
-   and of [IETF-RFC5869] for HKDF; for example, the Poly1305 vector
-   with key
-   "85d6be7857556d337f4452fe42d506a80103808afb0db2fd4abff6af4149f51b"
-   and message "Cryptographic Forum Research Group" yields the tag
-   "a8061dc1305136c6c22b8baf0c0127a9".
-
-B.5.  Tunnel Establishment
+B.3.  Tunnel Establishment
 
    A request with open set to an empty map is answered with open set to
    {"ok": true}, an acknowledgement and a window; a subsequent TUNDATA
    with a known offset is acknowledged by an advance of "ack".
 
-B.6.  Algorithm Negotiation
+B.4.  Algorithm Negotiation
 
    A HELLO whose "algs" member names only algorithms the responder does
    not implement is answered with a WELCOME in which the corresponding
    key is absent and the corresponding session flag is cleared; a HELLO
    that names one the responder implements is answered with that name.
+
+   The vectors for the primitives of [RFC0009] are in that document.
 
 Authors' Addresses
 
