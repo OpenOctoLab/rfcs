@@ -1,5 +1,7 @@
 
 
+
+
 OpenOcto Standards Group (OOSG)                                  S. Yang
 Request for Comments: 0010                                          HFUT
 Category: Standards Track                                 September 2026

@@ -353,9 +353,17 @@ Table of Contents
    +============+======================================================+
    |zstd        |Zstandard [IETF-RFC8878]; default                     |
    +------------+------------------------------------------------------+
-   |deflate     |zlib "deflate" [IETF-RFC1950]                         |
+   |brotli      |Brotli [IETF-RFC7932]                                 |
    +------------+------------------------------------------------------+
-   |raw-deflate |"deflate" stream without a wrapper [IETF-RFC1951]     |
+   |deflate     |DEFLATE with a zlib wrapper [IETF-RFC1950]            |
+   +------------+------------------------------------------------------+
+   |gzip        |GZIP file format [IETF-RFC1952]                       |
+   +------------+------------------------------------------------------+
+   |lz4         |LZ4 frame format [LZ4-FRAME]                          |
+   +------------+------------------------------------------------------+
+   |xz          |LZMA2 in an .xz container [XZ-FORMAT]                 |
+   +------------+------------------------------------------------------+
+   |snappy      |Snappy block format [SNAPPY]                          |
    +------------+------------------------------------------------------+
 
                     Table 3: Compression Algorithms
@@ -2006,9 +2014,7 @@ Table of Contents
    4.  Unknown fields in a message map MUST be ignored.
 
    5.  A breaking change increments the version octet once the protocol
-       has been published.  While this document is a draft the version
-       octet remains 0x01 and interoperability with an earlier draft of
-       the frame layer is not offered.
+       has been published.
 
    6.  Transform algorithms are named freely (Section 3.6).  An endpoint
        that does not recognise a name ignores it in an offer and MUST
@@ -2104,10 +2110,6 @@ Table of Contents
 
 14.1. Normative References
 
-   Each document below is an IETF publication.  Its tag carries the
-   IETF- prefix so that it cannot be confused with a document of this
-   series, which is listed in Section 14.2.
-
    [IETF-RFC8949]  Bormann, C. and P. Hoffman, "Concise Binary Object
               Representation (CBOR)", STD 94, IETF RFC 8949, December
               2020.
@@ -2118,16 +2120,6 @@ Table of Contents
    [IETF-RFC1982]  Elz, R. and R. Bush, "Serial Number Arithmetic",
               IETF RFC 1982, August 1996.
 
-   [IETF-RFC1950]  Deutsch, P. and J-L. Gailly, "ZLIB Compressed Data
-              Format Specification version 3.3", IETF RFC 1950, May
-              1996.
-
-   [IETF-RFC1951]  Deutsch, P., "DEFLATE Compressed Data Format
-              Specification version 1.3", IETF RFC 1951, May 1996.
-
-   [IETF-RFC8878]  Collet, Y. and M. Kucherawy, "Zstandard Compression
-              and the application/zstd Media Type", IETF RFC 8878,
-              February 2021.
 
 14.2. Informative References
 
@@ -2140,6 +2132,31 @@ Table of Contents
    [RFC0009]  "Primitive Security Extensions of OCP", this series.
 
    [RFC0010]  "OCP over Secure Transport", this series.
+
+   [IETF-RFC8878]  Collet, Y. and M. Kucherawy, "Zstandard Compression
+              and the application/zstd Media Type", IETF RFC 8878,
+              February 2021.
+
+   [IETF-RFC1950]  Deutsch, P. and J-L. Gailly, "ZLIB Compressed Data
+              Format Specification version 3.3", IETF RFC 1950, May
+              1996.
+
+   [IETF-RFC7932]  Alakuijala, J. and Z. Szabadka, "Brotli Compressed
+              Data Format", IETF RFC 7932, July 2016.
+
+   [IETF-RFC1952]  Deutsch, P., "GZIP file format specification version
+              4.3", IETF RFC 1952, May 1996.
+
+   [LZ4-FRAME]  "LZ4 Frame Format Description", LZ4 project,
+            <https://github.com/lz4/lz4/blob/dev/doc/
+            lz4_Frame_format.md>.
+
+   [XZ-FORMAT]  "The .xz File Format", XZ Utils,
+            <https://tukaani.org/xz/format.html>.
+
+   [SNAPPY]  "Snappy Compressed Format Description", Google LLC,
+            <https://github.com/google/snappy/blob/main/
+            format_description.txt>.
 
 Appendix A.  Error Code Registry
 
