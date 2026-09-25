@@ -1,0 +1,687 @@
+
+
+OpenOcto Standards Group (OOSG)                                  S. Yang
+Request for Comments: 0005                                          HFUT
+Category: Standards Track                                 September 2026
+
+                 The OpenOcto Device Descriptor Format
+
+Abstract
+
+   A device daemon contains no device-specific knowledge.  Everything it
+   knows comes from a descriptor: a TOML document that declares which
+   buses exist, how instruction names map to octets on those buses, how
+   received octets are decoded back into named values, and what a daemon
+   does when certain frames arrive.  This document specifies that
+   format: every table, every key, its type and default, the validation
+   rules, and the diagnostic messages that violations produce.
+
+Status of This Memo
+
+   This is a Standards Track document of the OpenOcto Standards (OOS)
+   series.
+
+   This document is a product of the OpenOcto Standards Group (OOSG).
+   It represents the consensus of the OOSG community, has received
+   public review and has been approved for publication.  It is not an
+   Internet Standard and is not a candidate for any level of Internet
+   Standard.  Distribution of this document is unlimited.
+
+   Information about the current status of this document, any errata
+   and how to provide feedback on it may be obtained from the OOSG.
+
+Copyright Notice
+
+   Copyright (c) 2026 OOSG and the persons identified as the document
+   authors.  All rights reserved.
+
+   This document is distributed under the MIT License: permission is
+   granted, free of charge, to use, copy, modify, merge, publish,
+   distribute, sublicense and/or sell copies of this document, subject
+   to the inclusion of the above notice in all such copies.  The
+   document is provided without warranty of any kind.  Code Components
+   extracted from this document are subject to the same terms.
+
+Table of Contents
+
+   1. Introduction
+   2. Conventions
+   3. Document Structure
+   4. The Daemon Table
+   5. The OCP Table
+   6. Bus Tables
+   7. Instruction Tables
+   8. Parameter Tables
+   9. Actuator Tables
+   10. Frame Entry Tables: Events and Faults
+   11. Sensor Tables
+   12. Reaction Tables
+   13. Frame Templates
+   14. Match Expressions
+   15. Derived Files and Utilities
+   16. Security Considerations
+   17. IANA Considerations
+   18. References
+     18.1. Normative References
+     18.2. Informative References
+   Appendix A. Validation Messages
+   Appendix B. Conformance Notes
+   Authors' Addresses
+
+1.  Introduction
+
+   The descriptor is data, not code: it is read at start-up, validated,
+   and then drives the daemon at run time.  Two consequences follow.
+   First, changing behaviour means changing the file, not the daemon.
+   Second, two descriptors that differ only in device-specific values
+   are interchangeable to the daemon.
+
+   A descriptor MAY describe more than one bus.  Instructions,
+   parameters, actuators, events, faults, sensors and reactions each
+   select the bus they belong to, so a single daemon can drive several
+   links at once and can also act as a client of remote peers at the
+   same time [RFC0002].
+
+2.  Conventions
+
+   The key words of [IETF-RFC2119] and [IETF-RFC8174] apply.  The
+   descriptor is a
+   TOML document [TOML].  Type names used in the tables below mean:
+
+      Type     Meaning
+      +=========+======================================================+
+      | Type    | Meaning                                              |
+      +=========+======================================================+
+      | integer | A TOML integer.                                      |
+      +---------+------------------------------------------------------+
+      | float   | A TOML float or integer.                             |
+      +---------+------------------------------------------------------+
+      | boolean | A TOML boolean.                                      |
+      +---------+------------------------------------------------------+
+      | string  | A TOML string.                                       |
+      +---------+------------------------------------------------------+
+      | array   | A TOML array; the element type is stated where used. |
+      +---------+------------------------------------------------------+
+      | table   | A TOML table.                                        |
+      +---------+------------------------------------------------------+
+      | any     | Any of the above.                                    |
+      +---------+------------------------------------------------------+
+
+   A key that is not listed for a table MUST be rejected as an error;
+   this rule is enforced for the daemon table and the frame-entry
+   tables, and is RECOMMENDED everywhere else.
+
+3.  Document Structure
+
+   The top-level tables are:
+
+      Table               Purpose
+      +====================+===========================================+
+      | Table              | Purpose                                   |
+      +====================+===========================================+
+      | [daemon]           | Listening endpoint and session-level      |
+      +--------------------+-------------------------------------------+
+      | [ocp]              | Defaults for every bus reached over the   |
+      +--------------------+-------------------------------------------+
+      | [bus.<name>]       | One bus.                                  |
+      +--------------------+-------------------------------------------+
+      | [commands.<name>]  | One instruction.                          |
+      +--------------------+-------------------------------------------+
+      | [params.<name>]    | One read/write parameter.                 |
+      +--------------------+-------------------------------------------+
+      | [actuators.<name>] | One actuator with per-actuator            |
+      +--------------------+-------------------------------------------+
+      | [events.<name>]    | One named event decoded from a received   |
+      +--------------------+-------------------------------------------+
+      | [faults.<name>]    | One fault decoded from a received frame.  |
+      +--------------------+-------------------------------------------+
+      | [sensors.<name>]   | One named sensor mapped onto a parameter  |
+      +--------------------+-------------------------------------------+
+      | [hooks.<name>]     | One reaction to an event (Section 12).    |
+      +--------------------+-------------------------------------------+
+
+   A descriptor that declares no bus MUST be rejected; the message names
+   the requirement.  A legacy form is accepted in which the table
+   [device] is the only bus and is internally named "default".
+
+   The descriptor is located by, in decreasing priority: an explicit
+   path given to the daemon; an environment variable; a file named
+   "octod.toml" in the working directory; a file of the same name below
+   the user configuration directory; and a packaged default.  A missing
+   file and a malformed document are both errors that name the path.
+
+4.  The Daemon Table
+
+      Key          Type     Default    Meaning
+      +=============+=========+===========+============================+
+      | Key         | Type    | Default   | Meaning                    |
+      +=============+=========+===========+============================+
+      | host        | string  | 127.0.0.1 | Listening address.         |
+      +-------------+---------+-----------+----------------------------+
+      | port        | integer | 6286      | Listening port.            |
+      +-------------+---------+-----------+----------------------------+
+      | auth        | string  | none      | Session authentication:    |
+      +-------------+---------+-----------+----------------------------+
+      | auth_token  | string  | none      | Shared token; REQUIRED     |
+      +-------------+---------+-----------+----------------------------+
+      | auth_psk    | string  | none      | Pre-shared key; REQUIRED   |
+      +-------------+---------+-----------+----------------------------+
+      | compress    | boolean | false     | Offer session compression. |
+      +-------------+---------+-----------+----------------------------+
+      | encrypt     | boolean | false     | Offer session encryption   |
+      +-------------+---------+-----------+----------------------------+
+      | max_payload | integer | 1048576   | Largest payload accepted.  |
+      +-------------+---------+-----------+----------------------------+
+      | window      | integer | 65536     | Default tunnel receive     |
+      +-------------+---------+-----------+----------------------------+
+      | chunk_size  | integer | 8192      | Default tunnel slice size. |
+      +-------------+---------+-----------+----------------------------+
+      | buf_max     | integer | 262144    | Default tunnel receive     |
+      +-------------+---------+-----------+----------------------------+
+
+   An unknown key is an error that lists the allowed keys.  A value of
+   auth other than the three listed values is an error that lists them.
+   When authentication is configured but the corresponding secret is
+   absent, the daemon MUST refuse every session rather than accept it
+   without authentication.
+
+   The session options are negotiated per connection as specified in
+   [RFC0004]; the descriptor declares what this endpoint offers.
+
+5.  The OCP Table
+
+   The [ocp] table provides defaults for every bus that is reached over
+   the protocol.  A value in a bus table overrides the value here, and
+   the daemon table's own session options take precedence on the
+   listening side.  Recognised keys:
+
+      Key                 Type     Default  Meaning
+      +====================+=========+=========+=======================+
+      | Key                | Type    | Default | Meaning               |
+      +====================+=========+=========+=======================+
+      | heartbeat          | boolean | false   | Probe the peer        |
+      +--------------------+---------+---------+-----------------------+
+      | heartbeat_interval | float   | 5.0     | Probe period in       |
+      +--------------------+---------+---------+-----------------------+
+      | heartbeat_timeout  | float   | 15.0    | Liveness timeout in   |
+      +--------------------+---------+---------+-----------------------+
+      | max_payload        | integer | 1048576 | Largest payload for   |
+      +--------------------+---------+---------+-----------------------+
+      | window             | integer | 65536   | Tunnel receive        |
+      +--------------------+---------+---------+-----------------------+
+      | chunk_size         | integer | 0       | Tunnel slice size;    |
+      +--------------------+---------+---------+-----------------------+
+      | compress           | boolean | false   | Offer compression on  |
+      +--------------------+---------+---------+-----------------------+
+      | encrypt            | boolean | false   | Request encryption on |
+      +--------------------+---------+---------+-----------------------+
+      | auth               | string  | none    | Authentication method |
+      +--------------------+---------+---------+-----------------------+
+      | auth_token         | string  | none    | Token for auth =      |
+      +--------------------+---------+---------+-----------------------+
+      | auth_psk           | string  | none    | Key for auth =        |
+      +--------------------+---------+---------+-----------------------+
+
+6.  Bus Tables
+
+   Every bus is declared as [bus.<name>]; the name is used by every
+   other table that selects a bus.  If the table is not a table, the
+   descriptor is rejected with a message naming the bus.
+
+      Key          Type     Default                Meaning
+      +=============+=========+===================+====================+
+      | Key         | Type    | Default           | Meaning            |
+      +=============+=========+===================+====================+
+      | transport   | string  | mock (ocp-tcp for | Selects the        |
+      +-------------+---------+-------------------+--------------------+
+      | ocp         | boolean | false             | Force this bus to  |
+      +-------------+---------+-------------------+--------------------+
+      | interface   | any     | none              | Bus interface or   |
+      +-------------+---------+-------------------+--------------------+
+      | bitrate     | integer | none (1000000 for | Bus bit rate.      |
+      +-------------+---------+-------------------+--------------------+
+      | host        | string  | 127.0.0.1         | Peer address for a |
+      +-------------+---------+-------------------+--------------------+
+      | port        | integer | 6287              | Peer port for a    |
+      +-------------+---------+-------------------+--------------------+
+      | timeout     | float   | 3.0               | Connection timeout |
+      +-------------+---------+-------------------+--------------------+
+      | ack_ids     | array   | [0x130, 0x131,    | Frame identifiers  |
+      +-------------+---------+-------------------+--------------------+
+      | ack_timeout | float   | 0.5               | Acknowledgement    |
+      +-------------+---------+-------------------+--------------------+
+
+   A protocol bus additionally accepts the keys of the OCP table
+   (Section 5) and of the tunnel parameters.
+
+   Keys not listed above are passed to the underlying bus implementation
+   unchanged, which allows adapter-specific settings to be used without
+   a schema change.
+
+   A bus is a protocol bus when its transport is a protocol-over-network
+   transport or when ocp is true.  Signalling details MUST NOT be given
+   for a protocol bus, because the peer owns them; a table that both
+   selects a protocol bus and supplies signalling details is rejected.
+
+   The available transport names are flat; the list is discoverable from
+   the command line [RFC0007].  An unknown name is rejected with an
+   error that lists the available names.
+
+   The loopback transport retains sent frames locally so that they can
+   be received again; it touches no hardware and is the standard means
+   of running without a device.
+
+7.  Instruction Tables
+
+   [commands.<name>] declares one instruction.  The name is the name a
+   program calls.
+
+      Key     Type    Default    Meaning
+      +========+========+===========+==================================+
+      | Key    | Type   | Default   | Meaning                          |
+      +========+========+===========+==================================+
+      | bus    | string | first bus | Bus that executes the            |
+      +--------+--------+-----------+----------------------------------+
+      | help   | string | ""        | Description reported by          |
+      +--------+--------+-----------+----------------------------------+
+      | args   | array  | []        | Positional argument names, in    |
+      +--------+--------+-----------+----------------------------------+
+      | limits | table  | {}        | Saturation limits, one [min,     |
+      +--------+--------+-----------+----------------------------------+
+      | frames | array  | []        | Frames to send (local buses      |
+      +--------+--------+-----------+----------------------------------+
+
+   A frame element has:
+
+      Key   Type     Default   Meaning
+      +======+=========+==========+====================================+
+      | Key  | Type    | Default  | Meaning                            |
+      +======+=========+==========+====================================+
+      | id   | integer | REQUIRED | Frame identifier; masked to 29     |
+      +------+---------+----------+------------------------------------+
+      | data | string  | REQUIRED | Frame template (Section 13).       |
+      +------+---------+----------+------------------------------------+
+      | dlc  | integer | 8        | Frame length; shorter data is      |
+      +------+---------+----------+------------------------------------+
+
+   A frame element that lacks id or data is rejected with a message
+   naming the instruction and the offending element.
+
+   Semantics:
+
+   *  For a local bus, the templates are rendered with the call
+      arguments and sent.  Values outside a declared limit are
+      saturated, not rejected.
+   *  For a protocol bus, no templates MAY be given; the call is
+      forwarded to the peer.
+   *  A local bus instruction without templates is rejected.
+   *  After sending, if the frame identifier appears in ack_ids and the
+      bus is neither a protocol bus nor the loopback transport, the
+      daemon waits for the device to acknowledge before reporting
+      completion; the wait fails on timeout, and a device-reported
+      rejection fails the call.
+   *  Argument count mismatches, connection failures, missing
+      acknowledgements and rejections all produce errors as specified in
+      [RFC0008].
+
+   A small set of instruction names is served by the daemon itself and
+   cannot be redefined by a table: the heartbeat call, the discovery
+   call, the status call, the event drain, and the sensor and actuator
+   introspection calls [RFC0006].  Other built-in names MAY be
+   overridden by a table of the same name.
+
+8.  Parameter Tables
+
+   [params.<name>] declares a readable and writable device parameter.
+
+      Key      Type     Default    Meaning
+      +=========+=========+===========+================================+
+      | Key     | Type    | Default   | Meaning                        |
+      +=========+=========+===========+================================+
+      | write   | integer | REQUIRED  | Function code used to write    |
+      +---------+---------+-----------+--------------------------------+
+      | read    | integer | REQUIRED  | Function code used to read the |
+      +---------+---------+-----------+--------------------------------+
+      | bytes   | integer | 2         | Width of the value in octets.  |
+      +---------+---------+-----------+--------------------------------+
+      | signed  | boolean | true      | Whether the value is signed.   |
+      +---------+---------+-----------+--------------------------------+
+      | default | any     | 0         | Initial value and value        |
+      +---------+---------+-----------+--------------------------------+
+      | range   | array   | none      | Two-element [min, max]; a      |
+      +---------+---------+-----------+--------------------------------+
+      | bus     | string  | first bus | Bus that carries the           |
+      +---------+---------+-----------+--------------------------------+
+      | help    | string  | ""        | Description reported by        |
+      +---------+---------+-----------+--------------------------------+
+
+   Writing encodes the value as a big-endian integer of bytes octets
+   preceded by the write code, and updates the cached value.  Reading
+   sends a frame consisting of the read code followed by zero octets;
+   the answer arrives asynchronously and updates the cache, so a read
+   returns the most recent value and never blocks.
+
+   For a protocol bus, reading and writing are forwarded to the peer.
+
+9.  Actuator Tables
+
+   [actuators.<name>] declares one actuator and the templates used by
+   the generic actuator primitives.
+
+      Key       Type     Default    Meaning
+      +==========+=========+===========+===============================+
+      | Key      | Type    | Default   | Meaning                       |
+      +==========+=========+===========+===============================+
+      | can_id   | integer | REQUIRED  | Frame identifier of the       |
+      +----------+---------+-----------+-------------------------------+
+      | bus      | string  | first bus | Bus of the actuator.          |
+      +----------+---------+-----------+-------------------------------+
+      | help     | string  | ""        | Description.                  |
+      +----------+---------+-----------+-------------------------------+
+      | commands | table   | {}        | Templates keyed by primitive  |
+      +----------+---------+-----------+-------------------------------+
+
+   The primitives are: torque, speed, position, enable, disable and
+   halt.  Their argument shapes are fixed: torque and speed take a
+   value; position takes a value and a maximum speed, the latter
+   defaulting to zero; enable, disable and halt take no argument.  A
+   primitive invoked for an actuator that declares no template for it is
+   rejected with a message naming the actuator and the primitive.  An
+   actuator that is not declared is rejected when the bus is local, and
+   forwarded to the peer when the bus is a protocol bus.
+
+10. Frame Entry Tables: Events and Faults
+
+   [events.<name>] and [faults.<name>] decode received frames.  The
+   two tables have identical fields; the kind of the resulting entry is
+   determined by the table it appears in, so no field is needed to
+   distinguish them.
+
+      Key    Type            Default               Meaning
+      +=======+================+===================+===================+
+      | Key   | Type           | Default           | Meaning           |
+      +=======+================+===================+===================+
+      | id    | integer        | REQUIRED          | Frame identifier  |
+      +-------+----------------+-------------------+-------------------+
+      | bus   | string         | any bus           | Restrict the      |
+      +-------+----------------+-------------------+-------------------+
+      | help  | string         | ""                | Description       |
+      +-------+----------------+-------------------+-------------------+
+      | match | table or array | none (always      | Payload condition |
+      +-------+----------------+-------------------+-------------------+
+      | edge  | boolean        | true for faults,  | Report only on a  |
+      +-------+----------------+-------------------+-------------------+
+
+   An unknown field is rejected with a message naming the table and
+   listing the allowed fields.  A missing id is rejected with a message
+   naming the table.
+
+   Matching proceeds over the fault entries first, then over the event
+   entries, and within each group in declaration order; for a given
+   frame the first matching entry wins.  With edge set, a frame that
+   matches again with identical payload is treated as a repetition: it
+   is not reported.  A frame that matches nothing is still reported, as
+   an unidentified frame carrying its raw octets, so that no traffic is
+   invisible [RFC0006].
+
+11. Sensor Tables
+
+   [sensors.<name>] maps a name used by programs onto a parameter or an
+   event.
+
+      Key      Type    Default                  Meaning
+      +=========+========+======================+======================+
+      | Key     | Type   | Default              | Meaning              |
+      +=========+========+======================+======================+
+      | help    | string | ""                   | Description.         |
+      +---------+--------+----------------------+----------------------+
+      | source  | string | same as the sensor   | Name of the          |
+      +---------+--------+----------------------+----------------------+
+      | bus     | string | first bus            | Bus of the source.   |
+      +---------+--------+----------------------+----------------------+
+      | unit    | string | ""                   | Unit of the value.   |
+      +---------+--------+----------------------+----------------------+
+      | default | any    | 0                    | Value reported while |
+      +---------+--------+----------------------+----------------------+
+
+12. Reaction Tables
+
+   [hooks.<name>] declares a reaction to an event.  Reactions are
+   configuration, not code: the daemon performs them without involving a
+   program.
+
+      Key      Type    Meaning
+      +=========+========+=============================================+
+      | Key     | Type   | Meaning                                     |
+      +=========+========+=============================================+
+      | trigger | string | Event name that activates the reaction.     |
+      +---------+--------+---------------------------------------------+
+      | bus     | string | Bus on which the reaction is transmitted.   |
+      +---------+--------+---------------------------------------------+
+      | frames  | array  | Frames to send directly; local buses only.  |
+      +---------+--------+---------------------------------------------+
+      | command | string | Instruction to execute; local or protocol   |
+      +---------+--------+---------------------------------------------+
+      | args    | array  | Arguments for command.                      |
+      +---------+--------+---------------------------------------------+
+
+   The trigger name is the name of an event entry, or a parameter name
+   when the reaction is triggered by a parameter update.
+
+   Exactly one of frames and command MUST be given.  Using frames
+   with a protocol bus is rejected, because signalling details belong to
+   the peer.  A reaction that names a frame or an instruction that does
+   not exist is rejected when the descriptor is loaded.  At run time a
+   reaction that fails MUST be reported without interrupting the frame
+   handler that triggered it.
+
+13. Frame Templates
+
+   A frame template is a string mixing literal octets and placeholders.
+   Literal octets are written as pairs of hexadecimal digits; spaces,
+   tabs, underscores and hyphens are ignored.  A placeholder has the
+   form "{name:format}" and is replaced by the value of the argument or
+   parameter of that name.
+
+   The available formats are:
+
+      Format  Width  Encoding
+      +========+=======+=========================+
+      | Format | Width | Encoding                |
+      +========+=======+=========================+
+      | u8     | 1     | unsigned                |
+      +--------+-------+-------------------------+
+      | i8     | 1     | signed                  |
+      +--------+-------+-------------------------+
+      | u16le  | 2     | unsigned, little-endian |
+      +--------+-------+-------------------------+
+      | u16be  | 2     | unsigned, big-endian    |
+      +--------+-------+-------------------------+
+      | i16le  | 2     | signed, little-endian   |
+      +--------+-------+-------------------------+
+      | i16be  | 2     | signed, big-endian      |
+      +--------+-------+-------------------------+
+      | u32le  | 4     | unsigned, little-endian |
+      +--------+-------+-------------------------+
+      | u32be  | 4     | unsigned, big-endian    |
+      +--------+-------+-------------------------+
+      | i32le  | 4     | signed, little-endian   |
+      +--------+-------+-------------------------+
+      | i32be  | 4     | signed, big-endian      |
+      +--------+-------+-------------------------+
+
+      data = "6A"                                  # one literal octet
+      data = "{m1:i16be}{m2:i16be}{m3:i16be}{m4:i16be}"
+      data = "A1 00 00 00 {value:i16le}"
+
+   Errors detected while compiling a template: an odd number of
+   hexadecimal digits, a non-hexadecimal character, an unclosed brace,
+   an unknown format name.  Errors detected while rendering: a missing
+   argument, or a template longer than the frame length.
+
+   Shorter data is zero-padded on the right to the frame length.
+
+14. Match Expressions
+
+   A match expression is either a single condition or an array of
+   conditions, all of which MUST hold.
+
+      Condition form                    Meaning
+      +===============================+================================+
+      | Condition form                | Meaning                        |
+      +===============================+================================+
+      | { offset = N, value = V }     | The octet at offset N equals   |
+      +-------------------------------+--------------------------------+
+      | { offset = N, value = V, not  | The octet at offset N differs  |
+      +-------------------------------+--------------------------------+
+      | true }                        | from V.                        |
+      +-------------------------------+--------------------------------+
+      | { mask = "…", value = "…" }   | The payload, masked, equals    |
+      +-------------------------------+--------------------------------+
+      | { mask = "…", nonzero = true  | The payload, masked, is        |
+      +-------------------------------+--------------------------------+
+      | [ cond, cond, … ]             | All conditions hold.           |
+      +-------------------------------+--------------------------------+
+
+   Offsets are zero-based and MUST be in the range 0 to 7; values MUST
+   be in the range 0 to 255.  Masks and values are hexadecimal strings
+   that are right-padded with zero octets to the frame length.  A
+   condition that uses an offset and a mask together, that omits both a
+   value and the non-zero flag, or that uses an out-of-range number is
+   rejected with a message naming the table entry.
+
+      match = { offset = 7, value = 0x02 }
+      match = [ { offset = 0, value = 0x9A }, { offset = 7, value = 0,
+          not = true } ]
+      match = { mask = "00000000000000FF", value = "0000000000000002" }
+      match = { mask = "00000000000000FF", nonzero = true }
+
+15. Derived Files and Utilities
+
+   The daemon offers two descriptor utilities on its command line
+   [RFC0007]:
+
+   *  Writing a copy of the packaged default descriptor to a chosen
+      path.  Writing over the packaged default itself is refused.
+   *  Converting a descriptor into a loopback-only variant, in which
+      every bus uses the loopback transport, so that a configuration can
+      be exercised without hardware.  A descriptor without any bus is
+      rejected.  The output either goes to the path given or is derived
+      from the input name by inserting a suffix before the extension.
+
+16. Security Considerations
+
+   *  The descriptor is trusted input: it can cause arbitrary frames to
+      be sent to hardware.  It MUST NOT be accepted from an untrusted
+      peer; the interpreter forwards a descriptor only to a daemon it
+      starts locally [RFC0002].
+   *  Secrets in the daemon table and in the OCP table are configuration
+      data.  They MUST NOT be echoed in logs or exposed to programs.
+   *  Saturation limits protect hardware from out-of-range commands, but
+      they are not a safety interlock.
+   *  Acknowledgement waiting is a correctness feature: without it, a
+      command would be reported as complete before the device accepted
+      it.
+
+17. IANA Considerations
+
+   This document registers no names with IANA.
+
+18. References
+
+18.1. Normative References
+
+   [TOML]  "TOML: Tom's Obvious, Minimal Language", version 1.0.
+
+   [RFC0004]  "Octopus Control Protocol (OCP)", this series.
+
+   [RFC0006]  "OpenOcto Device Daemon Behaviour", this series.
+
+   [RFC0007]  "OpenOcto Command-Line Tools and Interfaces", this series.
+
+18.2. Informative References
+
+   [RFC0002]  "OpenOcto Ecosystem Architecture", this series.
+
+   [RFC0008]  "OpenOcto Error Taxonomy and Diagnostics", this series.
+
+Appendix A.  Validation Messages
+
+   This appendix lists the diagnostic shapes the format produces.  All
+   of them are in English.
+
+      Situation                     Message shape
+      +==============================+=================================+
+      | Situation                    | Message shape                   |
+      +==============================+=================================+
+      | Missing descriptor file      | config file not found: <path>   |
+      +------------------------------+---------------------------------+
+      | Malformed TOML               | invalid TOML in <path>:         |
+      +------------------------------+---------------------------------+
+      | No bus declared              | no bus declared: add at least   |
+      +------------------------------+---------------------------------+
+      | Bus section is not a table   | [bus.<name>] must be a table    |
+      +------------------------------+---------------------------------+
+      | Unknown daemon key           | unknown [daemon] option(s):     |
+      +------------------------------+---------------------------------+
+      | Invalid authentication mode  | [daemon] auth must be one of    |
+      +------------------------------+---------------------------------+
+      | Unknown frame-entry field    | <table>: unknown field(s):      |
+      +------------------------------+---------------------------------+
+      | Missing frame identifier     | <table>: missing required field |
+      +------------------------------+---------------------------------+
+      | Frame element lacks keys     | [commands.<name>] frame needs   |
+      +------------------------------+---------------------------------+
+      | Bad template                 | bad frame template <template>:  |
+      +------------------------------+---------------------------------+
+      | Unknown template format      | ... placeholder <placeholder>   |
+      +------------------------------+---------------------------------+
+      | Missing render argument      | missing argument '<name>' for   |
+      +------------------------------+---------------------------------+
+      | Frame data overflow          | frame data overflow: <n> >      |
+      +------------------------------+---------------------------------+
+      | Unknown transport            | unknown transport '<name>'      |
+      +------------------------------+---------------------------------+
+      | Unknown bus referenced       | [commands.<name>]: bus '<bus>'  |
+      +------------------------------+---------------------------------+
+      | Signalling on a protocol bus | [commands.<name>]: bus '<bus>'  |
+      +------------------------------+---------------------------------+
+      | Local bus without signalling | [commands.<name>]: local bus    |
+      +------------------------------+---------------------------------+
+      | Unknown parameter            | unknown parameter '<name>'      |
+      +------------------------------+---------------------------------+
+      | Parameter out of range       | parameter '<name>' value <v>    |
+      +------------------------------+---------------------------------+
+      | Unknown actuator             | unknown actuator '<name>'       |
+      +------------------------------+---------------------------------+
+      | Missing actuator template    | actuator '<name>' has no        |
+      +------------------------------+---------------------------------+
+      | Bad match condition          | <table>: needs offset= and      |
+      +------------------------------+---------------------------------+
+
+Appendix B.  Conformance Notes
+
+   This appendix is non-normative and records differences between this
+   document and the reference implementation.
+
+   B.1. Only the daemon table and the frame-entry tables reject unknown
+   keys; other tables accept and ignore them.
+
+   B.2. Reaction tables are accepted but have no effect in the reference
+   implementation (Section 12).
+
+   B.3. The reference implementation applies a parameter's declared
+   range to the magnitude of the written value, and only on a local bus.
+
+   B.4. A write of a parameter is transmitted as the function code
+   followed by the encoded value, without padding to the frame length,
+   while a read is transmitted padded to the frame length.
+
+   B.5. In the reference implementation a bus whose connection state has
+   not been observed is reported as "unknown" rather than
+   "disconnected".
+
+Authors' Addresses
+
+   Shining Yang
+   HFUT

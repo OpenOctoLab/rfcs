@@ -1,0 +1,441 @@
+
+
+OpenOcto Standards Group (OOSG)                                  S. Yang
+Request for Comments: 0008                                          HFUT
+Category: Standards Track                                 September 2026
+
+                OpenOcto Error Taxonomy and Diagnostics
+
+Abstract
+
+   A control system MUST NOT fail quietly.  This document specifies the
+   single classification used by the language, the protocol and the
+   daemon; states which failures a program can catch and which it
+   cannot; specifies how a device-level fault is turned into a
+   program-visible error; fixes the diagnostic formats and prefixes; and
+   lists the cases in which a failure MUST terminate a session or a
+   process.
+
+Status of This Memo
+
+   This is a Standards Track document of the OpenOcto Standards (OOS)
+   series.
+
+   This document is a product of the OpenOcto Standards Group (OOSG).
+   It represents the consensus of the OOSG community, has received
+   public review and has been approved for publication.  It is not an
+   Internet Standard and is not a candidate for any level of Internet
+   Standard.  Distribution of this document is unlimited.
+
+   Information about the current status of this document, any errata
+   and how to provide feedback on it may be obtained from the OOSG.
+
+Copyright Notice
+
+   Copyright (c) 2026 OOSG and the persons identified as the document
+   authors.  All rights reserved.
+
+   This document is distributed under the MIT License: permission is
+   granted, free of charge, to use, copy, modify, merge, publish,
+   distribute, sublicense and/or sell copies of this document, subject
+   to the inclusion of the above notice in all such copies.  The
+   document is provided without warranty of any kind.  Code Components
+   extracted from this document are subject to the same terms.
+
+Table of Contents
+
+   1. Introduction
+   2. Conventions
+   3. Error Domains
+   4. The Language Taxonomy
+   5. Catchability
+   6. Hardware Failures and Fault Latching
+   7. Application Errors on the Protocol
+   8. Protocol Errors
+   9. Diagnostic Formats
+   10. Rules Against Silent Failure
+   11. Security Considerations
+   12. IANA Considerations
+   13. References
+     13.1. Normative References
+     13.2. Informative References
+   Appendix A. Failure Catalogue
+   Appendix B. Conformance Notes
+   Authors' Addresses
+
+1.  Introduction
+
+   Failures in this ecosystem originate in four places: the source text,
+   a running program, the protocol, and the device.  Each of them is
+   classified exactly once, and the classification is observable,
+   because a program MAY need to distinguish "the argument was wrong"
+   from "the hardware is gone".
+
+   The design principle is uniform: a failure is either recoverable by a
+   program or it terminates something, and in neither case is it
+   discarded.
+
+2.  Conventions
+
+   The key words of [IETF-RFC2119] and [IETF-RFC8174] apply.
+   "catchable" means that a program's "try"/"except" construct can
+   intercept the failure [RFC0003].  "kind" means the classification
+   string attached to a failure.
+
+3.  Error Domains
+
+      Domain    Origin                  Travels as
+      +==========+========================+============================+
+      | Domain   | Origin                 | Travels as                 |
+      +==========+========================+============================+
+      | Source   | The text of a program  | A lexical or syntax        |
+      +----------+------------------------+----------------------------+
+      | Program  | Execution of a program | A runtime failure          |
+      +----------+------------------------+----------------------------+
+      | Protocol | The session layer      | An ERROR frame, or a       |
+      +----------+------------------------+----------------------------+
+      | Device   | A bus or a peer        | An application error in a  |
+      +----------+------------------------+----------------------------+
+
+   A failure never changes domain silently: a device failure reaching a
+   program is still recognisable as a device failure through its kind.
+
+4.  The Language Taxonomy
+
+      Kind                    Raised when
+      +========================+=======================================+
+      | Kind                   | Raised when                           |
+      +========================+=======================================+
+      | lexical failure        | Invalid character, unterminated       |
+      +------------------------+---------------------------------------+
+      | syntax failure         | The token sequence does not match the |
+      +------------------------+---------------------------------------+
+      | UndefinedNameError     | A variable, function or module member |
+      +------------------------+---------------------------------------+
+      | RedefinitionError      | The same name is declared twice in    |
+      +------------------------+---------------------------------------+
+      | ConstReassignError     | A constant is assigned to.            |
+      +------------------------+---------------------------------------+
+      | InvalidAssignmentError | The assignment target cannot be       |
+      +------------------------+---------------------------------------+
+      | UnpackError            | A destructuring or spread is not      |
+      +------------------------+---------------------------------------+
+      | TypeMismatchError      | An operator, iteration, index or      |
+      +------------------------+---------------------------------------+
+      | KeyNotFoundError       | A dictionary has no such key.         |
+      +------------------------+---------------------------------------+
+      | IndexOutOfRangeError   | An index lies outside a container.    |
+      +------------------------+---------------------------------------+
+      | DivisionByZeroError    | Integer division or remainder by      |
+      +------------------------+---------------------------------------+
+      | NotCallableError       | A value that is not callable is       |
+      +------------------------+---------------------------------------+
+      | ArgumentError          | Wrong number or shape of arguments.   |
+      +------------------------+---------------------------------------+
+      | FormatStringError      | String interpolation or formatting    |
+      +------------------------+---------------------------------------+
+      | PanicError             | The failure statement was executed.   |
+      +------------------------+---------------------------------------+
+      | NativeError            | A call into a native function         |
+      +------------------------+---------------------------------------+
+      | HardwareError          | A hardware instruction or the daemon  |
+      +------------------------+---------------------------------------+
+      | InternalError          | The implementation is inconsistent.   |
+      +------------------------+---------------------------------------+
+
+   The two host-environment failures, namely a messaging operation for
+   an unknown destination and an internal consistency failure, are
+   outside this taxonomy: they are not values a program can catch.
+
+5.  Catchability
+
+      Failure                                     Catchable by a program
+      +=======================================+========================+
+      | Failure                               | Catchable by a program |
+      +=======================================+========================+
+      | lexical and syntax failures of the    | no                     |
+      +---------------------------------------+------------------------+
+      | itself                                |                        |
+      +---------------------------------------+------------------------+
+      | lexical and syntax failures inside    | yes                    |
+      +---------------------------------------+------------------------+
+      | compiled at run time                  |                        |
+      +---------------------------------------+------------------------+
+      | every runtime failure of Section 4    | yes                    |
+      +---------------------------------------+------------------------+
+      | failures raised by the shared host    | no                     |
+      +---------------------------------------+------------------------+
+      | environment                           |                        |
+      +---------------------------------------+------------------------+
+      | protocol errors during a session      | no (the session fails) |
+      +---------------------------------------+------------------------+
+
+   Catching is by the common runtime base: a program does not need to
+   name the specific kind, and an implementation MUST make the kind
+   available to the program so that it can distinguish cases.
+   Classification names are deliberately distinct from any names an
+   implementation MAY use internally, so that platform code cannot
+   accidentally intercept a program failure.
+
+6.  Hardware Failures and Fault Latching
+
+   A frame that matches a fault entry of the descriptor [RFC0005]
+   produces a fault record, publishes it on the fault topic, and is
+   latched.  The consequences are, in order:
+
+   1.  a hook registered for the fault is invoked with the record;
+   2.  the next hardware instruction fails before anything is sent to
+       the bus, with a message that names the fault, the frame
+       identifier and the raw payload;
+   3.  consuming the fault clears the latch; a program MAY therefore
+       continue deliberately.
+
+   The record carries: a name, an identifier, the raw payload, the bus
+   and an OPTIONAL description.
+
+   A device-level rejection is different from a fault: a rejection is
+   the answer to one specific request and fails that request only.  A
+   busy answer, an unrecognised command and an unanswered command all
+   fail the request that caused them.  A command whose completion
+   requires device acknowledgement MUST NOT be reported as successful
+   before that acknowledgement arrives.
+
+7.  Application Errors on the Protocol
+
+   A response carries either a value or an application error consisting
+   of a kind and a message [RFC0004].  The kinds used by the daemon
+   are:
+
+      Kind           Meaning
+      +===============+================================================+
+      | Kind          | Meaning                                        |
+      +===============+================================================+
+      | HardwareError | The instruction could not be executed: unknown |
+      +---------------+------------------------------------------------+
+      | Error         | Any other application-level failure.           |
+      +---------------+------------------------------------------------+
+
+   A message MUST be a single English sentence or clause, MUST name the
+   instruction or frame concerned when the failure is device-related,
+   and MUST NOT contain credentials.
+
+8.  Protocol Errors
+
+   A protocol error is carried by an ERROR frame or, for tunnel state,
+   by the error member of a RECV frame.  The registry and the REQUIRED
+   handling of each code are specified in [RFC0004], Appendix A.
+
+      Situation                         Required consequence
+      +===============================+================================+
+      | Situation                     | Required consequence           |
+      +===============================+================================+
+      | Corrupted frame or wrong      | Report and close the session.  |
+      +-------------------------------+--------------------------------+
+      | magic/version                 |                                |
+      +-------------------------------+--------------------------------+
+      | Payload above the negotiated  | Report and close the session.  |
+      +-------------------------------+--------------------------------+
+      | limit                         |                                |
+      +-------------------------------+--------------------------------+
+      | Unknown message type          | Report; the session MUST       |
+      +-------------------------------+--------------------------------+
+      | Not a decodable value         | Report; the session SHOULD     |
+      +-------------------------------+--------------------------------+
+      | Failed integrity, decryption  | Report; treat the frame as     |
+      +-------------------------------+--------------------------------+
+      | decompression                 | never as cleartext.            |
+      +-------------------------------+--------------------------------+
+      | Authentication failure        | Report and close the session   |
+      +-------------------------------+--------------------------------+
+      | Tunnel error                  | Report to the tunnel's user;   |
+      +-------------------------------+--------------------------------+
+
+9.  Diagnostic Formats
+
+      Situation                       Format
+      +===============================+================================+
+      | Situation                     | Format                         |
+      +===============================+================================+
+      | A program fails at run time   | runtime error: <kind>:         |
+      +-------------------------------+--------------------------------+
+      | A program fails to lex        | lexical error: <message>       |
+      +-------------------------------+--------------------------------+
+      | A program fails to parse      | syntax error: <message>        |
+      +-------------------------------+--------------------------------+
+      | A program file is missing     | error: script file not found:  |
+      +-------------------------------+--------------------------------+
+      | An interactive statement      | error: <kind>: <message>; the  |
+      +-------------------------------+--------------------------------+
+      | A native call fails           | <message> prefixed [native]    |
+      +-------------------------------+--------------------------------+
+      | A hardware call fails         | <message> prefixed [octod]     |
+      +-------------------------------+--------------------------------+
+      | A hook fails                  | [hook:<event>] error:          |
+      +-------------------------------+--------------------------------+
+      | A watcher fails               | [watch:<name>] error:          |
+      +-------------------------------+--------------------------------+
+      | A device fault blocks a call  | device fault: <name> id=0x<id> |
+      +-------------------------------+--------------------------------+
+
+   All messages are in English.  Messages are stable enough to be read
+   by humans and MUST NOT be parsed as a machine interface: the machine
+   interface is the kind and, for the protocol, the numeric error code.
+
+10. Rules Against Silent Failure
+
+   1.  A failure MUST NOT be replaced by a plausible value.  There is no
+       implicit simulation of hardware.
+   2.  A failure MUST NOT be dropped because it occurred in a hook, a
+       watcher, a reaction or a publication path; such failures are
+       reported and isolated.
+   3.  A frame MUST NOT be discarded without being reported somewhere:
+       the protocol exposes it, and the daemon republishes unidentified
+       frames [RFC0006].
+   4.  A request MUST NOT be reported complete before its completion
+       condition, including a REQUIRED acknowledgement, is satisfied.
+   5.  A configuration error MUST be reported as an error rather than
+       being ignored, at least for the tables for which the format
+       defines rejection [RFC0005].
+   6.  A connection failure at start-up MUST NOT terminate a daemon, and
+       a failed probe MUST NOT print anything from the interpreter.
+
+11. Security Considerations
+
+   *  Error messages are visible to whoever holds a session.  They MUST
+      NOT disclose credentials, keys or file contents beyond a path.
+   *  A failed authentication is reported as an authentication failure
+      and then the session is closed; the responder SHOULD NOT reveal
+      whether the credential or the method was at fault beyond the
+      method name.
+   *  Latching faults is a safety property: a program cannot ignore a
+      device failure by accident.
+   *  A daemon that reports device failures MUST be reachable to
+      programs that can act on them; a deployment where faults are
+      published to nobody defeats the mechanism.
+
+12. IANA Considerations
+
+   This document registers no names with IANA.
+
+13. References
+
+13.1. Normative References
+
+   Each document below is an IETF publication; its tag carries the
+   IETF- prefix so that it cannot be confused with a document of
+   this series.
+
+   [RFC0003]  "The OctoScript Language", this series.
+
+   [RFC0004]  "Octopus Control Protocol (OCP)", this series.
+
+   [RFC0005]  "The OpenOcto Device Descriptor Format", this series.
+
+   [IETF-RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119, March 1997.
+
+13.2. Informative References
+
+   [RFC0002]  "OpenOcto Ecosystem Architecture", this series.
+
+   [RFC0006]  "OpenOcto Device Daemon Behaviour", this series.
+
+   [RFC0007]  "OpenOcto Command-Line Tools and Interfaces", this series.
+
+Appendix A.  Failure Catalogue
+
+   This appendix collects, in one place, the failures an operator is
+   likely to meet, with the domain and the RECOMMENDED reaction.
+
+      Failure                     Domain      Reaction
+      +=========================+============+=========================+
+      | Failure                 | Domain     | Reaction                |
+      +=========================+============+=========================+
+      | Unknown instruction     | Program    | Application error from  |
+      +-------------------------+------------+-------------------------+
+      | No peer reachable, no   | Device     | Report; the program MAY |
+      +-------------------------+------------+-------------------------+
+      | daemon startable        |            | fall back to            |
+      +-------------------------+------------+-------------------------+
+      | Instruction bound to a  | Descriptor | Reject the request; fix |
+      +-------------------------+------------+-------------------------+
+      | protocol bus with       |            | the descriptor.         |
+      +-------------------------+------------+-------------------------+
+      | signalling details      |            |                         |
+      +-------------------------+------------+-------------------------+
+      | Instruction bound to a  | Descriptor | Reject the request; fix |
+      +-------------------------+------------+-------------------------+
+      | local bus without       |            | the descriptor.         |
+      +-------------------------+------------+-------------------------+
+      | signalling details      |            |                         |
+      +-------------------------+------------+-------------------------+
+      | Argument count mismatch | Program    | Reject the request.     |
+      +-------------------------+------------+-------------------------+
+      | Value outside a         | Program    | Saturate, do not fail.  |
+      +-------------------------+------------+-------------------------+
+      | limit                   |            |                         |
+      +-------------------------+------------+-------------------------+
+      | Parameter outside its   | Device     | Reject the write.       |
+      +-------------------------+------------+-------------------------+
+      | declared range          |            |                         |
+      +-------------------------+------------+-------------------------+
+      | No acknowledgement      | Device     | Fail the request.       |
+      +-------------------------+------------+-------------------------+
+      | the timeout             |            |                         |
+      +-------------------------+------------+-------------------------+
+      | Device reports busy or  | Device     | Fail the request.       |
+      +-------------------------+------------+-------------------------+
+      | unrecognised command    |            |                         |
+      +-------------------------+------------+-------------------------+
+      | Device reports a fault  | Device     | Latch; fail the next    |
+      +-------------------------+------------+-------------------------+
+      | Tunnel unknown or not   | Protocol   | Answer with the         |
+      +-------------------------+------------+-------------------------+
+      | established             |            | corresponding tunnel    |
+      +-------------------------+------------+-------------------------+
+      | Tunnel offset already   | Protocol   | Answer with the         |
+      +-------------------------+------------+-------------------------+
+      | released                |            | tunnel-reset error.     |
+      +-------------------------+------------+-------------------------+
+      | Authentication missing  | Protocol   | Close the session.      |
+      +-------------------------+------------+-------------------------+
+      | wrong                   |            |                         |
+      +-------------------------+------------+-------------------------+
+      | Frame failed its        | Protocol   | Drop the frame; fail    |
+      +-------------------------+------------+-------------------------+
+      | or tag check            |            | session on repetition.  |
+      +-------------------------+------------+-------------------------+
+      | Payload exceeds the     | Protocol   | Close the session.      |
+      +-------------------------+------------+-------------------------+
+      | negotiated limit        |            |                         |
+      +-------------------------+------------+-------------------------+
+      | Unknown message type    | Protocol   | Report; keep the        |
+      +-------------------------+------------+-------------------------+
+
+Appendix B.  Conformance Notes
+
+   This appendix is non-normative and records differences between this
+   document and the reference implementation.
+
+   B.1. A failure raised by the shared host environment's messaging
+   operation is not catchable in the reference implementation, because
+   its class is outside the runtime failure family (Section 5).
+
+   B.2. A frame of unknown message type terminates the session in the
+   reference implementation, contrary to Section 8.
+
+   B.3. Two protocol codes, E_INTERNAL and E_RATE_LIMITED, are defined
+   but never produced, so the situations they describe are not
+   observable.
+
+   B.4. The reference formatter tolerates input it cannot fully
+   normalise by leaving it unchanged rather than failing, except for
+   text it cannot lex.
+
+   B.5. The interpreter's launcher does not propagate the failure status
+   of a program (see [RFC0007]).
+
+Authors' Addresses
+
+   Shining Yang
+   HFUT

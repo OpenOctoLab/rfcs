@@ -1,0 +1,445 @@
+
+
+OpenOcto Standards Group (OOSG)                                  S. Yang
+Request for Comments: 0007                                          HFUT
+Category: Standards Track                                 September 2026
+
+               OpenOcto Command-Line Tools and Interfaces
+
+Abstract
+
+   Three tools make up the user-visible surface of the ecosystem: the
+   interpreter that runs programs, the daemon that owns buses, and the
+   formatter that rewrites source text.  This document specifies all
+   three interfaces, the files and environment variables they read, the
+   behaviour of the interactive mode, the policy that governs connecting
+   to and starting a daemon, and the exact formatting rules.
+
+Status of This Memo
+
+   This is a Standards Track document of the OpenOcto Standards (OOS)
+   series.
+
+   This document is a product of the OpenOcto Standards Group (OOSG).
+   It represents the consensus of the OOSG community, has received
+   public review and has been approved for publication.  It is not an
+   Internet Standard and is not a candidate for any level of Internet
+   Standard.  Distribution of this document is unlimited.
+
+   Information about the current status of this document, any errata
+   and how to provide feedback on it may be obtained from the OOSG.
+
+Copyright Notice
+
+   Copyright (c) 2026 OOSG and the persons identified as the document
+   authors.  All rights reserved.
+
+   This document is distributed under the MIT License: permission is
+   granted, free of charge, to use, copy, modify, merge, publish,
+   distribute, sublicense and/or sell copies of this document, subject
+   to the inclusion of the above notice in all such copies.  The
+   document is provided without warranty of any kind.  Code Components
+   extracted from this document are subject to the same terms.
+
+Table of Contents
+
+   1. Introduction
+   2. Conventions
+   3. The Interpreter Command
+   4. Interactive Mode
+   5. Connection and Start-Up Policy
+     5.1.  Target Resolution
+     5.2.  Loopback Detection
+     5.3.  Start Policy
+     5.4.  Usage Errors
+   6. The Peer Record File
+   7. The Daemon Command
+   8. Descriptor Utilities
+   9. The Formatter Command
+   10. Formatting Rules
+   11. Launcher Scripts
+   12. Security Considerations
+   13. IANA Considerations
+   14. References
+     14.1. Normative References
+     14.2. Informative References
+   Appendix A. Environment Variables
+   Appendix B. Exit Statuses
+   Appendix C. Conformance Notes
+   Authors' Addresses
+
+1.  Introduction
+
+   The tools are specified here as observable interfaces: command-line
+   arguments, files read, output produced, exit status, and side
+   effects.  All user-facing messages are in English.
+
+2.  Conventions
+
+   The key words of [IETF-RFC2119] and [IETF-RFC8174] apply.
+   "<command>" means the interpreter, the daemon or the formatter.
+   Options MAY be written before or after positional arguments.  A path
+   that is not absolute is resolved against the working directory.
+
+3.  The Interpreter Command
+
+      octo [options] [script ...]
+
+      Operand / option     Argument      Meaning
+      +=====================+==============+===========================+
+      | Operand / option    | Argument     | Meaning                   |
+      +=====================+==============+===========================+
+      | script              | zero or more | Program files to execute. |
+      +---------------------+--------------+---------------------------+
+      | --config, -c        | path         | Device descriptor         |
+      +---------------------+--------------+---------------------------+
+      | --peer-config       | path         | Peer record file (Section |
+      +---------------------+--------------+---------------------------+
+      | --set               | KEY=VALUE    | Opaque descriptor         |
+      +---------------------+--------------+---------------------------+
+      | --daemon-host       | address      | Connect to this address.  |
+      +---------------------+--------------+---------------------------+
+      | --daemon-port       | port         | Connect to this port.     |
+      +---------------------+--------------+---------------------------+
+      | --auth-token        | secret       | Token for session         |
+      +---------------------+--------------+---------------------------+
+      | --auth-psk          | secret       | Pre-shared key for        |
+      +---------------------+--------------+---------------------------+
+      | --encrypt           | none         | Request session           |
+      +---------------------+--------------+---------------------------+
+      | --compress          | none         | Request session           |
+      +---------------------+--------------+---------------------------+
+      | --octo-id           | name         | Identifier of the         |
+      +---------------------+--------------+---------------------------+
+      | --verbose, -v       | none         | Report progress,          |
+      +---------------------+--------------+---------------------------+
+      | --color, --no-color | none         | Force or suppress colour  |
+      +---------------------+--------------+---------------------------+
+
+   With several program files, each file runs in its own interpreter
+   instance, the instances share one host environment, and identifiers
+   are assigned automatically in order (for example "octo0", "octo1").
+   With one file, the identifier defaults to a fixed name unless
+   --octo-id is given.  Each program emits the shutdown lifecycle event
+   when it finishes.
+
+   If --set is given without an "=" the command fails with a usage
+   error.  A "KEY=VALUE" pair is forwarded verbatim; the interpreter
+   does not interpret the key or the value.
+
+   On start-up the interpreter probes the peer once.  A failed probe is
+   silent: it neither prints an error nor starts a daemon.  With
+   --verbose the outcome is reported, including the number of
+   instructions discovered.
+
+   The exit status is zero on success; non-zero when a program file is
+   missing, when lexing, parsing or evaluation fails, and when a usage
+   error is detected (Section 5.4 and Appendix B).
+
+4.  Interactive Mode
+
+   With no program file the interpreter reads statements from the
+   standard input.  Interactive mode requires a terminal; when no
+   terminal is attached (for example when the terminal type is "dumb" or
+   the input is not a terminal) the command refuses to run and exits
+   with a non-zero status rather than reading input blindly.
+
+   1.  The prompt is shown; a continuation prompt is shown while a
+       statement is incomplete.
+   2.  A statement is accumulated until it is complete: an unclosed
+       bracket or an unterminated string continues to the next line, as
+       does a line that ends with a line-continuation backslash.
+   3.  On completion the statement is executed and its value, if any, is
+       displayed.
+   4.  A failure is reported as an error line and the session continues.
+   5.  Input is remembered in a history file in the user's home
+       directory.
+   6.  The words "exit" and "quit", and an end-of-file, terminate the
+       session, which emits the shutdown lifecycle event.
+
+   Interrupting the current line abandons it and leaves the session
+   running.
+
+5.  Connection and Start-Up Policy
+
+5.1.  Target Resolution
+
+   The connection target is resolved from, in decreasing priority: an
+   explicit host and port from the command line; a peer record file,
+   which supplies the host, the port and optionally the credentials; and
+   the built-in defaults, namely the loopback address and port 6286.
+   Credentials given on the command line take precedence over the peer
+   record.
+
+5.2.  Loopback Detection
+
+   An address is local when it is the loopback address, the name
+   "localhost", the IPv6 loopback address, or any address starting with
+   "127.".  Every other address is remote.
+
+5.3.  Start Policy
+
+   A daemon is started by the interpreter only when the resolved address
+   is local and neither the host nor the port was given explicitly.  In
+   all other cases the interpreter connects only.  A descriptor and its
+   overrides are forwarded only when the address is local; for a remote
+   address they are ignored, because they describe buses of another
+   machine.
+
+   When a daemon is started and the connection then fails, the failure
+   message includes the output of the started daemon, so that the cause
+   is visible without a second command.
+
+5.4.  Usage Errors
+
+   A malformed option argument, an unknown option and an invalid option
+   combination are usage errors: they are reported on the error stream
+   and the process exits with the usage status.
+
+6.  The Peer Record File
+
+   A peer record is a TOML document whose "daemon" table records the
+   endpoint and optionally the credentials:
+
+      [daemon]
+      host = "127.0.0.1"
+      port = 6286
+      auth = "hmac"          # none | token | hmac
+      auth_token = "..."     # when auth = "token"
+      auth_psk = "..."       # when auth = "hmac"
+
+   A peer record MAY also record bus addresses, which are stored for
+   inspection only.  It MUST NOT be used as the descriptor of a remote
+   daemon: only the endpoint information is consumed, and the file is
+   never forwarded.
+
+   A program can inspect the recorded peer through its meta object; the
+   record exposes the address and the authentication method, and never a
+   secret [RFC0003].
+
+   An unreadable or malformed peer record is reported as a warning and
+   does not abort the run: the command falls back to the defaults.
+
+7.  The Daemon Command
+
+      octod [options]
+
+      Option               Argument       Meaning
+      +=====================+===============+==========================+
+      | Option              | Argument      | Meaning                  |
+      +=====================+===============+==========================+
+      | --config, -c        | path          | Descriptor to load.      |
+      +---------------------+---------------+--------------------------+
+      | --set               | KEY=VALUE     | Descriptor override;     |
+      +---------------------+---------------+--------------------------+
+      | --init-config       | OPTIONAL path | Write a copy of the      |
+      +---------------------+---------------+--------------------------+
+      | --mockify           | OPTIONAL path | Write a loopback-only    |
+      +---------------------+---------------+--------------------------+
+      | --list-transports   | none          | List the available       |
+      +---------------------+---------------+--------------------------+
+      | --host              | address       | Listening address,       |
+      +---------------------+---------------+--------------------------+
+      | --port              | port          | Listening port,          |
+      +---------------------+---------------+--------------------------+
+      | --verbose, -v       | none          | Verbose logging,         |
+      +---------------------+---------------+--------------------------+
+      | --color, --no-color | none          | Force or suppress colour |
+      +---------------------+---------------+--------------------------+
+
+   The descriptor is located by, in decreasing priority: --config; the
+   environment variable for the descriptor; a file named "octod.toml" in
+   the working directory; the same name below the user configuration
+   directory; and the packaged default.
+
+   An override takes the form "section.key=value" and builds nested
+   tables; a value is parsed as a TOML scalar when possible and is
+   otherwise taken as text.  When the descriptor declares several buses
+   and no legacy bus table, an override whose first component is the
+   legacy bus name is remapped onto the first bus.
+
+   The listening address and port are taken from the command line, then
+   from the environment, then from the descriptor, then from the
+   defaults.
+
+8.  Descriptor Utilities
+
+   Copying the packaged default descriptor writes to the given path, or
+   to "octod.toml" in the working directory when no path is given;
+   writing over the packaged default itself is refused.  The command
+   prints the path it wrote and exits without starting a daemon.
+
+   Producing a loopback-only variant rewrites every bus's transport to
+   the loopback transport.  When no path is given the output name is
+   derived from the input name.  A descriptor without any bus is
+   rejected.  On success the command prints the path it wrote; on
+   failure it prints an error and exits with a non-zero status.
+
+   Listing transports prints one line per available transport name with
+   a description of what it is and which configuration keys it accepts.
+
+9.  The Formatter Command
+
+      octofmt [options] [file ...]
+
+      Option       Meaning
+      +=============+==================================================+
+      | Option      | Meaning                                          |
+      +=============+==================================================+
+      | file        | Files to format; "-" or no file means standard   |
+      +-------------+--------------------------------------------------+
+      | -w, --write | Rewrite files in place and report each one.      |
+      +-------------+--------------------------------------------------+
+      | --check     | Report files that would change; make no change.  |
+      +-------------+--------------------------------------------------+
+
+   Without -w and without --check the formatted text is written to the
+   standard output.  With --check each file that would change is
+   reported and the exit status becomes 1.  A file that cannot be read,
+   a source text that cannot be lexed and a formatting failure are
+   reported and produce the error status; processing stops at the first
+   such error.  The exit status is zero when nothing needed changing.
+   Because the tool reads and writes through the given paths, symbolic
+   links are followed and the target file is rewritten.
+
+10. Formatting Rules
+
+   Formatting is lossless at the token level: every token's text is
+   preserved, including string contents, numeric literal spellings, and
+   both comment forms.  Only whitespace, indentation, line breaks inside
+   brackets, and brace placement are normalised.
+
+   1.  Indentation is four spaces per brace level.  Only braces increase
+       the level; parentheses and brackets do not.
+   2.  Each statement occupies its own line.  A line break in the source
+       is preserved only outside parentheses and brackets, so an
+       expression that spans lines inside brackets is joined onto one
+       line.
+   3.  Spaces are inserted between operators and their operands, after
+       commas, and around colons that introduce a dictionary entry or a
+       ternary branch.
+   4.  No space is inserted before a closing bracket, a comma, or a
+       semicolon, nor after an opening bracket; a unary minus, a logical
+       negation and the OPTIONAL-chaining token stay adjacent to their
+       operand; the range and spread token stays adjacent to its
+       operand, except after a comma.
+   5.  An opening parenthesis or bracket after an identifier, a literal,
+       a closing bracket or a dot is adjacent to it; otherwise a space
+       is inserted.
+   6.  A structure header ("if", "elif", "else", "for", "while", "do",
+       "loop", "match", "case", "fn", "try", "except", "finally") is on
+       the same line as its opening brace.  A closing brace that is
+       followed by a continuation keyword shares a line with it, as in
+       "} else {".
+   7.  An empty block is written inline as "{}".
+   8.  A semicolon inside parentheses is kept on the same line;
+       elsewhere it becomes a line break.
+   9.  Comments are preserved: a comment that was at the end of a line
+       stays at the end of that line, separated by two spaces, and a
+       comment on its own line stays on its own line at the current
+       indentation.  A multi-line block comment is re-emitted line by
+       line, keeping its relative indentation.
+   10. Blank lines are preserved, with consecutive blank lines collapsed
+      into one; blank lines at the beginning of a file are dropped; no
+      blank line is introduced inside brackets.
+   11. The output ends with exactly one line break.
+
+   Applying the formatter to already formatted text MUST produce
+   identical text.
+
+11. Launcher Scripts
+
+   Each tool has a launcher script that resolves its own location
+   through the symbolic-link chain before importing the implementation,
+   so that a launcher MAY be linked into a directory on the search path.
+   A launcher forwards all arguments and the exit status of the tool.
+
+12. Security Considerations
+
+   *  The interpreter evaluates the program text it is given and MAY
+      read its environment.  Only trusted programs SHOULD be run.
+   *  Credentials given on the command line are visible to other
+      processes on the same host through the process table.  A peer
+      record file with restrictive permissions is preferable.
+   *  The descriptor-override option can change any descriptor value; it
+      is intended for development.
+   *  Utility subcommands write files.  They refuse to overwrite the
+      packaged default descriptor, and they report the path they wrote.
+
+13. IANA Considerations
+
+   This document registers no names with IANA.
+
+14. References
+
+14.1. Normative References
+
+   [RFC0005]  "The OpenOcto Device Descriptor Format", this series.
+
+   [RFC0003]  "The OctoScript Language", this series.
+
+   [RFC0004]  "Octopus Control Protocol (OCP)", this series.
+
+   [TOML]  "TOML: Tom's Obvious, Minimal Language", version 1.0.
+
+14.2. Informative References
+
+   [RFC0002]  "OpenOcto Ecosystem Architecture", this series.
+
+   [RFC0006]  "OpenOcto Device Daemon Behaviour", this series.
+
+Appendix A.  Environment Variables
+
+      Variable               Read by              Meaning
+      +===================+=====================+======================+
+      | Variable          | Read by             | Meaning              |
+      +===================+=====================+======================+
+      | OCTO_DAEMON_PORT  | interpreter, daemon | Default port when    |
+      +-------------------+---------------------+----------------------+
+      | OCTOD_CONFIG      | daemon              | Descriptor path,     |
+      +-------------------+---------------------+----------------------+
+      | OCTOD_NO_LISTENER | daemon              | When set, the        |
+      +-------------------+---------------------+----------------------+
+      | TERM              | interpreter         | A missing or "dumb"  |
+      +-------------------+---------------------+----------------------+
+      | HOME              | interpreter         | Location of the      |
+      +-------------------+---------------------+----------------------+
+      | NO_COLOR, colour  | all tools           | Suppress colour.     |
+      +-------------------+---------------------+----------------------+
+      | settings          |                     |                      |
+      +-------------------+---------------------+----------------------+
+
+Appendix B.  Exit Statuses
+
+      Status  Meaning
+      +========+=======================================================+
+      | Status | Meaning                                               |
+      +========+=======================================================+
+      | 0      | Success.                                              |
+      +--------+-------------------------------------------------------+
+      | 1      | Program, script or formatting failure; interactive    |
+      +--------+-------------------------------------------------------+
+      | 2      | Usage error; unreadable or unlexable input for the    |
+      +--------+-------------------------------------------------------+
+
+Appendix C.  Conformance Notes
+
+   This appendix is non-normative and records differences between this
+   document and the reference implementation.
+
+   C.1. In the reference implementation the interpreter and daemon
+   launcher scripts do not propagate the tool's exit status, so the
+   process MAY exit with zero after a program failed.  The formatter's
+   launcher does propagate it.
+
+   C.2. The reference implementation stops processing a formatter run at
+   the first failing file rather than reporting every failing file.
+
+   C.3. The interpreter's port default is also taken from an environment
+   variable in the daemon; the two MUST agree for a locally started
+   daemon to be found.
+
+Authors' Addresses
+
+   Shining Yang
+   HFUT

@@ -1,0 +1,558 @@
+
+
+
+
+OpenOcto Standards Group (OOSG)                                  S. Yang
+Request for Comments: 0002                                          HFUT
+Category: Standards Track                                 September 2026
+
+
+                    OpenOcto Ecosystem Architecture
+
+Abstract
+
+   This document specifies the architecture of the OpenOcto ecosystem:
+   what the components are, how they are layered, which deployment
+   topologies are supported, how a connection to a device is
+   established, how instructions and events flow, how concurrency is
+   observable, and how the processes start and stop.  It is the entry
+   document for the remaining documents of the series: it describes the
+   architecture, while [RFC0003], [RFC0004], [RFC0005], [RFC0006],
+   [RFC0007] and [RFC0008] specify each area in detail.
+
+Status of This Memo
+
+   This is a Standards Track document of the OpenOcto Standards (OOS)
+   series.
+
+   This document is a product of the OpenOcto Standards Group (OOSG).
+   It represents the consensus of the OOSG community, has received
+   public review and has been approved for publication.  It is not an
+   Internet Standard and is not a candidate for any level of Internet
+   Standard.  Distribution of this document is unlimited.
+
+   Information about the current status of this document, any errata
+   and how to provide feedback on it may be obtained from the OOSG.
+
+Copyright Notice
+
+   Copyright (c) 2026 OOSG and the persons identified as the document
+   authors.  All rights reserved.
+
+   This document is distributed under the MIT License: permission is
+   granted, free of charge, to use, copy, modify, merge, publish,
+   distribute, sublicense and/or sell copies of this document, subject
+   to the inclusion of the above notice in all such copies.  The
+   document is provided without warranty of any kind.  Code Components
+   extracted from this document are subject to the same terms.
+
+Table of Contents
+
+   1. Introduction
+   2. Terminology
+   3. Component Model
+   4. Layering
+   5. Deployment Topologies
+   6. Runtime Model
+     6.1.  Value Model
+     6.2.  Instruction Registration
+     6.3.  Result and Failure Semantics
+     6.4.  Multiple Instances and the Host
+     6.5.  Hooks
+     6.6.  Variable Observation
+   7. Connection Model
+     7.1.  Target Resolution
+     7.2.  Credentials
+     7.3.  Start Policy
+     7.4.  Probing and Reconnection
+     7.5.  Liveness
+   8. Transport Taxonomy
+   9. Instruction and Event Flow
+     9.1.  Instruction Flow
+     9.2.  Event Flow
+     9.3.  Topic Namespaces
+   10. Bulk Data Transfer
+   11. Concurrency Model
+   12. Lifecycle of a Process
+   13. Security Considerations
+   14. IANA Considerations
+   15. References
+     15.1. Normative References
+     15.2. Informative References
+   Appendix A. Conformance Notes
+   Authors' Addresses
+
+1.  Introduction
+
+   OctoScript is used to drive robots: programs written in the language
+   [RFC0003] issue instructions that end up as electrical signalling on
+   a machine bus, and the machine reports frames back that become
+   events in the program.
+
+   The ecosystem separates three concerns:
+
+   *  the language and its interpreter, which have no hardware
+      knowledge at all;
+
+   *  the device daemon, which translates between the session protocol
+      [RFC0004] and one or more machine buses, driven entirely by a
+      declarative device descriptor [RFC0005];
+
+   *  the command-line tools, which prepare, run and format programs
+      [RFC0007].
+
+   Because the daemon is OPTIONAL, pure-language programs run with no
+   hardware present.  Because the protocol is symmetric, an interpreter
+   can talk directly to a device that speaks it, with no daemon in
+   between.
+
+2.  Terminology
+
+   Program
+      A source text in the language, stored with the extension ".octo".
+
+   Interpreter
+      The component that executes a program.
+
+   Daemon
+      The component that owns machine buses and exposes them through
+      the protocol.  It is also referred to as the device daemon.
+
+   Descriptor
+      The declarative file that tells a daemon which buses exist and
+      how instructions and device frames map to them.
+
+   Session
+      One protocol connection between two endpoints [RFC0004].
+
+   Instruction
+      A named operation callable from a program; the set of
+      instructions is discovered at run time.
+
+   Event
+      A named, asynchronous notification produced by a device, by the
+      daemon, or by the protocol layer.
+
+   Bus
+      An abstraction of a physical or virtual link.  A "local bus"
+      reaches hardware directly; an "OCP bus" reaches a peer over the
+      protocol.
+
+3.  Component Model
+
+   The ecosystem consists of the following externally visible
+   components.
+
+   +=================+================================================+
+   |Component        |Responsibility                                  |
+   +=================+================================================+
+   |Interpreter      |Lexing, parsing and evaluation of programs;     |
+   |                 |native-function registry; hook dispatch;        |
+   |                 |discovery and registration of instructions;     |
+   |                 |interactive mode.                               |
+   +-----------------+------------------------------------------------+
+   |Device Daemon    |Bus ownership; descriptor-driven instruction    |
+   |                 |execution; device-frame decoding; event         |
+   |                 |publication; protocol server; logging.          |
+   +-----------------+------------------------------------------------+
+   |Protocol Library |Framing, values, messages, sessions, tunnels and|
+   |                 |and OPTIONAL confidentiality.                   |
+   +-----------------+------------------------------------------------+
+   |Formatter        |Lossless token-level re-formatting of source    |
+   |                 |text.                                           |
+   +-----------------+------------------------------------------------+
+   |Linter           |Static analysis and style checking of source    |
+   |                 |text.                                           |
+   +-----------------+------------------------------------------------+
+   |Language Server  |Interactive editing of source text.             |
+   +-----------------+------------------------------------------------+
+
+                       Table 1: Component Model
+
+   The interpreter MUST be usable without the daemon.  The daemon MUST
+   NOT require any particular program to be running: it serves any
+   number of concurrent sessions.
+
+   A program MAY observe, but MUST NOT require, the presence of other
+   interpreter instances: instances cooperate only through their shared
+   host environment (Section 6.4).
+
+4.  Layering
+
+   The layers, from top to bottom, are:
+
+      +==================+=============================================+
+      | Layer            | Content                                     |
+      +==================+=============================================+
+      | Language         | Syntax, values, semantics, library entry    |
+      |                  | points [RFC0003].                         |
+      | Runtime binding  | Mapping of instruction names to invocable   |
+      |                  | operations; native registry; hook registry. |
+      | Session protocol | Framing, values, messages, sessions,        |
+      |                  | authentication, transforms, tunnels         |
+      |                  | [RFC0004].                                 |
+      | Bus signalling   | Per-bus encoding of instruction frames and  |
+      |                  | decoding of device frames, driven by the    |
+      |                  | descriptor [RFC0005].                     |
+      +------------------+---------------------------------------------+
+
+   Two rules follow from this layering, and both are normative.
+
+   *  The language layer carries no bus concepts.  A program names
+      instructions and values; it never names a bus frame, a bit field
+      or an identifier unless such a value is returned to it as data.
+
+   *  A bus that is reached over the protocol MUST NOT carry signalling
+      details in the descriptor: frames are the business of the peer
+      [RFC0005].
+
+5.  Deployment Topologies
+
+   Five topologies are defined.  All of them are observably equivalent
+   from the point of view of a program: an instruction is issued, and
+   either a result or an error is produced.
+
+   A. Local daemon.  The interpreter connects to a daemon endpoint on
+      the loopback address.  If no daemon is listening, the interpreter
+      MAY start one itself (Section 7.3).
+
+   B. Remote daemon.  The interpreter connects to a daemon on another
+      host.  It never starts a daemon for a non-loopback address and
+      never forwards its own descriptor to such a daemon.
+
+   C. Direct device.  The interpreter connects to a peer that implements
+      the protocol and speaks for hardware directly, with no daemon.
+      Any peer that accepts a session and answers instructions MAY take
+      this role.
+
+   D. Relayed device.  A daemon acts as a client of another daemon or
+      device: some of its buses are OCP buses, and instructions bound to
+      those buses are forwarded.  Result and event semantics are
+      preserved across the relay.
+
+   E. Hybrid.  A single deployment MAY combine A to D: one daemon MAY
+      own local buses and OCP buses at the same time, and several
+      interpreters MAY share it.
+
+   The roles in the protocol are symmetric: either endpoint MAY send
+   requests, publish events, and open tunnels [RFC0004].
+
+6.  Runtime Model
+
+6.1.  Value Model
+
+   Values are the objects of the language: integers, floating-point and
+   complex numbers, booleans, the empty value, strings, bytes, lists,
+   tuples, sets, dictionaries, ranges, functions and modules, together
+   with opaque values supplied by native functions.  Assignment binds a
+   reference, so a change made through one binding is visible through
+   every other binding of the same value.  The operators and operations
+   defined on these values are specified in [RFC0003].
+
+6.2.  Instruction Registration
+
+   Instructions are not built into the interpreter.  At start-up the
+   interpreter SHOULD probe the configured peer once, and it MUST
+   refresh the instruction list on every successful connection and
+   re-register the discovered names.  A name becomes callable only after
+   it has been registered; calling an unregistered name is an error
+   [RFC0003] [RFC0008].
+
+   Discovery is a protocol request; it is logged like any other request
+   [RFC0004] [RFC0006].
+
+6.3.  Result and Failure Semantics
+
+   An instruction call MUST either return a value or fail loudly.  There
+   is no implicit simulation: a missing daemon, a missing instruction, a
+   refused bus connection or a rejected command produces an error, and
+   it is the program's decision whether to handle it.  Silent
+   substitution of fake results is not permitted.  Simulation is
+   expressed by configuring a bus that loops back locally [RFC0005].
+
+6.4.  Multiple Instances and the Host
+
+   Several interpreter instances MAY run in one process and share a host
+   environment.  The shared environment provides:
+
+   *  a registry of native functions callable from programs;
+   *  point-to-point mailboxes between instances;
+   *  named channels with publish/consume semantics;
+   *  a hook registry keyed by event name, shared by all instances.
+
+   Instance identity, mailbox and channel operations, and hook
+   registration are specified in [RFC0003].
+
+6.5.  Hooks
+
+   A hook is a function invoked when a named event occurs.  The same
+   mechanism carries device stimuli and lifecycle transitions; there is
+   no difference in registration or dispatch.  Hooks are dispatched in
+   registration order; an exception raised by a hook is reported and
+   MUST NOT interrupt the caller or the remaining hooks [RFC0003]
+   [RFC0008].
+
+6.6.  Variable Observation
+
+   A program MAY register a watcher for a variable name; the watcher is
+   invoked synchronously whenever that variable's value changes.
+   Watcher failures are isolated in the same manner as hook failures
+   [RFC0003].
+
+7.  Connection Model
+
+7.1.  Target Resolution
+
+   The connection target is a host and a port.  It is resolved from, in
+   decreasing priority: an explicit command-line host and port; a peer
+   record file; built-in defaults.  Recording a peer means storing the
+   address and, optionally, the credentials of the endpoint; it does not
+   imply interpreting any device-side configuration [RFC0007].
+
+7.2.  Credentials
+
+   A session MAY be authenticated and MAY be encrypted or compressed
+   [RFC0004].  Credentials and the two transforms are configured on
+   both endpoints independently; they are negotiated at connection
+   set-up, and a mismatch MUST fail the connection rather than silently
+   proceeding in cleartext.
+
+7.3.  Start Policy
+
+   Starting a daemon is allowed only when the resolved peer is the local
+   host and no explicit host or port was given.  For any other peer the
+   interpreter connects only.  When a device descriptor is supplied, it
+   is forwarded to a daemon that the interpreter starts itself, and
+   never to a remote peer, because such a descriptor is only meaningful
+   on the machine that owns the buses [RFC0007].
+
+7.4.  Probing and Reconnection
+
+   Probing MUST be silent: a failed probe does not print an error and
+   does not start a daemon.  The interpreter SHOULD attempt a discovery
+   probe at most once per process lifetime from the call path;
+   subsequent refreshes happen on reconnection.
+
+   A daemon treats a bus as disconnected when opening it fails, when a
+   liveness probe times out, or when the peer closes the session.
+   Reconnection uses exponential back-off: the first retry after one
+   second, doubling on each failure, capped at thirty seconds; a
+   successful connection resets the delay.  A connection-state change is
+   published as an event [RFC0006].
+
+7.5.  Liveness
+
+   Liveness of a protocol session is determined by request/response
+   round trips (a heartbeat request); liveness of a directly attached
+   bus is determined by the bus transport, or by an application-level
+   heartbeat declared in the descriptor when one is configured
+   [RFC0005] [RFC0006].
+
+8.  Transport Taxonomy
+
+   Transports are addressed by a flat name; there are no nested
+   variants.  Every name is usable in the descriptor's bus sections, and
+   the set of names is discoverable from the command line [RFC0007].
+   Names fall into four classes:
+
+      +====================+===========================================+
+      | Class              | Behaviour                                 |
+      +====================+===========================================+
+      | Loopback           | Frames sent are retained locally and can  |
+      |                    | be received again.  No hardware is        |
+      |                    | touched. Used for development and         |
+      |                    | testing.                                  |
+      | Serial adapter     | A serial line carrying a de-facto CAN     |
+      |                    | tunnel protocol, with a bit-rate code     |
+      |                    | selected from the configured bit rate.    |
+      | CAN adapter family | Host CAN interfaces, selected by name;    |
+      |                    | the adapter's own configuration keys are  |
+      |                    | passed through untouched.                 |
+      | Protocol over IP   | A session to a peer, either               |
+      |                    | stream-oriented or datagram-oriented      |
+      |                    | [RFC0004].                               |
+      +--------------------+-------------------------------------------+
+
+   Two bus semantics exist above the transports.  A bus is an OCP bus
+   when its transport is a protocol-over-IP transport, or when it is
+   explicitly marked to use the protocol.  Otherwise it is a local bus,
+   whose signalling is described by the descriptor.  All non-protocol
+   transports are interchangeable at the descriptor level.
+
+   Unknown transport names MUST be rejected with an error that lists the
+   available names.
+
+9.  Instruction and Event Flow
+
+9.1.  Instruction Flow
+
+   A call in a program resolves to a registered instruction and is sent
+   to the peer as a request.  The response carries either a value or an
+   application error.  When the instruction is bound to a local bus, the
+   daemon renders the declared frames and, for the identifiers that the
+   descriptor lists as acknowledging, waits for the device to
+   acknowledge before reporting completion.  When the instruction is
+   bound to an OCP bus, the daemon forwards the request to the peer and
+   returns the peer's answer.
+
+   The observable ordering guarantee is that a call returns only after
+   the corresponding work is either completed or has failed.
+
+9.2.  Event Flow
+
+   Incoming device frames are decoded against the descriptor.  Four
+   outcomes are possible: a parameter value, a named event, a named
+   fault, or no match.  No outcome is silently discarded: frames that
+   match nothing are still reported, and the raw frame remains visible
+   to subscribers [RFC0006].
+
+   Decoded results reach programs through two mechanisms, which are
+   complementary: a queued form that a program drains explicitly, and a
+   publication form that subscribers receive asynchronously.  Faults
+   additionally carry the property that they are latched: the next
+   hardware call fails until the fault is explicitly cleared
+   [RFC0003] [RFC0006].
+
+9.3.  Topic Namespaces
+
+   Publication topics use reserved prefixes.  The namespaces "bus.",
+   "device.", "core.", "blobtun." and "log." are reserved for the
+   standard; an application MUST NOT use them for private topics.  A
+   topic whose name begins with an underscore is reserved for future
+   standard extensions [RFC0004].
+
+10. Bulk Data Transfer
+
+   Bulk byte streams (firmware images, media, logs, private extensions)
+   are carried by the tunnel primitive of the protocol rather than by
+   requests.  Tunnels are named, MAY exist several at a time on one
+   session, provide flow control, retransmission and resumption, and are
+   subject to the same OPTIONAL compression and encryption as every
+   other message [RFC0004].
+
+   A receiver that consumes tunnel data exposes it to programs as
+   published events; a sender MAY push device-side bytes into an
+   established tunnel.  Integrity, compression and encryption are
+   properties of the protocol layer, not of the tunnel.
+
+11. Concurrency Model
+
+   The following concurrency properties are observable and therefore
+   normative.
+
+   *  A daemon serves each session independently; sessions do not share
+      state.  Reconnecting produces a new session with no retained
+      state.
+   *  Within one session, requests MAY be outstanding simultaneously and
+      responses MAY arrive in any order; each response identifies its
+      request.
+   *  Requests and tunnel writes on one session MAY be issued from
+      different threads; the implementation serialises them on the wire.
+   *  A daemon publishes events to subscribers without blocking the
+      device-reading path.
+   *  A program's watchers and hooks run in the thread that caused the
+      change or event.
+   *  Ordering of a request's own side effects is preserved: a request's
+      log output precedes its completion log output.
+
+12. Lifecycle of a Process
+
+   Interpreter:
+
+   1.  Resolve the peer and credentials.
+   2.  Probe once, silently.
+   3.  Register discovered instructions.
+   4.  Run the program, or enter the interactive loop.
+   5.  Emit the shutdown lifecycle event.
+   6.  Close the session gracefully.
+
+   Daemon:
+
+   1.  Load and validate the descriptor.
+   2.  Try to open every bus; failure is reported but does not terminate
+       the daemon.
+   3.  Start serving sessions and start the device-reading path.
+   4.  Publish the start-up lifecycle event.
+   5.  On termination: publish the shutdown event, stop background work
+       before closing transports, then close transports.  Closing
+       transports before stopping background work can crash the process
+       on some platforms and is therefore prohibited.
+
+13. Security Considerations
+
+   *  Control traffic can move machinery.  A deployment that is
+      reachable off-host SHOULD enable authentication and encryption
+      [RFC0004].
+   *  A daemon SHOULD bind the loopback address unless remote access is
+      explicitly intended.
+   *  Credentials are configuration, not program data.  They MUST NOT be
+      exposed to programs or written to logs.
+   *  A descriptor received from a remote peer is never trusted: a
+      descriptor is applied only to a daemon started locally.
+   *  Faults are latched by design so that a program cannot accidentally
+      continue driving hardware that has reported a failure.
+
+14. IANA Considerations
+
+   This document registers no names with IANA.  Names used by the
+   ecosystem are registered in the standards themselves, not with IANA.
+
+15. References
+
+15.1. Normative References
+
+   [RFC0003]  "The OctoScript Language", this series.
+
+   [RFC0004]  "Octopus Control Protocol (OCP)", this series.
+
+   [RFC0005]  "The OpenOcto Device Descriptor Format", this series.
+
+   [RFC0006]  "OpenOcto Device Daemon Behaviour", this series.
+
+   [RFC0007]  "OpenOcto Command-Line Tools and Interfaces", this series.
+
+   [RFC0008]  "OpenOcto Error Taxonomy and Diagnostics", this series.
+
+15.2. Informative References
+
+   Each document below is an IETF publication; its tag carries the
+   IETF- prefix so that it cannot be confused with a document of
+   this series.
+
+   [IETF-RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119, March 1997.
+
+   [IETF-RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in
+              RFC 2119 Key Words", BCP 14, RFC 8174, May 2017.
+
+Appendix A.  Conformance Notes
+
+   This appendix is non-normative and records the state of the reference
+   implementation where it is known to differ from this document.
+
+   A.1. Descriptor tables not validated.  Unknown keys are rejected only
+   in the daemon section and in the frame-entry tables of the
+   descriptor; unknown keys elsewhere are accepted and ignored.
+
+   A.2. Hook tables in the descriptor are defined by [RFC0005] but are
+   currently accepted without effect: no reaction is performed.
+
+   A.3. Datagram transports request acknowledgement on requests but the
+   reference server emits no acknowledgement frames; reliability of a
+   request therefore rests on its response.
+
+   A.4. A frame of unknown message type terminates the session in the
+   reference implementation, although [RFC0004] requires the session to
+   survive it.
+
+   A.5. Two protocol error codes are defined but never produced:
+   E_INTERNAL and E_RATE_LIMITED.
+
+   A.6. The interpreter's process exit status does not reflect program
+   failure when started through its launcher script (the formatter's
+   launcher does propagate status).
+
+Authors' Addresses
+
+   Shining Yang
+   HFUT

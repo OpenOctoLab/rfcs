@@ -1,0 +1,528 @@
+
+
+OpenOcto Standards Group (OOSG)                                  S. Yang
+Request for Comments: 0006                                          HFUT
+Category: Standards Track                                 September 2026
+
+                    OpenOcto Device Daemon Behaviour
+
+Abstract
+
+   The device daemon owns the machine buses and exposes them to programs
+   through the session protocol.  Everything it does is described by a
+   device descriptor.  This document specifies what a program and an
+   operator observe: which instructions exist beyond the descriptor, how
+   a command is transmitted and confirmed, how received frames become
+   events, which topics are published, how connection state is monitored
+   and re-established, the exact shape of the log, and the order in
+   which resources are released at shutdown.
+
+Status of This Memo
+
+   This is a Standards Track document of the OpenOcto Standards (OOS)
+   series.
+
+   This document is a product of the OpenOcto Standards Group (OOSG).
+   It represents the consensus of the OOSG community, has received
+   public review and has been approved for publication.  It is not an
+   Internet Standard and is not a candidate for any level of Internet
+   Standard.  Distribution of this document is unlimited.
+
+   Information about the current status of this document, any errata
+   and how to provide feedback on it may be obtained from the OOSG.
+
+Copyright Notice
+
+   Copyright (c) 2026 OOSG and the persons identified as the document
+   authors.  All rights reserved.
+
+   This document is distributed under the MIT License: permission is
+   granted, free of charge, to use, copy, modify, merge, publish,
+   distribute, sublicense and/or sell copies of this document, subject
+   to the inclusion of the above notice in all such copies.  The
+   document is provided without warranty of any kind.  Code Components
+   extracted from this document are subject to the same terms.
+
+Table of Contents
+
+   1. Introduction
+   2. Conventions
+   3. Start-Up
+   4. Built-in Instructions
+   5. Instruction Execution
+     5.1.  Resolving a Request
+     5.2.  Local Bus Execution
+     5.3.  Acknowledgement
+     5.4.  Status Text
+     5.5.  Forwarding
+   6. The Event Pipeline
+     6.1.  Decoding
+     6.2.  Queueing
+     6.3.  Publication
+     6.4.  Remote Events
+     6.5.  Tunnel Traffic
+     6.6.  Lifecycle Events
+   7. Parameter Cache and Introspection
+   8. Connection Monitoring
+     8.1.  Protocol Buses
+     8.2.  Local Buses
+     8.3.  Reconnection
+     8.4.  Concurrency
+   9. Logging
+     9.1.  Session Lines
+     9.2.  Frame Lines
+     9.3.  Banners
+     9.4.  Colour
+   10. Shutdown
+   11. Security Considerations
+   12. IANA Considerations
+   13. References
+     13.1. Normative References
+     13.2. Informative References
+   Appendix A. Conformance Notes
+   Authors' Addresses
+
+1.  Introduction
+
+   The daemon is a translator, not an application: it neither interprets
+   programs nor performs reactions of its own accord (reactions declared
+   in the descriptor are the exception, and are specified in
+   [RFC0005]).  It receives requests, drives buses, decodes frames,
+   and publishes what it observes.
+
+   The daemon is also a client: some of its buses MAY be reached over
+   the protocol, in which case it forwards requests to a peer and
+   republishes what the peer reports [RFC0002].
+
+2.  Conventions
+
+   The key words of [IETF-RFC2119] and [IETF-RFC8174] apply.
+   "Descriptor" means the device descriptor [RFC0005].  "Session" means
+   one protocol connection [RFC0004].
+
+3.  Start-Up
+
+   1.  The descriptor is located and loaded as specified in [RFC0005].
+       A missing or malformed descriptor terminates the process with a
+       diagnostic that names the path.
+   2.  Every declared bus is created and an attempt is made to open it.
+       Failure is reported once, per bus, as a warning; the process
+       stays up and continues to report the bus as disconnected.  This
+       is deliberate: a daemon is expected to survive hardware that is
+       temporarily absent.
+   3.  The device-reading path and the session listener are started.
+   4.  The start-up lifecycle event is published.
+   5.  The listening endpoint is announced on the log, together with the
+       list of buses and the transport of each.
+
+   A daemon that owns no bus at all is not valid; the descriptor
+   requirement is enforced before start-up.
+
+4.  Built-in Instructions
+
+   The following instructions exist in every daemon, in addition to
+   those declared by the descriptor.  Names marked reserved cannot be
+   redefined by a descriptor table; the others can.
+
+      Instruction        Reserved  Arguments          Result
+      +===================+==========+================+================+
+      | Instruction       | Reserved | Arguments      | Result         |
+      +===================+==========+================+================+
+      | ping              | yes      | t              | {t, time,      |
+      +-------------------+----------+----------------+----------------+
+      | list_instructions | yes      | none           | The            |
+      +-------------------+----------+----------------+----------------+
+      | device_status     | yes      | none           | Human-readable |
+      +-------------------+----------+----------------+----------------+
+      | poll_events       | yes      | none           | The queued     |
+      +-------------------+----------+----------------+----------------+
+      | read_sensor       | yes      | name           | The current    |
+      +-------------------+----------+----------------+----------------+
+      | list_sensors      | yes      | none           | Declared       |
+      +-------------------+----------+----------------+----------------+
+      | list_actuators    | yes      | none           | Declared       |
+      +-------------------+----------+----------------+----------------+
+      | actuator_info     | yes      | name           | Metadata of    |
+      +-------------------+----------+----------------+----------------+
+      | connection_state  | yes      | none           | Per-bus        |
+      +-------------------+----------+----------------+----------------+
+      | set_param         | no       | name, value    | Empty; writes  |
+      +-------------------+----------+----------------+----------------+
+      | get_param         | no       | name           | The cached     |
+      +-------------------+----------+----------------+----------------+
+      | set_torque        | no       | name, value    | Empty;         |
+      +-------------------+----------+----------------+----------------+
+      | set_speed         | no       | name, value    | Empty;         |
+      +-------------------+----------+----------------+----------------+
+      | set_position      | no       | name, value,   | Empty;         |
+      +-------------------+----------+----------------+----------------+
+      | enable, disable,  | no       | name           | Empty;         |
+      +-------------------+----------+----------------+----------------+
+      | halt              |          |                | primitives.    |
+      +-------------------+----------+----------------+----------------+
+
+   A non-reserved built-in is used only when the descriptor declares no
+   instruction of that name.
+
+5.  Instruction Execution
+
+5.1.  Resolving a Request
+
+   A request names an instruction and supplies positional arguments.
+   The name is resolved against the reserved built-ins, the descriptor's
+   instruction declarations and the remaining built-ins.  An unknown
+   name is an application error, not a protocol error.
+
+5.2.  Local Bus Execution
+
+   The declared frames are rendered with the arguments, honouring any
+   saturation limits, and sent in declaration order on the bus the
+   instruction selects.  Rendering failures, an absent connection and a
+   transport refusal are reported as instruction failures with the
+   offending frame identifier.
+
+5.3.  Acknowledgement
+
+   If a command frame's identifier is listed as requiring
+   acknowledgement and the bus is neither the loopback transport nor a
+   protocol bus, the daemon waits for the device to confirm.  A
+   confirmation is either an echo of the command frame (the same
+   identifier, with the first payload octet unchanged) or a dedicated
+   acknowledgement frame with identifier 0x136, whose first four payload
+   octets carry the original identifier in big-endian order and whose
+   fifth payload octet carries the status.  For an echoed frame the
+   status octet is the last payload octet.  A status of 0x02 means
+   "busy" and a status of 0xFF means "not recognised"; any other value
+   means success.  Silence until the timeout, a busy status and an
+   unrecognised status all fail the request.  A dedicated
+   acknowledgement frame is consumed by the daemon and is not reported
+   as an event.
+
+   Acknowledgement waiting is what makes the result of a request
+   meaningful: without it, a request would be reported complete as soon
+   as the octets left the host.
+
+5.4.  Status Text
+
+   The status instruction returns a text of the following shape:
+
+      <bus>: <connected|disconnected|unknown> (<transport status>[
+          [ocp]]); ...
+      sensors=<n>; actuators=<n>; faults=<n> [mode=mock]
+
+   Buses are separated by "; ".  The trailing groups are present only
+   when the descriptor declares sensors, actuators or faults, and the
+   mode marker is present only when every bus is the loopback transport.
+   A bus whose connection state has never been observed is reported as
+   "unknown".
+
+5.5.  Forwarding
+
+   For a protocol bus the daemon issues the request to the peer and
+   returns the peer's answer unchanged, including its failure kind and
+   message.  Requests for instructions that the descriptor does not
+   declare are also forwarded when the default bus is a protocol bus, so
+   that a daemon can act as a transparent relay.
+
+6.  The Event Pipeline
+
+6.1.  Decoding
+
+   A received frame is matched against the descriptor's fault entries
+   and then its event entries, in declaration order, first match wins.
+   A frame on the parameter channel is decoded as a parameter value if
+   its functional code matches a declared parameter.  Frames that match
+   nothing become unidentified entries and are still reported.
+
+6.2.  Queueing
+
+   Events are held in a queue with a fixed bound.  When the queue is
+   full, the oldest entries are discarded; no event is ever dropped
+   silently from the queue's point of view, in the sense that the
+   publication path (Section 6.3) is independent of the queue.
+
+   An entry carries: the entry's name, its kind (event, fault or
+   unidentified frame), the frame identifier, the payload as an
+   uppercase hexadecimal string, the bus name and, when the descriptor
+   supplies one, the entry's description.  An entry that arrived from a
+   peer over the protocol carries an additional marker that it is
+   remote.
+
+6.3.  Publication
+
+   Decoded results are published to sessions subscribed to the relevant
+   topic.
+
+      Topic              Published when
+      +===================+============================================+
+      | Topic             | Published when                             |
+      +===================+============================================+
+      | device.param      | A parameter value arrives.                 |
+      +-------------------+--------------------------------------------+
+      | device.event      | A named event arrives, or a frame matches  |
+      +-------------------+--------------------------------------------+
+      | device.fault      | A fault arrives.                           |
+      +-------------------+--------------------------------------------+
+      | bus.rx            | A frame that produced no entry, or one     |
+      +-------------------+--------------------------------------------+
+      | device.connection | A bus changes connection state.            |
+      +-------------------+--------------------------------------------+
+      | daemon.event      | A daemon lifecycle event occurs.           |
+      +-------------------+--------------------------------------------+
+      | blobtun.data      | Tunnel bytes arrive (Section 6.5).         |
+      +-------------------+--------------------------------------------+
+      | blobtun.close     | A tunnel is destroyed.                     |
+      +-------------------+--------------------------------------------+
+
+   The rule that no frame disappears is normative: even a frame that
+   matches nothing and a frame suppressed as a repetition remain
+   observable on "bus.rx".
+
+6.4.  Remote Events
+
+   When a protocol bus reports a parameter, an event or a fault, the
+   daemon updates its own caches and republishes the report on the
+   corresponding topic, so that a consumer behind the daemon sees the
+   same information as a consumer attached to the original device.  A
+   raw bus frame reported by a peer is re-decoded locally as well, so
+   that a frame the peer did not recognise is still reported against
+   this daemon's own descriptor.
+
+6.5.  Tunnel Traffic
+
+   Bytes received on a tunnel are published on "blobtun.data" with the
+   tunnel name, the octets and their length.  Destruction of a tunnel is
+   published on "blobtun.close" with the tunnel name and the error, if
+   any.  Bytes can also be pushed into an established tunnel from the
+   device side by the daemon's host application.
+
+6.6.  Lifecycle Events
+
+   The daemon publishes, on "daemon.event": start-up, bus connection and
+   disconnection, heartbeat, daemon-side failures, and shutdown.  These
+   events are informational; no component is REQUIRED to react to them.
+
+7.  Parameter Cache and Introspection
+
+   Every parameter has a cached value, initialised from its declared
+   default.  A write updates the cache; a read returns the cache without
+   waiting for the device, and the device's asynchronous answer updates
+   the cache too.  Programs therefore observe parameters as values with
+   eventual consistency, never as blocking reads.
+
+   Sensors report the cached value of their source parameter or the last
+   value published for their source event, falling back to the declared
+   default when nothing has arrived.  Actuator metadata is supplied by
+   the descriptor; the introspection instructions return it verbatim.
+
+8.  Connection Monitoring
+
+8.1.  Protocol Buses
+
+   For a bus reached over the protocol, the daemon probes the peer with
+   a heartbeat request when heartbeats are enabled for that bus; a
+   successful probe refreshes liveness and a failed probe marks the bus
+   disconnected and starts reconnection.  When heartbeats are disabled
+   the daemon still notices a peer that closes the session and
+   reconnects.
+
+8.2.  Local Buses
+
+   A local bus can be monitored by an application-level heartbeat
+   declared in the descriptor: an instruction named "heartbeat" whose
+   description carries an interval is sent periodically, and an event
+   named "heartbeat" whose description carries an interval and a timeout
+   acts as an inbound watchdog.  The description text is parsed for the
+   markers "interval=" and "timeout=", with a unit suffix of "ms" or
+   "s"; a missing unit means seconds, and a missing timeout means three
+   times the interval.  An inbound heartbeat also clears a previously
+   observed disconnection.
+
+8.3.  Reconnection
+
+   Reconnection uses exponential back-off: the first retry after one
+   second, doubling after each failure up to thirty seconds, reset to
+   one second on success.  A bus that reconnects republishes its
+   connection state and resubscribes to the topics it needs.
+
+8.4.  Concurrency
+
+   Each bus is monitored independently.  A session is served
+   independently of every other session.  Monitoring never blocks a
+   request.
+
+9.  Logging
+
+   All log output is written to the error stream.  Every line begins
+   with a timestamp in ISO 8601 form with the local offset, at second
+   resolution.  Log lines are intended for humans and are not a machine
+   interface.
+
+9.1.  Session Lines
+
+      Line kind             Shape
+      +=================+======================+=======================+
+      | Line kind       | Shape                |                       |
+      +=================+======================+=======================+
+      | Hello           | [octod] <src>  HELLO |                       |
+      +-----------------+----------------------+-----------------------+
+      | Authentication  | [octod] <src>  AUTH  | failed>               |
+      +-----------------+----------------------+-----------------------+
+      | Request (before | [octod] <src>  CALL  |                       |
+      +-----------------+----------------------+-----------------------+
+      | execution)      | <name>(<arguments>)  |                       |
+      +-----------------+----------------------+-----------------------+
+      | Response (after | [octod] <src>  DONE  |                       |
+      +-----------------+----------------------+-----------------------+
+      | execution)      | <name>  -> ok[  =    |                       |
+      +-----------------+----------------------+-----------------------+
+      | Goodbye         | [octod] <src>  BYE   |                       |
+      +-----------------+----------------------+-----------------------+
+      | Tunnel          | [octod] <src>        | RECV>  tun=<name>     |
+      +-----------------+----------------------+-----------------------+
+      | Subscription    | [octod] <src>        | UNSUBSCRIBE> <topic>  |
+      +-----------------+----------------------+-----------------------+
+      | Request echo    | [octod] verbose      |                       |
+      +-----------------+----------------------+-----------------------+
+
+   The request line is emitted before the request executes and the
+   response line after it returns, so that the log shows a request, then
+   the bus traffic it caused, then its completion.  This ordering is
+   normative.
+
+9.2.  Frame Lines
+
+   Every frame line names the bus and the transport:
+
+      <timestamp> [octod] [TX] bus=<name> transport=<transport> COMMAND
+          <what> id=0x<id>  (<octets>) -> <status>
+      <timestamp> [octod] [RX] bus=<name> transport=<transport>
+          <category> <body>  (<octets>)
+
+   The direction marker is the first prefix after the daemon tag.  The
+   category is the second prefix and is padded to a fixed width so that
+   the bodies align between the two directions.
+
+      Category  Direction  Meaning
+      +==========+===========+=========================================+
+      | Category | Direction | Meaning                                 |
+      +==========+===========+=========================================+
+      | PARAM    | RX        | A parameter reply; the body is name =   |
+      +----------+-----------+-----------------------------------------+
+      | EVENT    | RX        | A declared event; the body is name      |
+      +----------+-----------+-----------------------------------------+
+      | FAULT    | RX        | A declared fault; the body is name      |
+      +----------+-----------+-----------------------------------------+
+      | UNKNOWN  | RX        | A frame matching no entry; the body is  |
+      +----------+-----------+-----------------------------------------+
+      | DUP      | RX        | A repetition suppressed by the          |
+      +----------+-----------+-----------------------------------------+
+      | INTERNAL | RX        | A frame consumed internally, such as an |
+      +----------+-----------+-----------------------------------------+
+      | COMMAND  | TX        | An outgoing command; the body is        |
+      +----------+-----------+-----------------------------------------+
+
+   Outgoing lines carry a status: success, or failure with a reason;
+   they are emitted even when the bus is not connected.  Lines of the
+   UNKNOWN category are written only in verbose mode; the data path is
+   unaffected by that choice.
+
+9.3.  Banners
+
+   On start-up the daemon announces the listening endpoint, the protocol
+   version, and the list of buses with their transports, marking the
+   case where every bus is the loopback transport.  When the
+   device-reading path starts it announces the buses it will read and
+   whether unidentified frames are being hidden.  When a bus could not
+   be opened a single warning lists the affected buses and states that
+   the daemon continues to run.
+
+9.4.  Colour
+
+   Log lines are coloured unless colour is disabled explicitly, through
+   the environment, or because the stream is not a terminal.  Colour
+   never changes the text, only its rendering; disabling colour produces
+   byte-identical text without escape sequences.
+
+10. Shutdown
+
+   On an interrupt or termination request the daemon, in order:
+
+   1.  publishes the shutdown lifecycle event;
+   2.  signals the device-reading path to stop and waits for it;
+   3.  stops and joins the per-bus monitoring work;
+   4.  closes the transports.
+
+   Closing a transport before the work that reads from it has stopped
+   can crash the process on some platforms, so the order above is
+   normative.
+
+   An active session is closed by its peer or by the transport; the
+   daemon does not need to drain sessions, because no session state
+   outlives the session.
+
+11. Security Considerations
+
+   *  The daemon executes whatever a session asks it to execute, subject
+      only to the descriptor.  A daemon that is reachable off-host
+      SHOULD require authentication [RFC0004].
+   *  Secrets come from the descriptor and MUST NOT appear in the log;
+      the authentication line records the method and the client name
+      only.
+   *  A relayed request is executed with the authority of the relaying
+      daemon.  Deployments that span trust boundaries SHOULD terminate
+      the protocol at the boundary rather than relay through it.
+   *  The daemon is the component that can move machinery; it is the
+      correct place to add interlocks, not the program.
+
+12. IANA Considerations
+
+   This document registers no names with IANA.
+
+13. References
+
+13.1. Normative References
+
+   Each document below is an IETF publication; its tag carries the
+   IETF- prefix so that it cannot be confused with a document of
+   this series.
+
+   [RFC0004]  "Octopus Control Protocol (OCP)", this series.
+
+   [RFC0005]  "The OpenOcto Device Descriptor Format", this series.
+
+   [RFC0008]  "OpenOcto Error Taxonomy and Diagnostics", this series.
+
+   [IETF-RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119, March 1997.
+
+13.2. Informative References
+
+   [RFC0002]  "OpenOcto Ecosystem Architecture", this series.
+
+   [RFC0007]  "OpenOcto Command-Line Tools and Interfaces", this series.
+
+Appendix A.  Conformance Notes
+
+   This appendix is non-normative and records differences between this
+   document and the reference implementation.
+
+   A.1. The dedicated acknowledgement frame identifier (0x136) used by
+   Section 5.3 is a fixed convention of the reference implementation; it
+   is not configurable.
+
+   A.2. In the reference implementation, a request that carries
+   signalling details on a protocol bus or omits them on a local bus is
+   rejected when executed rather than when the descriptor is loaded.
+
+   A.3. Reactions declared in the descriptor are accepted and ignored by
+   the reference implementation (see [RFC0005]).
+
+   A.4. The reference implementation maintains a monitoring thread for
+   every bus, including loopback buses, where it has no observable
+   effect.
+
+Authors' Addresses
+
+   Shining Yang
+   HFUT

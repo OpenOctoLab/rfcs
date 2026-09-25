@@ -1,0 +1,279 @@
+
+
+
+
+OpenOcto Standards Group (OOSG)                                  S. Yang
+Request for Comments: 0001                                          HFUT
+Category: Informational                                   September 2026
+
+
+                    OpenOcto Standards Series (OOS)
+
+                    Index and Document Conventions
+
+Abstract
+
+   This document is the entry point of the OpenOcto Standards (OOS)
+   series.  It lists the documents of the series, defines the form of
+   cross-references between them, states the requirement-level
+   keywords, and describes the layout rules that every OOS document
+   obeys.
+
+   The OOS series specifies, in English and independently of any
+   particular implementation, the externally observable behaviour of
+   the OpenOcto ecosystem: its programming language, its runtime
+   architecture, its control protocol, its device-descriptor file
+   format, its daemon behaviour, and its command-line tools.
+
+Status of This Memo
+
+   This document is not a Standards Track document of the OpenOcto
+   Standards (OOS) series; it is published for informational purposes.
+
+   This document is a product of the OpenOcto Standards Group (OOSG).
+   It represents the consensus of the OOSG community, has received
+   public review and has been approved for publication.  It is not an
+   Internet Standard and is not a candidate for any level of Internet
+   Standard.  Distribution of this document is unlimited.
+
+   Information about the current status of this document, any errata
+   and how to provide feedback on it may be obtained from the OOSG.
+
+Copyright Notice
+
+   Copyright (c) 2026 OOSG and the persons identified as the document
+   authors.  All rights reserved.
+
+   This document is distributed under the MIT License: permission is
+   granted, free of charge, to use, copy, modify, merge, publish,
+   distribute, sublicense and/or sell copies of this document, subject
+   to the inclusion of the above notice in all such copies.  The
+   document is provided without warranty of any kind.  Code Components
+   extracted from this document are subject to the same terms.
+
+Table of Contents
+
+   1.  Introduction
+   2.  Document Series
+   3.  Cross References
+   4.  Requirement Levels
+   5.  Document Conventions
+   6.  Interpretation of Examples
+   7.  Security Considerations
+   8.  IANA Considerations
+   9.  References
+     9.1.  Normative References
+     9.2.  Informative References
+   Authors' Addresses
+
+1.  Introduction
+
+   OpenOcto is an open, language-based control ecosystem for robots and
+   other physical machinery.  It lets a program written in one
+   implementation-independent control language drive heterogeneous
+   devices over a session protocol, without the program needing to know
+   the make, the bus or the register layout of any piece of hardware.
+
+   The ecosystem is composed of the following parts:
+
+   *  OctoScript, a lightweight, dynamically typed, Turing-complete
+      control language with the file extension ".octo" [RFC0003].
+
+   *  The interpreter (the "octo" tool), which parses and executes
+      OctoScript programs.  It speaks OCP, so it can drive a device
+      that implements OCP natively, or reach a device through octod
+      [RFC0003].
+
+   *  OCP, the Octopus Control Protocol, the common session protocol of
+      the ecosystem.  A device MAY implement it natively; the
+      interpreter speaks it directly to such a device, or through octod
+      to a device that does not.  It provides sessions, remote
+      procedure calls, publish/subscribe and a byte-stream tunnel, with
+      optional integrity, compression, encryption and authentication
+      [RFC0004].
+
+   *  The device descriptor format, a file that describes a device's
+      capabilities (the instructions, parameters and events it offers)
+      in a bus-independent way [RFC0005].
+
+   *  The device daemon (the "octod" tool), a general translation layer
+      that bridges OCP and device-native transports.  It is data-driven
+      and bus-agnostic: it connects to one or more transport buses,
+      speaks a session protocol with each peer, and exposes the
+      device's instructions, parameters, events and faults to an OCP
+      peer [RFC0006].
+
+   *  The command-line tools and interfaces that start, configure and
+      inspect the interpreter and the daemon [RFC0007].
+
+   How these parts connect, how a connection to a device is
+   established, and how instructions and events flow are described in
+   [RFC0002].  The OOS series specifies the externally observable
+   behaviour of the whole ecosystem in English and independently of any
+   implementation: it gives the language grammar in ABNF, tabulates
+   every protocol field, error code and descriptor key, and lists every
+   value type, operator, statement and library entry point.  Behaviour,
+   not structure, is specified: an implementation is free to organise
+   its internals in any way as long as the specified observable results
+   are produced, and a future implementation MAY be built on a
+   different platform without changing the standard.
+
+2.  Document Series
+
+   +=====+=================================================+==========+
+   |RFC  |Title                                            |Category  |
+   +=====+=================================================+==========+
+   |0002 |OpenOcto Ecosystem Architecture                  |Standards |
+   +-----+-------------------------------------------------+----------+
+   |0003 |The OctoScript Language                          |Standards |
+   +-----+-------------------------------------------------+----------+
+   |0004 |Octopus Control Protocol (OCP)                   |Standards |
+   +-----+-------------------------------------------------+----------+
+   |0005 |The OpenOcto Device Descriptor Format            |Standards |
+   +-----+-------------------------------------------------+----------+
+   |0006 |OpenOcto Device Daemon Behaviour                 |Standards |
+   +-----+-------------------------------------------------+----------+
+   |0007 |OpenOcto Command-Line Tools and Interfaces       |Standards |
+   +-----+-------------------------------------------------+----------+
+   |0008 |OpenOcto Error Taxonomy and Diagnostics          |Standards |
+   +-----+-------------------------------------------------+----------+
+
+                       Table 1: Document Series
+
+   The series is numbered RFC 0001 to RFC 0008; the number is the
+   position of the document in the reading order.  RFC 0001 is this
+   index; RFC 0002 to RFC 0008 specify the areas of the ecosystem and
+   are listed in Table 2 in reading order.  Each document is a single
+   plain-text file in this directory, laid out like this document and
+   named "OpenOcto-RFC<number>.txt", where <number> is the four-digit
+   zero-padded position in the series (for example, the language
+   document is stored in "OpenOcto-RFC0003.txt").
+
+   A document of the series MUST be self-contained: it MUST NOT require
+   the reader to consult implementation files, project directories or
+   source code.  Cross-references to other documents of the series use
+   the RFC number form "[RFC####]" described in Section 3 and are
+   permitted.
+
+3.  Cross References
+
+   Within the series, the following citation forms are used:
+
+   *  "[RFC####]" - normative statement lives in the language document.
+
+   *  "RFC####, Section #.#" - a statement in a specific section.
+
+   External references use ordinary citation conventions and MUST point
+   to publicly available standards only (for example, CBOR, ChaCha20-
+   Poly1305, HKDF, TOML).
+
+   The form "[IETF-RFC####]" refers to an external IETF RFC.  For
+   example, [IETF-RFC2119] defines the requirement keywords.
+
+4.  Requirement Levels
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+   "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY" and
+   "OPTIONAL" in documents of this series are to be interpreted as
+   described in BCP 14 [IETF-RFC2119] [IETF-RFC8174] when, and only
+   when, they appear in all capitals, as shown here.
+
+5.  Document Conventions
+
+   Every document of the series has the following structure.
+
+   1.  A header block naming the series, the document number, its
+       number in the series, the category and the date.
+
+   2.  "Abstract".
+
+   3.  "Status of This Memo".
+
+   4.  "Copyright Notice".
+
+   5.  "Table of Contents".
+
+   6.  Numbered sections.  Section numbering is per document and starts
+       at 1; subsections are numbered "n.m".
+
+   7.  "Security Considerations".
+
+   8.  "IANA Considerations" (or an explicit statement that the document
+       registers nothing).
+
+   9.  "References", split into normative and informative references.
+
+   10. "Appendix" (optional)
+
+   11. "Authors' Addresses".
+
+   Text is written in English.  A document MUST use only ASCII
+   characters; values, field names, file keys, message names and error
+   codes appear verbatim, in the spelling used by the interchange
+   formats.  All multi-byte integers in wire formats are in network
+   byte order (big-endian) unless stated otherwise.
+
+6.  Interpretation of Examples
+
+   Examples are illustrative and non-normative unless a section
+   declares them normative.  An example written in the language is a
+   valid ".octo" program; a comment of the form "# => value" shows
+   the value the preceding expression evaluates to.  An example of a
+   device descriptor is a valid TOML fragment, and any example given
+   in hexadecimal is an exact octet sequence.
+
+   An example that contains a placeholder (for example, a name in angle
+   brackets or a "####" token) is not a valid program or fragment; the
+   placeholder stands for a value the reader must supply.
+
+7.  Security Considerations
+
+   The ecosystem carries control traffic that can move physical
+   machinery.  Every document of the series that concerns interchange
+   therefore includes a Security Considerations section; the security
+   model of the protocol itself is specified in [RFC0004], and the
+   trust boundaries of a multi-process deployment are specified in
+   [RFC0002].
+
+8.  IANA Considerations
+
+   This document does not request any IANA action.  It defines no
+   protocol parameter, no registry and no media type, and it establishes
+   no new namespace.  The RFC numbers of Table 2 are local identifiers
+   of this series and are not registered with any external authority.
+
+9.  References
+
+9.1.  Normative References
+
+   Each document below is an IETF publication; its tag carries the
+   IETF- prefix so that it cannot be confused with a document of
+   this series.
+
+   [IETF-RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, IETF RFC 2119, March 1997.
+
+   [IETF-RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in
+              RFC 2119 Key Words", BCP 14, IETF RFC 8174, May 2017.
+
+9.2.  Informative References
+
+   [RFC0002]  "OpenOcto Ecosystem Architecture", this series.
+
+   [RFC0003]  "The OctoScript Language", this series.
+
+   [RFC0004]  "Octopus Control Protocol (OCP)", this series.
+
+   [RFC0005]  "The OpenOcto Device Descriptor Format", this series.
+
+   [RFC0006]  "OpenOcto Device Daemon Behaviour", this series.
+
+   [RFC0007]  "OpenOcto Command-Line Tools and Interfaces",
+              this series.
+
+   [RFC0008]  "OpenOcto Error Taxonomy and Diagnostics", this series.
+
+Authors' Addresses
+
+   Shining Yang
+   HFUT
