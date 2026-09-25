@@ -7,21 +7,22 @@ Request for Comments: 0010                                          HFUT
 Category: Standards Track                                 September 2026
 
 
-                OCP over Secure Transport
+                       OCP over Secure Transport
 
 Abstract
 
-   This document specifies how a session of the Octopus Control
-   Protocol [RFC0004] is carried inside a secure transport instead of
-   being protected by the frame-layer primitives of [RFC0009]: OCP over
-   TLS and OCP over QUIC.  It gives the ALPN identifier, the port and
-   the URI scheme, the framing rules of each transport, the mapping of
-   tunnel traffic and of loss-tolerant traffic onto QUIC streams and
-   QUIC datagrams, the authentication of a session by binding it to the
-   transport, and the mapping between transport failures and protocol
-   failures.  It specifies no cryptography and no frame-layer
-   primitive: everything it protects is protected by the transport, and
-   a session that uses it does not use [RFC0009] at the same time.
+   This document specifies how a session of the Octopus Control Protocol
+   [RFC0004] is carried inside a secure transport instead of being
+   protected by the frame-layer primitives of [RFC0009]: OCP over TLS,
+   OCP over DTLS and OCP over QUIC.  It gives the ALPN identifier, the
+   port and the URI scheme, the framing rules of each transport, the
+   mapping of tunnel traffic and of loss-tolerant traffic onto QUIC
+   streams and QUIC datagrams, the authentication of a session by
+   binding it to the transport, and the mapping between transport
+   failures and protocol failures.  It specifies no cryptography and no
+   frame-layer primitive: everything it protects is protected by the
+   transport, and a session that uses it does not use [RFC0009] at the
+   same time.
 
 Status of This Memo
 
@@ -34,8 +35,8 @@ Status of This Memo
    Internet Standard and is not a candidate for any level of Internet
    Standard.  Distribution of this document is unlimited.
 
-   Information about the current status of this document, any errata
-   and how to provide feedback on it may be obtained from the OOSG.
+   Information about the current status of this document, any errata and
+   how to provide feedback on it may be obtained from the OOSG.
 
 Copyright Notice
 
@@ -103,34 +104,34 @@ Table of Contents
    is one of them: instead of adding primitives to the frames, it puts
    the whole session inside a transport that already provides
    confidentiality, integrity and an authenticated peer.  Nothing in
-   [RFC0004] changes.  The frame layer is the core frame layer, with
-   the header of sixteen octets and no trailer, and every message,
-   primitive and rule of that document applies as it does over TCP.
+   [RFC0004] changes.  The frame layer is the core frame layer, with the
+   header of sixteen octets and no trailer, and every message, primitive
+   and rule of that document applies as it does over TCP.
 
    Three bindings are specified: OCP over TLS (Section 5), for a stream
-   transport; OCP over DTLS (Section 6), for a datagram transport that
-   a device already has; and OCP over QUIC (Section 7), for a transport
+   transport; OCP over DTLS (Section 6), for a datagram transport that a
+   device already has; and OCP over QUIC (Section 7), for a transport
    that offers streams and datagrams over one connection.  What applies
-   to all three is in Section 4.  TLS and DTLS are the two halves of
-   the same handshake over different carriers, so most of Section 5
-   applies to both and Section 6 states only what is different.
+   to all three is in Section 4.  TLS and DTLS are the two halves of the
+   same handshake over different carriers, so most of Section 5  applies
+   to both and Section 6 states only what is different.
 
    The benefit of doing it here rather than in the frame layer is that
-   the work is already done, reviewed and implemented: a deployment
-   gets peer authentication, forward secrecy, key update, replay
-   protection and congestion control without specifying any of them,
-   and a device that has a TLS library needs no new code.  The cost is
-   that what is protected is the transport and not the frame: a peer
-   that holds the transport keys sees everything, a relay that
-   terminates the transport sees everything, and no frame carries a
-   proof of its own that outlives the session.
+   the work is already done, reviewed and implemented: a deployment gets
+   peer authentication, forward secrecy, key update, replay protection
+   and congestion control without specifying any of them, and a device
+   that has a TLS library needs no new code.  The cost is that what is
+   protected is the transport and not the frame: a peer that holds the
+   transport keys sees everything, a relay that terminates the transport
+   sees everything, and no frame carries a proof of its own that
+   outlives the session.
 
 1.1.  Two Ways to Protect a Session
 
    [RFC0009] adds integrity, encryption and zero-trust verification to
    the frames themselves.  This document wraps the session in a secure
-   transport.  The two solve the same problem at different layers, and
-   a session uses one of them.
+   transport.  The two solve the same problem at different layers, and a
+   session uses one of them.
 
    *  An endpoint that runs OCP over a secure transport MUST NOT offer
       the header form, or any algorithm, of [RFC0009]: it MUST NOT send
@@ -145,10 +146,10 @@ Table of Contents
    inner tag would authenticate octets the outer one already
    authenticates, and an operator reading the negotiation would not be
    able to tell which layer is actually protecting the session.  Which
-   of the two a deployment wants is a matter of what it can change:
-   this document when it can change how the connection is made,
-   [RFC0009] when it cannot, or when frames must be verifiable on
-   their own or survive being stored and replayed to a third party.
+   of the two a deployment wants is a matter of what it can change: this
+   document when it can change how the connection is made, [RFC0009]
+   when it cannot, or when frames must be verifiable on their own or
+   survive being stored and replayed to a third party.
 
 2.  Conventions
 
@@ -157,14 +158,14 @@ Table of Contents
    meaning here.  "Secure transport" means TLS as specified in Section
    5, DTLS as specified in Section 6, or QUIC as specified in Section
    7.  The first two are together called "the TLS family" where the
-   distinction does not matter.  "Initiator" and "responder"
-   are the roles of [RFC0004], Section 6, and "client" and "server" are
-   the roles of the transport: the initiator is the client.
+   distinction does not matter.  "Initiator" and "responder" are the
+   roles of [RFC0004], Section 6, and "client" and "server" are the
+   roles of the transport: the initiator is the client.
 
 3.  The Model
 
-   One transport connection carries exactly one OCP session, and one
-   OCP session occupies exactly one transport connection.
+   One transport connection carries exactly one OCP session, and one OCP
+   session occupies exactly one transport connection.
 
    *  The client is the initiator: it sends HELLO.  The server is the
       responder: it sends WELCOME.
@@ -177,20 +178,20 @@ Table of Contents
    *  A lost transport connection ends the session.  There is no
       resumption of a session across connections: the next connection
       opens a new session with a new HELLO, as [RFC0004], Section 6.3,
-      requires of a reconnect.  Byte streams resume by the tunnel
-      offset of [RFC0004], Section 6.6.4, which is an application
-      matter and survives either way.
+      requires of a reconnect.  Byte streams resume by the tunnel offset
+      of [RFC0004], Section 6.6.4, which is an application matter and
+      survives either way.
 
-   *  The frame layer is the core frame layer of [RFC0004], Section
-      3.1: sixteen octets, "header_len" equal to 0x0010, no trailer.  A
-      receiver MUST reject with E_UNSUPPORTED a frame whose
-      "header_len" is anything else.
+   *  The frame layer is the core frame layer of [RFC0004], Section 3.1:
+      sixteen octets, "header_len" equal to 0x0010, no trailer.  A
+      receiver MUST reject with E_UNSUPPORTED a frame whose "header_len"
+      is anything else.
 
    What the transport provides, and what it does not:
 
-   *  It provides confidentiality and integrity of everything inside
-      it, including the frame header, so "type", "seq" and
-      "payload_len" are not visible outside the transport.
+   *  It provides confidentiality and integrity of everything inside it,
+      including the frame header, so "type", "seq" and "payload_len" are
+      not visible outside the transport.
 
    *  It provides an authenticated peer.  The server is always
       authenticated; the client is authenticated only when it presents
@@ -213,12 +214,12 @@ Table of Contents
       [IETF-RFC6347] MAY be used under the same conditions, which apply
       to DTLS as they do to TLS.  Every version before 1.2 MUST NOT be
       used.  DTLS is OPTIONAL: a deployment that needs a datagram
-      transport and has QUIC uses QUIC (Section 7) instead, and one
-      that has a DTLS stack and no QUIC uses DTLS.
+      transport and has QUIC uses QUIC (Section 7) instead, and one that
+      has a DTLS stack and no QUIC uses DTLS.
 
    *  QUIC: QUIC version 1 [IETF-RFC9000] with the TLS 1.3 mapping of
-      [IETF-RFC9001].  The unreliable datagram extension
-      [IETF-RFC9221] is OPTIONAL and is required only by Section 7.4.
+      [IETF-RFC9001].  The unreliable datagram extension [IETF-RFC9221]
+      is OPTIONAL and is required only by Section 7.4.
 
    An endpoint that cannot meet the lowest version permitted here MUST
    refuse the connection rather than negotiate less.
@@ -235,25 +236,23 @@ Table of Contents
    not speak OCP over this transport, and the initiator MUST close the
    connection instead of sending HELLO.
 
-   The identifier names the protocol and its major version.  A change
-   to [RFC0004] that is not compatible increments the version octet of
+   The identifier names the protocol and its major version.  A change to
+   [RFC0004] that is not compatible increments the version octet of
    [RFC0004] and the second element here together.
 
 4.3.  Ports and URI Scheme
 
-   +===========+============+=========================================+
-   |Transport  |Port        |Meaning                                  |
-   +===========+============+=========================================+
-   |TCP        |6286        |OCP in cleartext [RFC0004], Section 7.4. |
-   +-----------+------------+-----------------------------------------+
-   |TLS over   |16286       |OCP over TLS (Section 5).                |
-   |TCP        |            |                                         |
-   +-----------+------------+-----------------------------------------+
-   |QUIC       |16286 (UDP) |OCP over QUIC (Section 7).               |
-   +-----------+------------+-----------------------------------------+
-   |DTLS over  |16286 (UDP) |OCP over DTLS (Section 6).               |
-   |UDP        |            |                                         |
-   +-----------+------------+-----------------------------------------+
+   +=============+============+========================================+
+   |Transport    |Port        |Meaning                                 |
+   +=============+============+========================================+
+   |TCP          |6286        |OCP in cleartext [RFC0004], Section 7.4.|
+   +-------------+------------+----------------------------------------+
+   |TLS over TCP |16286       |OCP over TLS (Section 5).               |
+   +-------------+------------+----------------------------------------+
+   |QUIC         |16286 (UDP) |OCP over QUIC (Section 7).              |
+   +-------------+------------+----------------------------------------+
+   |DTLS over UDP|16286 (UDP) |OCP over DTLS (Section 6).              |
+   +-------------+------------+----------------------------------------+
 
                           Table 1: Ports
 
@@ -262,10 +261,10 @@ Table of Contents
    [RFC0004]: on a telephone keypad the first key carries no letters,
    and the remaining four spell O, C, T and O.  The leading 1 is what
    lets the secure port be the same word as the cleartext one, 6286,
-   without being the same number.  The value is a convenience and not
-   an assignment; a deployment MAY use any port, and an endpoint learns
-   the port of its peer from configuration or from service discovery,
-   never from the protocol.
+   without being the same number.  The value is a convenience and not an
+   assignment; a deployment MAY use any port, and an endpoint learns the
+   port of its peer from configuration or from service discovery, never
+   from the protocol.
 
    One number serves three bindings, and none of the three is in
    conflict with another.
@@ -278,10 +277,10 @@ Table of Contents
       told apart by the first octet of the packet, which is what the
       transports themselves already place there:
 
-      -  A QUIC packet of version 1 always has the second-most-
-         significant bit of its first octet set, so the octet is in
-         0x40 to 0x7F for a short header and in 0xC0 to 0xFF for a long
-         one.
+      -  A QUIC packet of version 1 always has the
+         second-most-significant bit of its first octet set, so the
+         octet is in 0x40 to 0x7F for a short header and in 0xC0 to 0xFF
+         for a long one.
 
       -  A DTLS record begins with a content type, whose values are
          below 0x40, so the octet is in 0x14 to 0x19.
@@ -300,9 +299,9 @@ Table of Contents
 
    The scheme of a cleartext session, "ocp", belongs to [RFC0004],
    Section 7.4, and is not repeated here.  A tool that is given "ocps"
-   MUST use a secure transport and MUST NOT fall back to cleartext
-   when the handshake fails, whether by opening a cleartext connection
-   or by rewriting the scheme to "ocp".
+   MUST use a secure transport and MUST NOT fall back to cleartext when
+   the handshake fails, whether by opening a cleartext connection or by
+   rewriting the scheme to "ocp".
 
 4.4.  Peer Identity
 
@@ -325,24 +324,24 @@ Table of Contents
       public certificate authority and without a name in DNS.
 
    *  A server that needs to know who called it requires a client
-      certificate or the binding of Section 4.5.  Without one of the
-      two it knows only that somebody connected, and an application
-      MUST NOT take the "client" member of HELLO as an identity: that
-      member is free-form text for logging.
+      certificate or the binding of Section 4.5.  Without one of the two
+      it knows only that somebody connected, and an application MUST NOT
+      take the "client" member of HELLO as an identity: that member is
+      free-form text for logging.
 
    *  F_AUTH is set on the session when the server's identity has been
-      verified, which in this document is always.  An endpoint that
-      also needs the initiator's identity verified uses one of Section
-      4.5 and MUST NOT treat F_AUTH as saying more than it does.
+      verified, which in this document is always.  An endpoint that also
+      needs the initiator's identity verified uses one of Section 4.5
+      and MUST NOT treat F_AUTH as saying more than it does.
 
 4.5.  Authentication and Channel Binding
 
    The secure transport already proves who the peers are, so the "auth"
    member of [RFC0004], Section 6.2, is OPTIONAL.  It has one job here
    that the transport does not do by itself: proving that the OCP
-   session and the transport belong to the same peer, which an
-   endpoint needs when the transport is terminated in front of it, as
-   by a relay (Section 5.6), or when it wants a proof it can log.
+   session and the transport belong to the same peer, which an endpoint
+   needs when the transport is terminated in front of it, as by a relay
+   (Section 5.6), or when it wants a proof it can log.
 
    The RECOMMENDED method for that is "tls-exporter".
 
@@ -355,18 +354,17 @@ Table of Contents
    The exporter is the keying material exporter of the TLS session
    [IETF-RFC5705], as defined for TLS 1.3 by [IETF-RFC8446], taken with
    the label "EXPORTER-OCP-channel-binding", an empty context and a
-   length of 32 octets.  The same label and context are used over
-   DTLS and over QUIC, where the exporter of the TLS session that QUIC
+   length of 32 octets.  The same label and context are used over DTLS
+   and over QUIC, where the exporter of the TLS session that QUIC
    carries [IETF-RFC9001] is taken.  The nonce of the initiator is at
    least sixteen octets of unpredictable data; the nonce of the
    responder is generated the same way.
 
    The value of the exercise is that the exporter is known only to the
-   two ends of the TLS session.  A peer that is not the endpoint of
-   that session cannot compute the MAC, so a relay that terminates TLS
-   and opens a new one cannot forward a credential it did not have,
-   and a credential cannot be moved from one transport session to
-   another.
+   two ends of the TLS session.  A peer that is not the endpoint of that
+   session cannot compute the MAC, so a relay that terminates TLS and
+   opens a new one cannot forward a credential it did not have, and a
+   credential cannot be moved from one transport session to another.
 
    A method that reveals a long-lived secret in the credential, as a
    shared token does, is unnecessary here and SHOULD NOT be used: the
@@ -395,8 +393,8 @@ Table of Contents
       caller is not delayed behind a bulk transfer; it SHOULD coalesce
       when it is sending tunnel data.
 
-   *  Nothing here changes the limit of [RFC0004], Section 3.3.  A
-      frame larger than the negotiated "max_payload" is still
+   *  Nothing here changes the limit of [RFC0004], Section 3.3.  A frame
+      larger than the negotiated "max_payload" is still
       E_PAYLOAD_TOO_LARGE.
 
 4.7.  Compression
@@ -423,8 +421,8 @@ Table of Contents
        Section 4.5, when the deployment requires one.
 
    3.  The client writes HELLO as its first application octets.  The
-       server, whose first frame was not HELLO, answers
-       E_HELLO_EXPECTED as [RFC0004] requires.
+       server, whose first frame was not HELLO, answers E_HELLO_EXPECTED
+       as [RFC0004] requires.
 
    4.  The server writes WELCOME, and the session proceeds as in
        [RFC0004], Section 6.
@@ -439,11 +437,11 @@ Table of Contents
    Two points are particular to it.
 
    *  The size of a TLS record is not the size of a frame.  A sender
-      SHOULD let a large frame, mostly tunnel data, span several
-      records rather than buffer it, and SHOULD let a group of small
-      frames share one record rather than write each separately.  A
-      deployment that wants to hide the boundaries between frames
-      SHOULD do the latter.
+      SHOULD let a large frame, mostly tunnel data, span several records
+      rather than buffer it, and SHOULD let a group of small frames
+      share one record rather than write each separately.  A deployment
+      that wants to hide the boundaries between frames SHOULD do the
+      latter.
 
    *  A sender MUST NOT rely on a receiver seeing the same record
       boundaries, and a receiver MUST NOT infer a frame boundary from
@@ -452,8 +450,8 @@ Table of Contents
 5.3.  Version Fallback
 
    TLS 1.3 is what a deployment should use, and TLS 1.2 is permitted
-   because a device that cannot be updated should not be unreachable:
-   a robot that speaks only 1.2 is still a robot that has to be
+   because a device that cannot be updated should not be unreachable: a
+   robot that speaks only 1.2 is still a robot that has to be
    controlled, and the alternative to accepting it is usually to turn
    the protection off.  Falling back is therefore allowed, and is
    allowed only under all of the following.
@@ -463,12 +461,11 @@ Table of Contents
        deployment that configures 1.2 directly is not falling back and
        is not what this section permits.
 
-   2.  The cipher suite MUST be an AEAD suite.  CBC, stream ciphers,
-       and every suite without an authenticated cipher MUST NOT be
-       used.
+   2.  The cipher suite MUST be an AEAD suite.  CBC, stream ciphers, and
+       every suite without an authenticated cipher MUST NOT be used.
 
-   3.  Renegotiation MUST NOT be used, and the extended master secret
-       of [IETF-RFC7627] MUST be negotiated.  Section 5.4 states why.
+   3.  Renegotiation MUST NOT be used, and the extended master secret of
+       [IETF-RFC7627] MUST be negotiated.  Section 5.4 states why.
 
    4.  TLS compression MUST NOT be used, which Section 4.7 already
        requires of every version.
@@ -491,11 +488,11 @@ Table of Contents
       frame marks it, no key of [RFC0004] or of [RFC0009] is involved,
       and a session needs no action.
 
-   *  TLS renegotiation MUST NOT be used.  It does not exist in TLS
-      1.3, and an implementation that offers it over a version that has
-      it MUST refuse it.  What a renegotiation was used for, rotation
-      of the key or a second authentication, is done here by a key
-      update or by opening a new session.
+   *  TLS renegotiation MUST NOT be used.  It does not exist in TLS 1.3,
+      and an implementation that offers it over a version that has it
+      MUST refuse it.  What a renegotiation was used for, rotation of
+      the key or a second authentication, is done here by a key update
+      or by opening a new session.
 
    *  A long-lived session that wants a new key rotates the transport
       key: the client or the server sends a key update, which TLS 1.2
@@ -505,8 +502,8 @@ Table of Contents
 5.5.  Closure
 
    *  A graceful close sends BYE and then close_notify.  The peer
-      answers nothing: [RFC0004] asks for no acknowledgement of BYE,
-      and the transport close confirms it.
+      answers nothing: [RFC0004] asks for no acknowledgement of BYE, and
+      the transport close confirms it.
 
    *  A close_notify with no BYE ends the session just the same.  An
       endpoint SHOULD send BYE first when it can, so that the peer can
@@ -517,8 +514,8 @@ Table of Contents
       asks again on the next session.
 
    *  A session MUST NOT be used after the transport is closed.  An
-      implementation that keeps OCP state longer than the transport
-      MUST discard it.
+      implementation that keeps OCP state longer than the transport MUST
+      discard it.
 
 5.6.  Relays
 
@@ -540,13 +537,12 @@ Table of Contents
 
 6.  OCP over DTLS
 
-   DTLS is the datagram half of TLS [IETF-RFC9147], [IETF-RFC6347].
-   It is OPTIONAL, and it is here for a device that has a DTLS stack
-   and no QUIC: it gives the same handshake, the same certificates and
-   the same exporter, and it costs less code than adding QUIC.  A
-   deployment that has QUIC and no constraint prefers QUIC (Section 7),
-   which adds streams, tunnels on their own streams and a better
-   recovery from loss.
+   DTLS is the datagram half of TLS [IETF-RFC9147], [IETF-RFC6347].  It
+   is OPTIONAL, and it is here for a device that has a DTLS stack and no
+   QUIC: it gives the same handshake, the same certificates and the same
+   exporter, and it costs less code than adding QUIC.  A deployment that
+   has QUIC and no constraint prefers QUIC (Section 7), which adds
+   streams, tunnels on their own streams and a better recovery from loss.
 
    Everything in Section 5 applies, with the differences below and with
    the rules of [RFC0004], Section 7.2, for the frames it carries.
@@ -556,22 +552,21 @@ Table of Contents
    The client completes the DTLS handshake, offering "ocp/1" through
    ALPN, and validates the server certificate as in Section 4.4.  The
    version is chosen as in Section 4.1, and the fallback rules of
-   Section 5.3 apply to DTLS 1.2 as they do to TLS 1.2.  The client
-   then writes HELLO as its first application datagram and the server
-   answers WELCOME.  The socket is the port of Section 4.3, which DTLS
-   shares with QUIC: the first octet of a packet says which transport
-   it belongs to, and a server that serves both dispatches on it.
+   Section 5.3 apply to DTLS 1.2 as they do to TLS 1.2.  The client then
+   writes HELLO as its first application datagram and the server answers
+   WELCOME.  The socket is the port of Section 4.3, which DTLS shares
+   with QUIC: the first octet of a packet says which transport it
+   belongs to, and a server that serves both dispatches on it.
 
    *  The cookie exchange of DTLS MUST be used.  It is what keeps a
-      server from being made to answer for an address it has never
-      seen, which for a device on a local network is the only
-      amplification defence there is (Section 9).  A server that
-      receives a ClientHello with no cookie answers
-      HelloVerifyRequest.
+      server from being made to answer for an address it has never seen,
+      which for a device on a local network is the only amplification
+      defence there is (Section 9).  A server that receives a
+      ClientHello with no cookie answers HelloVerifyRequest.
 
-   *  The handshake is retransmitted by DTLS itself.  The application
-      is not involved and MUST NOT retry HELLO for that reason; it
-      retries only under the rules of [RFC0004], Section 7.2.
+   *  The handshake is retransmitted by DTLS itself.  The application is
+      not involved and MUST NOT retry HELLO for that reason; it retries
+      only under the rules of [RFC0004], Section 7.2.
 
    *  HELLO and WELCOME are application data and follow the handshake.
       A session is established only when the handshake is complete, and
@@ -591,20 +586,20 @@ Table of Contents
       and SHOULD discover that MTU rather than assume one.
 
    *  Bulk data does not belong on DTLS.  A tunnel MAY run over it, one
-      window at a time, but a deployment that moves firmware uses TLS
-      or QUIC instead, where a stream carries it.
+      window at a time, but a deployment that moves firmware uses TLS or
+      QUIC instead, where a stream carries it.
 
    *  F_ACK, the retransmission of a frame with the same sequence
-      number, and the deduplication of a frame that arrives twice are
-      as [RFC0004], Section 7.2, requires.
+      number, and the deduplication of a frame that arrives twice are as
+      [RFC0004], Section 7.2, requires.
 
 6.3.  Replay, Loss and Retransmission
 
    *  DTLS applies its own replay protection to the records it carries,
       within a sliding window.  That protects the transport and not the
-      application: a receiver SHOULD still reject a frame whose "seq"
-      it has already accepted, unless the octets are identical to the
-      frame it accepted under that number.
+      application: a receiver SHOULD still reject a frame whose "seq" it
+      has already accepted, unless the octets are identical to the frame
+      it accepted under that number.
 
    *  DTLS does not retransmit application data.  A frame that must
       arrive is acknowledged and repeated by OCP: the sender sets F_ACK
@@ -623,8 +618,8 @@ Table of Contents
    *  DTLS has no reset, so a session can also end by silence: an
       endpoint MAY abandon a datagram session that has been quiet, as
       [RFC0004], Section 7.2, permits.  The RECOMMENDED silence before
-      abandoning one is three times the heartbeat interval of
-      [RFC0004], Section 6.7.
+      abandoning one is three times the heartbeat interval of [RFC0004],
+      Section 6.7.
 
    *  A session MUST NOT be used after the transport is closed, as in
       Section 5.5.
@@ -645,8 +640,8 @@ Table of Contents
    One bidirectional stream carries the session.  It is the first
    client-initiated bidirectional stream of the connection, and every
    frame that has no other home travels on it: HELLO, WELCOME, CALL,
-   RESULT, EVENT, SUBSCRIBE, UNSUBSCRIBE, BYE, ERROR, ACK and the
-   state frames of a tunnel that has no stream of its own.
+   RESULT, EVENT, SUBSCRIBE, UNSUBSCRIBE, BYE, ERROR, ACK and the state
+   frames of a tunnel that has no stream of its own.
 
    *  There is exactly one OCP session per QUIC connection and exactly
       one control stream per session.
@@ -657,36 +652,36 @@ Table of Contents
       (Appendix A.1).
 
    *  The control stream is not closed while the session lives.  An
-      endpoint that closes it ends the session; the correct way to end
-      a session is Section 7.10.
+      endpoint that closes it ends the session; the correct way to end a
+      session is Section 7.10.
 
-   *  Frames on the control stream are framed as in Section 4.6: back
-      to back, delimited by length, with no relation to the boundaries
-      of QUIC STREAM frames.
+   *  Frames on the control stream are framed as in Section 4.6: back to
+      back, delimited by length, with no relation to the boundaries of
+      QUIC STREAM frames.
 
 7.3.  Tunnels on Their Own Streams
 
    A tunnel MAY be given a stream of its own, which is what a tunnel
    wants: QUIC then does the flow control, the loss recovery and the
    ordering, and a stalled firmware transfer cannot delay a call.  The
-   mapping is OPTIONAL and both endpoints MUST agree to it; when they
-   do not, tunnel frames travel on the control stream as they do over
-   TLS.  Section 7.6 makes the mapping REQUIRED for a session that
-   hands tunnel flow control to QUIC.
+   mapping is OPTIONAL and both endpoints MUST agree to it; when they do
+   not, tunnel frames travel on the control stream as they do over TLS.
+   Section 7.6 makes the mapping REQUIRED for a session that hands
+   tunnel flow control to QUIC.
 
    1.  The opener sends TUNSTAT with "open" on the control stream and
        the peer answers, exactly as in [RFC0004], Section 6.6.2.
 
-   2.  The opener opens one bidirectional stream.  The first frame on
-       it MUST be TUNDATA or TUNSTAT of the tunnel the stream belongs
-       to, and it is that frame's "tun" member that tells the peer
-       which tunnel the stream carries.
+   2.  The opener opens one bidirectional stream.  The first frame on it
+       MUST be TUNDATA or TUNSTAT of the tunnel the stream belongs to,
+       and it is that frame's "tun" member that tells the peer which
+       tunnel the stream carries.
 
    3.  Every frame on the stream thereafter MUST name the same tunnel.
        A frame that names another is rejected with E_UNSUPPORTED.
 
-   4.  The end of a stream is the end of that direction of the tunnel:
-       a sender that has no more to send sets "eof" and finishes the
+   4.  The end of a stream is the end of that direction of the tunnel: a
+       sender that has no more to send sets "eof" and finishes the
        stream.  A receiver that has read it to the end has observed the
        end of that direction.
 
@@ -707,9 +702,8 @@ Table of Contents
    [IETF-RFC9221], a datagram MAY carry one OCP frame for traffic that
    tolerates loss.
 
-   *  One datagram carries exactly one frame, and the frame is
-      complete: the length is in the header, so no reassembly is
-      needed.
+   *  One datagram carries exactly one frame, and the frame is complete:
+      the length is in the header, so no reassembly is needed.
 
    *  The rules of [RFC0004], Section 7.2, apply: F_ACK requests an
       acknowledgement, a frame SHOULD NOT exceed 1200 octets including
@@ -718,9 +712,9 @@ Table of Contents
    *  HELLO and WELCOME MUST NOT be carried by a datagram: the session
       is established on the control stream.
 
-   *  A datagram is not retransmitted by QUIC.  A frame that must
-      arrive uses a stream; a frame that may be lost, such as a
-      telemetry event, uses a datagram.
+   *  A datagram is not retransmitted by QUIC.  A frame that must arrive
+      uses a stream; a frame that may be lost, such as a telemetry
+      event, uses a datagram.
 
    *  An endpoint that has not negotiated the extension, or that
       receives a datagram before the handshake is complete, ignores the
@@ -728,17 +722,17 @@ Table of Contents
 
 7.5.  Flow Control
 
-   QUIC flow control applies per stream and per connection, and OCP
-   flow control applies per tunnel.  By default both apply.
+   QUIC flow control applies per stream and per connection, and OCP flow
+   control applies per tunnel.  By default both apply.
 
    *  A sender MUST respect both: it MUST NOT transmit beyond the QUIC
-      credit of the stream, and MUST NOT transmit beyond "ack +
-      window" of the tunnel.
+      credit of the stream, and MUST NOT transmit beyond "ack + window"
+      of the tunnel.
 
-   *  When a tunnel has a stream of its own, an endpoint MAY advertise
-      a tunnel window large enough never to bind, and rely on QUIC.
-      It MUST still send "ack", so that the peer can release the data
-      it has sent.
+   *  When a tunnel has a stream of its own, an endpoint MAY advertise a
+      tunnel window large enough never to bind, and rely on QUIC.  It
+      MUST still send "ack", so that the peer can release the data it
+      has sent.
 
    *  A receiver that stops reading a stream stops the sender, which is
       the same effect as a window of zero and is not an error.
@@ -748,13 +742,12 @@ Table of Contents
 
 7.6.  Taking Over Tunnel Flow Control
 
-   Two flow controllers over one tunnel is one more than a tunnel
-   needs: the sender stops at whichever binds first, and tuning one
-   without the other does nothing.  A session MAY therefore agree that
-   QUIC flow control replaces the built-in window of [RFC0004],
-   Section 6.6, for every tunnel of that session.  The mode is
-   negotiated, once, in the same exchange as every other session
-   property.
+   Two flow controllers over one tunnel is one more than a tunnel needs:
+   the sender stops at whichever binds first, and tuning one without the
+   other does nothing.  A session MAY therefore agree that QUIC flow
+   control replaces the built-in window of [RFC0004], Section 6.6, for
+   every tunnel of that session.  The mode is negotiated, once, in the
+   same exchange as every other session property.
 
    The initiator offers it in the "quic" member of HELLO, as a list of
    the modes it implements, most preferred first; the responder states
@@ -785,37 +778,36 @@ Table of Contents
 
    1.  Every tunnel of the session MUST be given a stream of its own
        (Section 7.3).  A peer that cannot MUST NOT confirm the mode.
-       This is what makes the substitution work: QUIC controls a
-       stream, and a tunnel that shares the control stream with
-       everything else has no stream of its own to be controlled.
+       This is what makes the substitution work: QUIC controls a stream,
+       and a tunnel that shares the control stream with everything else
+       has no stream of its own to be controlled.
 
-   2.  The built-in window no longer limits transmission.  A sender
-       MUST NOT stop transmitting because of "window", and a receiver
-       MUST NOT rely on "window" to make it stop.  Both MUST still
-       carry the member, because the message of [RFC0004] is unchanged,
-       and the RECOMMENDED value to carry is the largest one.
+   2.  The built-in window no longer limits transmission.  A sender MUST
+       NOT stop transmitting because of "window", and a receiver MUST
+       NOT rely on "window" to make it stop.  Both MUST still carry the
+       member, because the message of [RFC0004] is unchanged, and the
+       RECOMMENDED value to carry is the largest one.
 
    3.  "ack" is still sent and still marks what has been received, so
-       that a transfer can resume after a restart (Section 3).  It is
-       no longer what paces the sender.
+       that a transfer can resume after a restart (Section 3).  It is no
+       longer what paces the sender.
 
    4.  Back-pressure comes from QUIC: from the credit of the tunnel's
        stream, from the credit of the connection, and from the receiver
        simply not reading, which Section 7.5 already describes.
 
-   5.  A tunnel is reset, closed and destroyed exactly as in Section
-       7.3 and in [RFC0004], Section 6.6.  Resetting the stream resets
-       the tunnel and is reported as E_TUNNEL_RESET.
+   5.  A tunnel is reset, closed and destroyed exactly as in Section 7.3
+       and in [RFC0004], Section 6.6.  Resetting the stream resets the
+       tunnel and is reported as E_TUNNEL_RESET.
 
    A sender that respects only one of the two controllers is broken in
-   one direction or the other, so the mode is a property of the
-   session and not of a tunnel: an endpoint MUST NOT apply it to some
-   tunnels and not to others, and MUST NOT change it while the session
-   lives.
+   one direction or the other, so the mode is a property of the session
+   and not of a tunnel: an endpoint MUST NOT apply it to some tunnels
+   and not to others, and MUST NOT change it while the session lives.
 
-   Over TLS and over DTLS the "quic" member is meaningless and MUST
-   NOT be sent: there is one stream, or none, and nothing per tunnel to
-   hand the work to.
+   Over TLS and over DTLS the "quic" member is meaningless and MUST NOT
+   be sent: there is one stream, or none, and nothing per tunnel to hand
+   the work to.
 
 7.7.  Early Data
 
@@ -841,8 +833,8 @@ Table of Contents
    noticing, which is a property OCP inherits.
 
    *  A migration does not end the session and does not change the
-      identity of the peer, which is bound to the certificate and not
-      to the address.
+      identity of the peer, which is bound to the certificate and not to
+      the address.
 
    *  An endpoint that authorises by address MUST re-check after a
       migration, because the address it authorised is gone.
@@ -850,16 +842,16 @@ Table of Contents
    *  A server MAY disable migration for clients it does not expect to
       move, which is the common case for a device on a fixed network.
 
-   *  A server that requires the initiator to authenticate again after
-      a migration sends a new WELCOME only by establishing a new
-      session, since a session has one WELCOME.  It SHOULD instead
-      close the connection.
+   *  A server that requires the initiator to authenticate again after a
+      migration sends a new WELCOME only by establishing a new session,
+      since a session has one WELCOME.  It SHOULD instead close the
+      connection.
 
 7.9.  Idle Timeout and Heartbeat
 
    The QUIC idle timeout MUST be longer than the interval of the OCP
-   heartbeat of [RFC0004], Section 6.7, or a quiet session is closed
-   by a transport that thinks it is idle.
+   heartbeat of [RFC0004], Section 6.7, or a quiet session is closed by
+   a transport that thinks it is idle.
 
    *  The RECOMMENDED heartbeat interval is five seconds and the
       RECOMMENDED idle timeout thirty seconds; a deployment that wants
@@ -888,44 +880,44 @@ Table of Contents
 
 8.  Error Mapping
 
-   A failure of the transport is not an OCP error and is not reported
-   as one: there may be no session left to report it on.
+   A failure of the transport is not an OCP error and is not reported as
+   one: there may be no session left to report it on.
 
-   +===================+==============================================+
-   |Event              |Meaning to the session                        |
-   +===================+==============================================+
-   |TLS alert, DTLS    |The session ends.  No ERROR frame is sent.    |
-   |alert, or QUIC     |Outstanding calls are unanswered.             |
-   |transport error    |                                              |
-   +-------------------+----------------------------------------------+
-   |close_notify, or   |The session ends, gracefully.  A BYE that was |
-   |CONNECTION_CLOSE   |sent first carries the reason.                |
-   +-------------------+----------------------------------------------+
-   |QUIC stream reset  |The tunnel on that stream is reset: report    |
-   |on a tunnel stream |E_TUNNEL_RESET and destroy the tunnel.        |
-   +-------------------+----------------------------------------------+
-   |A datagram that is |Nothing.  DTLS and QUIC datagrams are not     |
-   |lost or arrives    |acknowledged by the transport; whether the   |
-   |twice              |frame is repeated is the decision of          |
-   |                   |[RFC0004], Section 7.2.                       |
-   +-------------------+----------------------------------------------+
-   |A DTLS session     |Nothing.  The endpoint opens a new session    |
-   |abandoned after    |when it needs one (Section 6.4).              |
-   |silence            |                                              |
-   +-------------------+----------------------------------------------+
-   |A frame the peer   |A protocol error: ERROR with the code of      |
-   |rejects            |[RFC0004], Appendix A.  The session continues |
-   |                   |unless the code says otherwise.               |
-   +-------------------+----------------------------------------------+
-   |A frame that cannot|E_BAD_PAYLOAD or E_BAD_MAGIC, as in           |
-   |be parsed          |[RFC0004].                                    |
-   +-------------------+----------------------------------------------+
+   +===================+===============================================+
+   |Event              |Meaning to the session                         |
+   +===================+===============================================+
+   |TLS alert, DTLS    |The session ends.  No ERROR frame is sent.     |
+   |alert, or QUIC     |Outstanding calls are unanswered.              |
+   |transport error    |                                               |
+   +-------------------+-----------------------------------------------+
+   |close_notify, or   |The session ends, gracefully.  A BYE that was  |
+   |CONNECTION_CLOSE   |sent first carries the reason.                 |
+   +-------------------+-----------------------------------------------+
+   |QUIC stream reset  |The tunnel on that stream is reset: report     |
+   |on a tunnel stream |E_TUNNEL_RESET and destroy the tunnel.         |
+   +-------------------+-----------------------------------------------+
+   |A datagram that is |Nothing.  DTLS and QUIC datagrams are not      |
+   |lost or arrives    |acknowledged by the transport; whether the     |
+   |twice              |frame is repeated is the decision of [RFC0004],|
+   |                   |Section 7.2.                                   |
+   +-------------------+-----------------------------------------------+
+   |A DTLS session     |Nothing.  The endpoint opens a new session when|
+   |abandoned after    |it needs one (Section 6.4).                    |
+   |silence            |                                               |
+   +-------------------+-----------------------------------------------+
+   |A frame the peer   |A protocol error: ERROR with the code of       |
+   |rejects            |[RFC0004], Appendix A.  The session continues  |
+   |                   |unless the code says otherwise.                |
+   +-------------------+-----------------------------------------------+
+   |A frame that cannot|E_BAD_PAYLOAD or E_BAD_MAGIC, as in [RFC0004]. |
+   |be parsed          |                                               |
+   +-------------------+-----------------------------------------------+
 
                         Table 3: Error Mapping
 
    An implementation SHOULD log the transport error alongside the
-   session identifier, so that a session that ended without a reason
-   can still be explained.
+   session identifier, so that a session that ended without a reason can
+   still be explained.
 
 9.  Security Considerations
 
@@ -935,49 +927,49 @@ Table of Contents
       machine that can be told to move, and an unauthenticated session
       to it is worse than no session.
 
-   *  TLS 1.2 is permitted (Section 5.3) because a device that cannot
-      be updated should not be unreachable, and it is permitted only
-      with an AEAD suite, with the extended master secret and without
+   *  TLS 1.2 is permitted (Section 5.3) because a device that cannot be
+      updated should not be unreachable, and it is permitted only with
+      an AEAD suite, with the extended master secret and without
       renegotiation.  A deployment SHOULD record which sessions are on
-      1.2, and SHOULD plan to leave it.  Every version before 1.2
-      MUST NOT be used.
+      1.2, and SHOULD plan to leave it.  Every version before 1.2 MUST
+      NOT be used.
 
    *  A datagram transport can be made to answer for an address it has
       never seen.  DTLS therefore requires the cookie exchange
       (Section 6.1), and a deployment SHOULD NOT expose a device that
       speaks only DTLS to an untrusted network.
 
-   *  Early data replays (Section 7.7).  The default is to refuse it.
-      A deployment that enables it has to know which of its calls are
-      safe to repeat, which for a machine is very few.
+   *  Early data replays (Section 7.7).  The default is to refuse it.  A
+      deployment that enables it has to know which of its calls are safe
+      to repeat, which for a machine is very few.
 
    *  Migration moves a session to a new address (Section 7.8).  An
-      endpoint that authorises by address is then authorising an
-      address it never saw, and MUST re-check.
+      endpoint that authorises by address is then authorising an address
+      it never saw, and MUST re-check.
 
-   *  Handing tunnel flow control to QUIC (Section 7.6) removes a
-      limit and not a guarantee: the peer is still bounded by the
-      credit of the stream and of the connection, and an endpoint that
-      reads nothing still stops the sender.  An implementation MUST
-      NOT treat the mode as permission to buffer without bound.
+   *  Handing tunnel flow control to QUIC (Section 7.6) removes a limit
+      and not a guarantee: the peer is still bounded by the credit of
+      the stream and of the connection, and an endpoint that reads
+      nothing still stops the sender.  An implementation MUST NOT treat
+      the mode as permission to buffer without bound.
 
    *  A relay sees cleartext (Section 5.6).  The channel binding of
-      Section 4.5 does not change that; it only stops a credential
-      from being forwarded through one.
+      Section 4.5 does not change that; it only stops a credential from
+      being forwarded through one.
 
    *  The transport protects the octets between two endpoints, and
       nothing after them.  A frame that is logged, stored or forwarded
-      by the application is cleartext again, and carries no proof of
-      its own.  A deployment that needs a frame to be verifiable later
-      wants [RFC0009] instead.
+      by the application is cleartext again, and carries no proof of its
+      own.  A deployment that needs a frame to be verifiable later wants
+      [RFC0009] instead.
 
    *  ALPN is not access control.  Selecting "ocp/1" says what protocol
       follows and not who may use it; authorisation is Section 4.4 and
       the application.
 
    *  An endpoint SHOULD bind the loopback address unless remote access
-      is intended, and a device SHOULD accept a secure transport with
-      a pinned certificate rather than a shared token.
+      is intended, and a device SHOULD accept a secure transport with  a
+      pinned certificate rather than a shared token.
 
 10. IANA Considerations
 
@@ -986,26 +978,25 @@ Table of Contents
    IANA.
 
    The ALPN identifier "ocp/1" (Section 4.2) is not registered.  The
-   port 16286 (Section 4.3) and the URI scheme "ocps" are not
-   assigned or registered: they are conventions of this series, and a
-   deployment is free to use others.
+   port 16286 (Section 4.3) and the URI scheme "ocps" are not assigned
+   or registered: they are conventions of this series, and a deployment
+   is free to use others.
 
-   The namespace of application error codes (Appendix A.1) is
-   maintained by this series, and a value is added to it only by a
-   document of the series.
+   The namespace of application error codes (Appendix A.1) is maintained
+   by this series, and a value is added to it only by a document of the
+   series.
 
 11. References
 
 11.1. Normative References
 
-   Each document below is an IETF publication.  Its tag carries the
-   IETF- prefix so that it cannot be confused with a document of this
-   series, which is listed in Section 11.2.
-
    [RFC0004]  "Octopus Control Protocol (OCP)", this series.
 
    [IETF-RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
               Requirement Levels", BCP 14, IETF RFC 2119, March 1997.
+
+   [IETF-RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in
+              RFC 2119 Key Words", BCP 14, IETF RFC 8174, May 2017.
 
    [IETF-RFC8446]  Rescorla, E., "The Transport Layer Security (TLS)
               Protocol Version 1.3", IETF RFC 8446, August 2018.
@@ -1052,10 +1043,6 @@ Table of Contents
               X.509 (PKIX) Certificates in the Context of Transport
               Layer Security (TLS)", IETF RFC 6125, March 2011.
 
-   [IETF-RFC3986]  Berners-Lee, T., Fielding, R., and L. Masinter,
-              "Uniform Resource Identifier (URI): Generic Syntax",
-              STD 66, IETF RFC 3986, January 2005.
-
 11.2. Informative References
 
    [RFC0009]  "Primitive Security Extensions of OCP", this series.
@@ -1069,49 +1056,53 @@ Table of Contents
    [RFC0007]  "OpenOcto Command-Line Tools and Interfaces", this
               series.
 
+   [IETF-RFC3986]  Berners-Lee, T., Fielding, R., and L. Masinter,
+              "Uniform Resource Identifier (URI): Generic Syntax",
+              STD 66, IETF RFC 3986, January 2005.
+
 Appendix A.  Summary of Parameters
 
-   +====================+=============================================+
-   |Parameter           |Value                                        |
-   +====================+=============================================+
-   |ALPN identifier     |"ocp/1"                                      |
-   +--------------------+---------------------------------------------+
-   |TLS version         |1.3 [IETF-RFC8446] preferred; 1.2            |
-   |                    |[IETF-RFC5246] permitted (Section 5.3)       |
-   +--------------------+---------------------------------------------+
-   |DTLS version        |1.3 [IETF-RFC9147] preferred; 1.2            |
-   |                    |[IETF-RFC6347] permitted                     |
-   +--------------------+---------------------------------------------+
-   |QUIC version        |1 [IETF-RFC9000]                             |
-   +--------------------+---------------------------------------------+
-   |Port, TLS over TCP  |16286                                        |
-   +--------------------+---------------------------------------------+
-   |Port, QUIC over UDP |16286                                        |
-   +--------------------+---------------------------------------------+
-   |Port, DTLS over UDP |16286 (shared with QUIC; first octet         |
-   |                    |discriminates, Section 4.3)                  |
-   +--------------------+---------------------------------------------+
-   |Port, cleartext     |6286 [RFC0004]                               |
-   +--------------------+---------------------------------------------+
-   |URI scheme, secure  |ocps://; port defaults to 16286              |
-   +--------------------+---------------------------------------------+
-   |URI scheme, plain   |ocp:// [RFC0004], Section 7.4                |
-   +--------------------+---------------------------------------------+
-   |Header form         |core, "header_len" 0x0010                    |
-   +--------------------+---------------------------------------------+
-   |Frame-layer         |none; [RFC0009] is not used                  |
-   |primitives          |                                             |
-   +--------------------+---------------------------------------------+
-   |Tunnel flow control |"ocp" by default; "quic" by agreement        |
-   |over QUIC           |(Section 7.6)                                |
-   +--------------------+---------------------------------------------+
-   |Channel binding     |"tls-exporter", label                        |
-   |                    |EXPORTER-OCP-channel-binding                 |
-   +--------------------+---------------------------------------------+
-   |Heartbeat interval  |5 s [RFC0004], Section 6.7                   |
-   +--------------------+---------------------------------------------+
-   |QUIC idle timeout   |30 s, and longer than the heartbeat          |
-   +--------------------+---------------------------------------------+
+   +====================+==============================================+
+   |Parameter           |Value                                         |
+   +====================+==============================================+
+   |ALPN identifier     |"ocp/1"                                       |
+   +--------------------+----------------------------------------------+
+   |TLS version         |1.3 [IETF-RFC8446] preferred; 1.2             |
+   |                    |[IETF-RFC5246] permitted (Section 5.3)        |
+   +--------------------+----------------------------------------------+
+   |DTLS version        |1.3 [IETF-RFC9147] preferred; 1.2             |
+   |                    |[IETF-RFC6347] permitted                      |
+   +--------------------+----------------------------------------------+
+   |QUIC version        |1 [IETF-RFC9000]                              |
+   +--------------------+----------------------------------------------+
+   |Port, TLS over TCP  |16286                                         |
+   +--------------------+----------------------------------------------+
+   |Port, QUIC over UDP |16286                                         |
+   +--------------------+----------------------------------------------+
+   |Port, DTLS over UDP |16286 (shared with QUIC; first octet          |
+   |                    |discriminates, Section 4.3)                   |
+   +--------------------+----------------------------------------------+
+   |Port, cleartext     |6286 [RFC0004]                                |
+   +--------------------+----------------------------------------------+
+   |URI scheme, secure  |ocps://; port defaults to 16286               |
+   +--------------------+----------------------------------------------+
+   |URI scheme, plain   |ocp:// [RFC0004], Section 7.4                 |
+   +--------------------+----------------------------------------------+
+   |Header form         |core, "header_len" 0x0010                     |
+   +--------------------+----------------------------------------------+
+   |Frame-layer         |none; [RFC0009] is not used                   |
+   |primitives          |                                              |
+   +--------------------+----------------------------------------------+
+   |Tunnel flow control |"ocp" by default; "quic" by agreement         |
+   |over QUIC           |(Section 7.6)                                 |
+   +--------------------+----------------------------------------------+
+   |Channel binding     |"tls-exporter", label                         |
+   |                    |EXPORTER-OCP-channel-binding                  |
+   +--------------------+----------------------------------------------+
+   |Heartbeat interval  |5 s [RFC0004], Section 6.7                    |
+   +--------------------+----------------------------------------------+
+   |QUIC idle timeout   |30 s, and longer than the heartbeat           |
+   +--------------------+----------------------------------------------+
 
                      Table 4: Summary of Parameters
 
@@ -1121,22 +1112,22 @@ A.1.  Application Error Codes
    document defines, for use in CONNECTION_CLOSE and in the error code
    of a stream.
 
-   +=======+=========================+================================+
-   |Code   |Name                     |Meaning                         |
-   +=======+=========================+================================+
-   |0x0000 |ocp-no-error             |The session ended after BYE.    |
-   +-------+-------------------------+--------------------------------+
-   |0x0001 |ocp-protocol-error       |A frame could not be processed, |
-   |       |                         |or a rule of [RFC0004] was      |
-   |       |                         |broken.                         |
-   +-------+-------------------------+--------------------------------+
-   |0x0002 |ocp-stream-error         |A frame arrived on a stream     |
-   |       |                         |that may not carry it.          |
-   +-------+-------------------------+--------------------------------+
-   |0x0003 |ocp-extension-required   |A WELCOME confirmed a primitive |
-   |       |                         |of [RFC0009] over a secure      |
-   |       |                         |transport (Section 1.1).        |
-   +-------+-------------------------+--------------------------------+
+   +=======+=========================+=================================+
+   |Code   |Name                     |Meaning                          |
+   +=======+=========================+=================================+
+   |0x0000 |ocp-no-error             |The session ended after BYE.     |
+   +-------+-------------------------+---------------------------------+
+   |0x0001 |ocp-protocol-error       |A frame could not be processed,  |
+   |       |                         |or a rule of [RFC0004] was       |
+   |       |                         |broken.                          |
+   +-------+-------------------------+---------------------------------+
+   |0x0002 |ocp-stream-error         |A frame arrived on a stream that |
+   |       |                         |may not carry it.                |
+   +-------+-------------------------+---------------------------------+
+   |0x0003 |ocp-extension-required   |A WELCOME confirmed a primitive  |
+   |       |                         |of [RFC0009] over a secure       |
+   |       |                         |transport (Section 1.1).         |
+   +-------+-------------------------+---------------------------------+
 
                   Table 5: Application Error Codes
 

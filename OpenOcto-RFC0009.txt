@@ -136,7 +136,7 @@ Table of Contents
    authentication (Section 9).
 
    The alternative is [RFC0010], which puts the whole session inside
-   TLS, QUIC or DTLS and leaves this document unused.  The two solve the
+   TLS, DTLS or QUIC and leaves this document unused.  The two solve the
    same problem at different layers.  Which one a deployment wants, and
    what each costs, is discussed in Section 11.
 
@@ -726,7 +726,7 @@ Table of Contents
       per session and is applied to frames only after it has been
       agreed.
 
-   [RFC0010]  puts the whole session inside TLS, QUIC or DTLS.  It
+   [RFC0010]  puts the whole session inside TLS, DTLS or QUIC.  It
       solves the same problem one layer lower and is an alternative to
       this document, not an addition to it.  An endpoint that runs OCP
       over a secure transport MUST NOT offer "hdr" and MUST NOT offer
