@@ -869,27 +869,36 @@ Table of Contents
       {"topic": "device.event", "data": {"name": "frame",
           "data": {"addr": 42, "octets": h'DEADBEEF'}}
 
-   An event is delivered only to sessions subscribed to its topic.
-   Events MAY interleave freely with responses.
+   An event is delivered only to sessions holding a filter that matches
+   its topic (Section 6.5.2).  Events MAY interleave freely with
+   responses, and an event with "retain" true is stored by the publisher
+   and replayed to later subscribers (Section 6.5.3).
 
    The members of EVENT are listed in Table 10.
 
    +============+==============+=======================================+
    |Field       |Type          |Meaning                                |
    +============+==============+=======================================+
-   |topic       |text          |Topic the event is published on,       |
-   |            |              |matched exactly.                       |
+   |topic       |text          |Concrete topic the event is published  |
+   |            |              |on; a published topic never contains   |
+   |            |              |a wildcard (Section 6.5.2).            |
    +------------+--------------+---------------------------------------+
    |data        |any           |OPTIONAL.  Payload.  An absent member  |
    |            |              |means the event carries nothing beyond |
    |            |              |its topic.                             |
+   +------------+--------------+---------------------------------------+
+   |retain      |bool          |OPTIONAL, default false.  If true the  |
+   |            |              |publisher stores the event as the      |
+   |            |              |retained message of the topic and      |
+   |            |              |replays it to later subscribers        |
+   |            |              |(Section 6.5.3).                       |
    +------------+--------------+---------------------------------------+
 
                          Table 10: EVENT Fields
 
 5.6.  SUBSCRIBE
 
-      {"id": 12, "topic": "device.event"}
+      {"id": 12, "topic": "device.+"}
 
    The identifier shares the numbering space of CALL identifiers, and
    the responder correlates its RESULT by that identifier.  Using the
@@ -899,8 +908,9 @@ Table of Contents
    the identifier, the responder MAY echo the frame sequence number; a
    requester SHOULD NOT rely on that form.
 
-   Topic matching is exact, and subscribing twice is idempotent.  The
-   answer carries null as its value.
+   A topic filter is matched by the wildcards of Section 6.5.2, and
+   subscribing to the same filter twice is idempotent.  The answer
+   carries null as its value.
 
    The members of SUBSCRIBE are listed in Table 11.
 
@@ -911,15 +921,15 @@ Table of Contents
    |            |              |the numbering space of calls (Section  |
    |            |              |5.6).                                  |
    +------------+--------------+---------------------------------------+
-   |topic       |text          |Topic to add to the session, matched   |
-   |            |              |exactly.                               |
+   |topic       |text          |Topic filter; MAY contain the          |
+   |            |              |wildcards '+' and '#' (Section 6.5.2). |
    +------------+--------------+---------------------------------------+
 
                        Table 11: SUBSCRIBE Fields
 
 5.7.  UNSUBSCRIBE
 
-      {"id": 13, "topic": "device.event"}
+      {"id": 13, "topic": "device.+"}
 
    Unsubscribing from a topic that is not subscribed succeeds.  The
    answer carries null as its value.
@@ -933,8 +943,9 @@ Table of Contents
    |            |              |the numbering space of calls (Section  |
    |            |              |5.6).                                  |
    +------------+--------------+---------------------------------------+
-   |topic       |text          |Topic to remove from the session,      |
-   |            |              |matched exactly.                       |
+   |topic       |text          |Filter to remove; it is matched by the |
+   |            |              |identical filter string, not by the    |
+   |            |              |published topic (Section 6.5.2).       |
    +------------+--------------+---------------------------------------+
 
                       Table 12: UNSUBSCRIBE Fields
@@ -990,8 +1001,8 @@ Table of Contents
    |window      |unsigned      |OPTIONAL.  Number of octets the peer   |
    |            |              |MAY still transmit.                    |
    +------------+--------------+---------------------------------------+
-   |off         |unsigned      |OPTIONAL.  Next offset expected; a     |
-   |            |              |resumption or a retransmission request |
+   |off         |unsigned      |OPTIONAL.  Offset to resume or re-send |
+   |            |              |from; a retransmission or resumption   |
    |            |              |(Section 6.6.4).                       |
    +------------+--------------+---------------------------------------+
    |eof         |boolean       |OPTIONAL.  End of this direction of the|
@@ -1111,6 +1122,36 @@ Table of Contents
    is opaque to this document: the protocol itself reads "method" and
    nothing else.
 
+   In HELLO the "auth" map carries the initiator's credential:
+
+      {"method": <text>, ... method-specific members ...}
+
+   In WELCOME the "auth" map carries the result of the handshake:
+
+      {"ok": <bool>, ... method-specific proof ...}
+      {"ok": false, "error": {"code": <uint>, "message": <text>}}
+
+   "ok" is REQUIRED.  "true" means the handshake succeeded and the
+   session proceeds; "false" means it failed, in which case "error"
+   names the reason and the session is closed with E_UNAUTHORIZED.  A
+   method that defines no proof leaves only "ok" (and, on failure,
+   "error").  The members a method defines MUST be known to both
+   endpoints before the method is used (Section 6.2).
+
+   The responder fails the handshake, closing with E_UNAUTHORIZED,
+   when it requires authentication but the initiator presented none,
+   when it does not implement the method, when the credential does
+   not verify, and when it cannot use the key material the method
+   yields.  Silent downgrade to an unauthenticated session is
+   prohibited.
+
+   The exchange is shown below.
+
+      Initiator                                  Responder
+         |---- HELLO {auth: {method, ...}} ----->|
+         |<--- WELCOME {auth: {ok, ...}} --------|
+         |         (otherwise E_UNAUTHORIZED)     |
+
    Any method MAY be used.  This document does not define a set of
    methods, does not register their names, and does not constrain how
    an identity is proved.  A shared secret, a keyed MAC, a digital
@@ -1146,31 +1187,35 @@ Table of Contents
        rules for rotating it.  A method that yields no secret is
        complete for every purpose of this document.
 
-   On success the responder sends WELCOME whose "auth" member carries
-   "ok" set to true, the proof of the method when it defines one, and
-   any other member the method defines.  On failure, including the cases
-   where the responder requires authentication but the initiator
-   presented none, where the responder does not implement the named
-   method, where the credential does not verify, and where the responder
-   cannot use the secret the method needs, the responder MUST send
-   E_UNAUTHORIZED and close.  Silent downgrade to an unauthenticated
-   session is prohibited.
+   Two methods are given below as examples.  Neither is required and an
+   implementation MAY ignore both.
 
-   One method is given below as an example.  It is not required and an
-   implementation MAY ignore it.
+   *  "hmac": a mutual challenge-response over a shared secret.  The
+      initiator sends a nonce and a MAC over it; the responder answers
+      with a nonce of its own and a MAC over both nonces, which the
+      initiator MUST verify.  The "auth" map uses the same shape as
+      Section 6.2: the HELLO map carries "method", "nonce" and "mac";
+      the WELCOME map carries "ok", the responder nonce and its MAC.
 
-   *  "hmac": the initiator presents a nonce and a MAC over that nonce,
-      so that the secret is not revealed.  The nonce is generated by the
-      initiator and SHOULD be at least 16 octets of unpredictable data.
-      The responder answers with a nonce of its own and a MAC over both
-      nonces, which the initiator MUST verify.
-
-         {"method": "hmac", "nonce": h'...', "mac": h'...'}
+         HELLO   {"method": "hmac", "nonce": h'...', "mac": h'...'}
          mac = HMAC-SHA256(secret, "OCP-HELLO" || client || nonce)
+         WELCOME {"ok": true, "nonce": h'...', "mac": h'...'}
+         mac = HMAC-SHA256(secret, "OCP-WELCOME" ||
+              client_nonce || server_nonce)
 
-         {"ok": true, "nonce": h'...', "mac": h'...'}
-         mac = HMAC-SHA256(secret, "OCP-WELCOME" || client_nonce ||
-             server_nonce)
+      "nonce" is at least 16 octets of unpredictable data.  The single
+      shared secret therefore authenticates both ends without being
+      revealed.
+
+   *  "token": a bearer ticket presented once, with no responder proof.
+      The HELLO map carries "method" and "ticket"; on success WELCOME
+      carries only "ok", and on failure "ok" is false with an "error":
+
+         HELLO   {"method": "token", "ticket": h'...'}
+         WELCOME {"ok": true}
+         WELCOME {"ok": false, "error": {"code": 13, "message": "bad"}}
+
+      A rejected ticket closes the session with E_UNAUTHORIZED.
 
    The key material a method yields, when it yields any, is used by
    [RFC0009] and by nothing in this document: that document derives the
@@ -1208,6 +1253,33 @@ Table of Contents
    correlation only.  Resumption of a byte stream across sessions is an
    application concern and is expressed with the tunnel offset field
    (Section 10).
+
+   An endpoint MUST enforce an abandonment timeout on every session.  A
+   timer for the peer is started when the session is established and is
+   reset whenever any frame is received from the peer.  If no frame from
+   the peer is received for a continuous period of T, the endpoint MUST
+   forcibly and abnormally close the session's transport.
+
+   The close is silent.  The endpoint MUST NOT send BYE, ERROR or any
+   other frame to the peer, and MUST NOT wait for an acknowledgement; it
+   simply drops the transport; the purpose is to free resources that
+   would otherwise be held forever, and to resolve a half-open session
+   left by a peer that vanished without sending BYE (Section 5.10).
+
+   T is an implementation parameter; a RECOMMENDED default of fifteen
+   seconds matches the heartbeat liveness timeout of Section 6.7 and
+   Table 18.  Applications that need longer idle periods MUST keep the
+   timer reset
+   by sending heartbeats (Section 6.7) or any other frame, and MUST in
+   any case receive a frame from the peer.  The timeout is independent
+   of, and complementary to, the graceful BYE close: a peer that leaves
+   cleanly sends BYE, and the timeout only applies once the peer has
+   gone silent.
+
+   The timeout is not cancelled by outstanding calls.  A session whose
+   calls are all answered but which then hears nothing times out; a
+   session with calls still awaiting answers that hears nothing also
+   times out.
 
 6.4.  Remote Procedure Call
 
@@ -1317,8 +1389,8 @@ Table of Contents
    2.  The publisher adds the topic to the session and answers with
        RESULT, "ok" set to true and no value.
 
-   3.  From then on the publisher sends EVENT on that topic, and on no
-       topic that the session has not subscribed to.
+   3.  From then on the publisher sends EVENT for each filter held by
+       the session, and on no concrete topic no filter matches.
 
    4.  UNSUBSCRIBE removes the topic.  Events already in flight MAY
        still arrive.
@@ -1329,8 +1401,9 @@ Table of Contents
       call is, and their identifier comes from the same space
       (Section 6.4.3).  The value of a successful answer is null.
 
-   *  Subscribing twice is idempotent and MUST NOT cause duplicate
-      deliveries of an event.
+   *  Subscribing to the same filter twice is idempotent and MUST NOT
+      cause duplicate deliveries; two distinct filters that both match a
+      topic are independent, and each MAY deliver the event it matches.
 
    *  UNSUBSCRIBE succeeds even when the topic was not subscribed: a
       subscription is only ever removed, never refused.
@@ -1338,13 +1411,41 @@ Table of Contents
    *  A subscription belongs to one session and does not survive a
       reconnect: the new session subscribes again.
 
-   *  A topic name is matched exactly; no wildcard and no prefix
-      matching is defined.  The namespaces are listed in Section 9.2.
+   *  A SUBSCRIBE or UNSUBSCRIBE carries a topic filter, not always a
+      concrete topic; a published event always carries a concrete topic
+      (Section 5.5).  The filter MAY contain MQTT-style wildcards, and
+      topic levels are separated by ".":
+
+      -  "+" matches exactly one level.  "device.+" matches
+         "device.event" and "device.fault", but not "device" nor
+         "device.event.foo".
+
+      -  "#" matches the current level and every level after it; it MUST
+         be the last level and the only character in that level.
+         "device.#" matches "device", "device.event" and
+         "device.event.foo"; a bare "#" matches every topic.
+
+      -  A level that is neither "+" nor "#" is matched literally,
+         character for character; a "+" or "#" inside a level is a
+         literal character, not a wildcard.
+
+      The namespaces are listed in Section 9.2; a wildcard filter is
+      accepted even when it currently matches no assigned topic.
 
 6.5.3.  Delivery
 
-   *  An event is delivered only to sessions that have subscribed to its
-      topic, and only after the subscription has been answered.
+   *  An event is delivered only to sessions that hold a filter matching
+      its topic (Section 6.5.2), and only after that filter's
+      subscription has been answered.
+
+   *  A retained event (EVENT with "retain" true, Section 5.5) is stored
+      by the publisher as the single retained message of its topic, and
+      replaces any prior retained message of that topic.  A retained
+      event with no payload clears that retained message.  When a
+      subscription is answered, the publisher immediately delivers the
+      retained message of every concrete topic the new filter matches,
+      before any later publication; a pseudo-topic (Section 9.2.1)
+      carries no retained message (Section 9.2.1).
 
    *  On a reliable transport the events of one topic are delivered in
       the order they were published.  The events of different topics MAY
@@ -1360,9 +1461,6 @@ Table of Contents
       subscriber received an event; a consumer that cannot afford to
       recovers by asking for the present state with a call, which is
       what the core profile of Section 9.1 is for.
-
-   *  The payload, when there is one, is carried in "data"; its shape
-      belongs to the topic and not to this document.
 
    *  The payload, when there is one, is carried in "data"; its shape
       belongs to the topic and not to this document.
@@ -1420,33 +1518,56 @@ Table of Contents
 
 6.6.3.  Data and Flow Control
 
-   *  The sender slices the stream; the RECOMMENDED slice size is 8192
-      octets.  It MUST NOT transmit beyond "ack + window" and waits for
-      a state frame otherwise.
+   TUNDATA carries a slice at offset "off".  TUNSTAT reports the
+   receiver's view of the stream: the acknowledgement "ack", the receive
+   window "window", and OPTIONALLY a request pointer "off".
 
-   *  The receiver places slices by offset: the contiguous prefix
-      advances the acknowledgement; out-of-order slices are held;
-      missing ranges cause a retransmission request; duplicate or
-      overlapping slices are trimmed.
+   Acknowledgement and window.  "ack" is the number of contiguous octets
+   received in order; every octet below "ack" has been received and the
+   next octet wanted is at "ack".  "window" is the number of octets the
+   sender MAY still have in flight (sent but not yet acknowledged).  The
+   sender MUST keep
 
-   *  The receiver sends TUNSTAT with the current acknowledgement and
-      window as needed; a receiver MAY coalesce these answers.  A window
-      of zero stops transmission until the window grows.
+      in_flight <= window,
+      where in_flight = (highest offset sent) - ack
 
-   *  Acknowledged data MAY be released by the sender.  Unacknowledged
-      data MUST be retained so that it can be retransmitted.
+   or, equivalently, it MUST NOT send a slice that lies beyond
+   "ack + window".  The receiver derives "window" from its free buffer
+   and advertises it as bytes are consumed; a zero window halts the
+   sender until it grows again.
+
+   Sending.  The sender slices the stream; the RECOMMENDED slice size is
+   8192 octets (Table 18).  It transmits slices whose offset lies in the
+   half-open interval [ack, ack + window), retains each until it is
+   acknowledged, and waits for a state frame once the window is full.
+
+   Receiving.  The receiver places each slice by its "off", advances
+   "ack" across the new contiguous prefix and holds any out-of-order
+   octets.  It sends TUNSTAT with the current "ack" and "window" as
+   needed, and MAY coalesce updates into one frame.  Duplicate
+   or overlapping slices are trimmed; octets below "ack" are ignored.
+
+   The window is shown in Figure 6.
+
+      received & delivered : 0 ......... ack
+      in flight (unacked)  : [  up to "window" octets  ]
+      may still be sent    : ack .................. ack + window
+
+               Figure 6: The BlobTun sliding window
 
 6.6.4.  Retransmission and Resumption
 
-   *  Retransmission: a receiver that detects a gap sends TUNSTAT with
-      "off" set to the first missing offset.  A sender MUST resend from
-      that offset when it still holds the data, and MUST answer
-      E_TUNNEL_RESET when the offset has already been released.
+   Retransmission.  When the receiver has delivered up to "ack" but the
+   next octet, at offset "ack", is missing, it sends TUNSTAT with "off"
+   set to "ack" -- a request to (re)transmit from that offset.  The
+   sender MUST resend from "off" while it still holds the data, and MUST
+   answer E_TUNNEL_RESET when the requested octets have already been
+   released.  A receiver SHOULD throttle gap notifications (Table 18).
 
-   *  Resumption: a receiver that restarts sends an establishment
-      request with "off" set to the number of octets it already has;
-      the sender continues from there.  An application MAY ignore
-      offsets entirely and treat the tunnel as a best-effort stream.
+   Resumption.  A receiver that restarts MAY open a tunnel with "off"
+   set to the octets it already holds; the sender continues from there.
+   The application MAY instead ignore offsets and treat the
+   tunnel as a best-effort stream.
 
 6.6.5.  Half Close
 
@@ -1478,8 +1599,11 @@ Table of Contents
    |retransmit request     |0.2 s             |Throttle for gap        |
    |interval               |                  |notifications.          |
    +-----------------------+------------------+------------------------+
+   |abandonment timeout    |15 s              |Session forced-close    |
+   |                       |                  |bound (Section 6.3).    |
+   +-----------------------+------------------+------------------------+
 
-                 Table 18: Recommended Tunnel Defaults
+                 Table 18: Recommended Defaults
 
 6.7.  Heartbeat and Metadata
 
@@ -1753,6 +1877,17 @@ Table of Contents
    +====================+==============+===============================+
    |Topic               |Publisher     |Data                           |
    +--------------------+--------------+-------------------------------+
+   |core.metadata       |runtime       |What the responder offers      |
+   |                    |              |changed.                       |
+   +--------------------+--------------+-------------------------------+
+   |core.session        |runtime       |A session state change {state, |
+   |                    |              |reason}.                       |
+   +--------------------+--------------+-------------------------------+
+   |core.heartbeat      |runtime       |A heartbeat report {rtt, time}.|
+   +--------------------+--------------+-------------------------------+
+   |core.error          |runtime       |A protocol error {code,        |
+   |                    |              |message}.                      |
+   +--------------------+--------------+-------------------------------+
    |device.param        |peer          |A parameter was written {name, |
    |                    |              |value}.                        |
    +--------------------+--------------+-------------------------------+
@@ -1776,27 +1911,6 @@ Table of Contents
    |                    |              |the status instruction         |
    |                    |              |(Section 9.1.1).               |
    +--------------------+--------------+-------------------------------+
-   |blobtun.open        |tunnel        |Tunnel established {tun,       |
-   |                    |              |window}.                       |
-   +--------------------+--------------+-------------------------------+
-   |blobtun.data        |tunnel        |Tunnel bytes {tun, data, len}. |
-   +--------------------+--------------+-------------------------------+
-   |blobtun.state       |tunnel        |Tunnel state {tun, ack, window,|
-   |                    |              |off, eof}.                     |
-   +--------------------+--------------+-------------------------------+
-   |blobtun.close       |tunnel        |Tunnel destroyed {tun, error}. |
-   +--------------------+--------------+-------------------------------+
-   |core.metadata       |runtime       |What the responder offers      |
-   |                    |              |changed.                       |
-   +--------------------+--------------+-------------------------------+
-   |core.session        |runtime       |A session state change {state, |
-   |                    |              |reason}.                       |
-   +--------------------+--------------+-------------------------------+
-   |core.heartbeat      |runtime       |A heartbeat report {rtt, time}.|
-   +--------------------+--------------+-------------------------------+
-   |core.error          |runtime       |A protocol error {code,        |
-   |                    |              |message}.                      |
-   +--------------------+--------------+-------------------------------+
    |rpc.call            |runtime       |A call was issued or received  |
    |                    |              |{id, name, dir}.               |
    +--------------------+--------------+-------------------------------+
@@ -1814,6 +1928,16 @@ Table of Contents
    +--------------------+--------------+-------------------------------+
    |pubsub.drop         |runtime       |An event was dropped           |
    |                    |              |{topic, reason}.               |
+   +--------------------+--------------+-------------------------------+
+   |blobtun.open        |tunnel        |Tunnel established {tun,       |
+   |                    |              |window}.                       |
+   +--------------------+--------------+-------------------------------+
+   |blobtun.data        |tunnel        |Tunnel bytes {tun, data, len}. |
+   +--------------------+--------------+-------------------------------+
+   |blobtun.state       |tunnel        |Tunnel state {tun, ack, window,|
+   |                    |              |off, eof}.                     |
+   +--------------------+--------------+-------------------------------+
+   |blobtun.close       |tunnel        |Tunnel destroyed {tun, error}. |
    +--------------------+--------------+-------------------------------+
    |log.<name>          |any           |Structured logging             |
    |                    |              |(extension point).             |
@@ -1866,13 +1990,16 @@ Table of Contents
    name begins with an underscore is reserved for future standard
    extensions.
 
-   *  Matching is exact (Section 6.5.2).  No wildcard and no prefix
-      matching is defined, so "device.*" names one topic and not the
-      family.
+   *  A topic filter MAY contain the wildcards "+" and "#" (Section
+      6.5.2); a published topic is always a concrete name, and "+" and
+      "#" are reserved and MUST NOT appear in one.  "device.+" matches
+      only the two-level topics of the device namespace, and "device.#"
+      matches those and any deeper topic.
 
    *  A name under a reserved prefix that is not listed is unassigned.
       A publisher MUST NOT publish it, a subscriber MUST NOT expect it,
-      and subscribing to it fails.
+      and subscribing to the concrete topic fails; a wildcard filter is
+      accepted even when it currently matches no assigned topic.
 
    *  Names are assigned only by a document of this series.  An
       application MUST NOT use a reserved prefix for a topic of its own,
@@ -1892,7 +2019,9 @@ Table of Contents
 
    *  An event reports a fact and not a state (Section 10.2): it says
       that something happened.  The present value is asked for with a
-      call, and a consumer that has missed events recovers that way.
+      call, and a consumer that has missed events recovers that way; a
+      retained message (Section 6.5.3) gives the last value without the
+      call.
 
    *  Delivery is best effort (Section 6.5.3).  A consumer that cannot
       afford to miss an event recovers by asking for the present state
@@ -2019,9 +2148,11 @@ Table of Contents
       relaying events, which keeps the primitive small and the trust
       boundary obvious.
 
-   *  Topics are names and not patterns.  Matching is exact, so the cost
-      of delivering one does not grow with the number of topics, and no
-      peer can be made to match against a pattern it never agreed to.
+   *  A topic is a name, but a subscription is a filter that MAY use the
+      wildcards "+" and "#" (Section 6.5.2).  Wildcards are opt-in with
+      the "pubsub" capability, so no peer matches a pattern it never
+      agreed to, and a publisher delivers only to sessions whose filter
+      matches the concrete topic it publishes.
 
    *  Push is cheap and the pull path carries the same data.  An
       application MAY use either without changing what it receives, so
@@ -2075,7 +2206,7 @@ Table of Contents
    *  Credit is granted and never inferred.  Flow control is driven by
       the receiver rather than guessed by the sender, which is what
       makes a slow consumer safe; publish/subscribe offers no such
-      guarantee (Section 10.2.1).
+      guarantee (Section 10.2).
 
    *  A stream keeps to itself.  A tunnel is established, advanced,
       closed and destroyed without ever touching the request numbering,
@@ -2190,7 +2321,7 @@ Table of Contents
 
    *  Error codes; the registry is reproduced in Appendix A.
 
-   *  Reserved topic prefixes (Section 9.3).
+   *  Reserved topic prefixes (Section 9.2).
 
    Two namespaces are not maintained at all.  A name in either of them
    is chosen by agreement between the two endpoints of one session,
