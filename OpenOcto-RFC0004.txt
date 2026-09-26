@@ -2343,11 +2343,12 @@ Table of Contents
 14.1. Normative References
 
    [IETF-RFC8949]  Bormann, C. and P. Hoffman, "Concise Binary Object
-              Representation (CBOR)", STD 94, IETF RFC 8949, December
-              2020.
+              Representation (CBOR)", IETF STD 94, IETF RFC 8949,
+              December 2020.
 
    [IETF-RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
-              Requirement Levels", BCP 14, IETF RFC 2119, March 1997.
+              Requirement Levels", IETF BCP 14, IETF RFC 2119, March
+              1997.
 
    [IETF-RFC1982]  Elz, R. and R. Bush, "Serial Number Arithmetic",
               IETF RFC 1982, August 1996.
@@ -2355,15 +2356,20 @@ Table of Contents
 
 14.2. Informative References
 
-   [RFC0002]  "OpenOcto Ecosystem Architecture", this series.
+   [RFC0002]  Yang, S., "OpenOcto Ecosystem Architecture", RFC 0002,
+             September 2026.
 
-   [RFC0006]  "OpenOcto Device Daemon Behaviour", this series.
+   [RFC0006]  Yang, S., "OpenOcto Device Daemon Behaviour", RFC 0006,
+             September 2026.
 
-   [RFC0005]  "The OpenOcto Device Descriptor Format", this series.
+   [RFC0005]  Yang, S., "The OpenOcto Device Descriptor Format",
+             RFC 0005, September 2026.
 
-   [RFC0009]  "Primitive Security Extensions of OCP", this series.
+   [RFC0009]  Yang, S., "OCP with Frame-Level Security", RFC 0009,
+             September 2026.
 
-   [RFC0010]  "OCP over Secure Transport", this series.
+   [RFC0010]  Yang, S., "OCP over Secure Transport", RFC 0010,
+             September 2026.
 
    [IETF-RFC8878]  Collet, Y. and M. Kucherawy, "Zstandard Compression
               and the application/zstd Media Type", IETF RFC 8878,

@@ -1611,15 +1611,21 @@ Table of Contents
 
 21.1. Normative References
 
-   [RFC0002]  "OpenOcto Ecosystem Architecture", this series.
+   [RFC0002]  Yang, S., "OpenOcto Ecosystem Architecture", RFC 0002,
+             September 2026.
 
-   [RFC0003]  "The OctoScript Language", this series.
+   [RFC0003]  Yang, S., "The OctoScript Language", RFC 0003,
+             September 2026.
 
-   [RFC0004]  "Octopus Control Protocol (OCP)", this series.
+   [RFC0004]  Yang, S., "Octopus Control Protocol (OCP)", RFC 0004,
+             September 2026.
 
-   [RFC0009]  "Primitive Security Extensions of OCP", this series.
+   [RFC0009]  Yang, S., "Primitive Security Extensions of OCP",
+             RFC 0009,
+             September 2026.
 
-   [RFC0010]  "OCP over Secure Transport", this series.
+   [RFC0010]  Yang, S., "OCP over Secure Transport", RFC 0010,
+             September 2026.
 
    [TOML]  "TOML: Tom's Obvious, Minimal Language", version 1.0.
 
@@ -1627,10 +1633,11 @@ Table of Contents
               Std 754-2019, July 2019.
 
    [IETF-RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
-              Requirement Levels", BCP 14, IETF RFC 2119, March 1997.
+              Requirement Levels", IETF BCP 14, IETF RFC 2119, March
+              1997.
 
    [IETF-RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in
-              RFC 2119 Key Words", BCP 14, IETF RFC 8174, May 2017.
+              RFC 2119 Key Words", IETF BCP 14, IETF RFC 8174, May 2017.
 
 21.2. Informative References
 
@@ -1640,14 +1647,17 @@ Table of Contents
    conforming implementation is written from this document and from
    Section 21.1 alone.  The series itself is defined by [RFC0001].
 
-   [RFC0001]  "OpenOcto Standards Series (OOS)", this series.
+   [RFC0001]  Yang, S., "OpenOcto Standards Series (OOS)", RFC 0001,
+             September 2026.
 
-   [RFC0006]  "OpenOcto Device Daemon Behaviour", this series.
+   [RFC0006]  Yang, S., "OpenOcto Device Daemon Behaviour", RFC 0006,
+             September 2026.
 
-   [RFC0007]  "OpenOcto Command-Line Tools and Interfaces", this
-              series.
+   [RFC0007]  Yang, S., "OpenOcto Command-Line Tools and Interfaces",
+             RFC 0007, September 2026.
 
-   [RFC0008]  "OpenOcto Error Taxonomy and Diagnostics", this series.
+   [RFC0008]  Yang, S., "OpenOcto Error Taxonomy and Diagnostics",
+             RFC 0008, September 2026.
 
 Appendix A.  Diagnostics
 

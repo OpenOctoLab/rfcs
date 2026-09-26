@@ -7,7 +7,7 @@ Request for Comments: 0009                                          HFUT
 Category: Standards Track                                 September 2026
 
 
-                  Primitive Security Extensions of OCP
+                     OCP with Frame-Level Security
 
 Abstract
 
@@ -831,14 +831,25 @@ Table of Contents
 
    *  Zero-trust algorithm names (Section 8).
 
+   The URI scheme "ocp-fls" names a frame-layer secured session, defined
+   by this document rather than by [RFC0004].  It is a convention of
+   this series and is not registered with IANA; a tool that is given
+   "ocp-fls" MUST NOT treat it as "ocp://" or as the secure scheme of
+   [RFC0010].  It uses the RECOMMENDED port 6357, whose digits spell
+   O, F, L, S on a telephone keypad, as a binding distinct from the
+   cleartext port 6286 of [RFC0004] Section 7.4; the transport is
+   unchanged and only the frame header is extended.
+
 14. References
 
 14.1. Normative References
 
-   [RFC0004]  "Octopus Control Protocol (OCP)", this series.
+   [RFC0004]  Yang, S., "Octopus Control Protocol (OCP)", RFC 0004,
+             September 2026.
 
    [IETF-RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
-              Requirement Levels", BCP 14, IETF RFC 2119, March 1997.
+              Requirement Levels", IETF BCP 14, IETF RFC 2119, March
+              1997.
 
    [IETF-RFC5869]  Krawczyk, H. and P. Eronen, "HMAC-based Extract-and-
               Expand Key Derivation Function (HKDF)", IETF RFC 5869, May
@@ -853,13 +864,17 @@ Table of Contents
 
 14.2. Informative References
 
-   [RFC0010]  "OCP over Secure Transport", this series.
+   [RFC0010]  Yang, S., "OCP over Secure Transport", RFC 0010, September
+             2026.
 
-   [RFC0002]  "OpenOcto Ecosystem Architecture", this series.
+   [RFC0002]  Yang, S., "OpenOcto Ecosystem Architecture", RFC 0002,
+             September 2026.
 
-   [RFC0005]  "The OpenOcto Device Descriptor Format", this series.
+   [RFC0005]  Yang, S., "The OpenOcto Device Descriptor Format",
+             RFC 0005, September 2026.
 
-   [RFC0006]  "OpenOcto Device Daemon Behaviour", this series.
+   [RFC0006]  Yang, S., "OpenOcto Device Daemon Behaviour", RFC 0006,
+             September 2026.
 
    [IETF-RFC5116]  McGrew, D., "An Interface and Algorithms for
               Authenticated Encryption", IETF RFC 5116, January 2008.

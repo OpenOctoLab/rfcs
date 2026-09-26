@@ -325,22 +325,31 @@ Table of Contents
    IETF- prefix so that it cannot be confused with a document of
    this series.
 
-   [RFC0003]  "The OctoScript Language", this series.
+   [RFC0003]  Yang, S., "The OctoScript Language", RFC 0003,
+             September 2026.
 
-   [RFC0004]  "Octopus Control Protocol (OCP)", this series.
+   [RFC0004]  Yang, S., "Octopus Control Protocol (OCP)", RFC 0004,
+             September 2026.
 
-   [RFC0005]  "The OpenOcto Device Descriptor Format", this series.
+   [RFC0005]  Yang, S., "The OpenOcto Device Descriptor Format",
+             RFC 0005,
+             September 2026.
 
    [IETF-RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
-              Requirement Levels", BCP 14, RFC 2119, March 1997.
+              Requirement Levels", IETF BCP 14, IETF RFC 2119
+              March 1997.
 
 13.2. Informative References
 
-   [RFC0002]  "OpenOcto Ecosystem Architecture", this series.
+   [RFC0002]  Yang, S., "OpenOcto Ecosystem Architecture", RFC 0002,
+             September 2026.
 
-   [RFC0006]  "OpenOcto Device Daemon Behaviour", this series.
+   [RFC0006]  Yang, S., "OpenOcto Device Daemon Behaviour", RFC 0006,
+             September 2026.
 
-   [RFC0007]  "OpenOcto Command-Line Tools and Interfaces", this series.
+   [RFC0007]  Yang, S., "OpenOcto Command-Line Tools and Interfaces",
+             RFC 0007,
+             September 2026.
 
 Appendix A.  Failure Catalogue
 

@@ -247,6 +247,8 @@ Table of Contents
    +=============+============+========================================+
    |TCP          |6286        |OCP in cleartext [RFC0004], Section 7.4.|
    +-------------+------------+----------------------------------------+
+   |Frame-sec    |6357        |Frame-layer secure OCP (scheme ocp-fls) |
+   +-------------+------------+----------------------------------------+
    |TLS over TCP |16286       |OCP over TLS (Section 5).               |
    +-------------+------------+----------------------------------------+
    |QUIC         |16286 (UDP) |OCP over QUIC (Section 7).              |
@@ -542,7 +544,7 @@ Table of Contents
    QUIC: it gives the same handshake, the same certificates and the same
    exporter, and it costs less code than adding QUIC.  A deployment that
    has QUIC and no constraint prefers QUIC (Section 7), which adds
-   streams, tunnels on their own streams and a better recovery from loss.
+   streams, tunnels on their own streams, and better loss recovery.
 
    Everything in Section 5 applies, with the differences below and with
    the rules of [RFC0004], Section 7.2, for the frames it carries.
@@ -990,13 +992,15 @@ Table of Contents
 
 11.1. Normative References
 
-   [RFC0004]  "Octopus Control Protocol (OCP)", this series.
+   [RFC0004]  Yang, S., "Octopus Control Protocol (OCP)", RFC 0004,
+             September 2026.
 
    [IETF-RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
-              Requirement Levels", BCP 14, IETF RFC 2119, March 1997.
+              Requirement Levels", IETF BCP 14, IETF RFC 2119
+              March 1997.
 
    [IETF-RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in
-              RFC 2119 Key Words", BCP 14, IETF RFC 8174, May 2017.
+              RFC 2119 Key Words", IETF BCP 14, IETF RFC 8174, May 2017.
 
    [IETF-RFC8446]  Rescorla, E., "The Transport Layer Security (TLS)
               Protocol Version 1.3", IETF RFC 8446, August 2018.
@@ -1045,20 +1049,24 @@ Table of Contents
 
 11.2. Informative References
 
-   [RFC0009]  "Primitive Security Extensions of OCP", this series.
+   [RFC0009]  Yang, S., "OCP with Frame-Level Security", RFC 0009,
+             September 2026.
 
-   [RFC0002]  "OpenOcto Ecosystem Architecture", this series.
+   [RFC0002]  Yang, S., "OpenOcto Ecosystem Architecture", RFC 0002,
+             September 2026.
 
-   [RFC0005]  "The OpenOcto Device Descriptor Format", this series.
+   [RFC0005]  Yang, S., "The OpenOcto Device Descriptor Format",
+             RFC 0005, September 2026.
 
-   [RFC0006]  "OpenOcto Device Daemon Behaviour", this series.
+   [RFC0006]  Yang, S., "OpenOcto Device Daemon Behaviour", RFC 0006,
+             September 2026.
 
-   [RFC0007]  "OpenOcto Command-Line Tools and Interfaces", this
-              series.
+   [RFC0007]  Yang, S., "OpenOcto Command-Line Tools and Interfaces",
+             RFC 0007, September 2026.
 
    [IETF-RFC3986]  Berners-Lee, T., Fielding, R., and L. Masinter,
               "Uniform Resource Identifier (URI): Generic Syntax",
-              STD 66, IETF RFC 3986, January 2005.
+              IETF STD 66, IETF RFC 3986, January 2005.
 
 Appendix A.  Summary of Parameters
 

@@ -1,0 +1,383 @@
+
+
+
+
+OpenOcto Standards Group (OOSG)                                  S. Yang
+Request for Comments: 0011                                          HFUT
+Category: Informational                                   September 2026
+
+
+                   OCP Air: an OCP Subset for MCUs
+
+Abstract
+
+   This document defines "OCP Air", a constrained subset of the Octopus
+   Control Protocol [RFC0004] that fits a microcontroller-class device
+   such as an STM32 (tens of kilobytes of RAM, no required operating
+   system).  Air is not a fork and not a new protocol version: an Air
+   device speaks OCP version 1 and interoperates with a full OCP stack
+   by the capability intersection that [RFC0004] already defines.  This
+   document repeats no protocol detail; it states only what to keep,
+   what to drop, and what to make optional, with the resource reasoning
+   behind each choice.
+
+Status of This Memo
+
+   This document is not an Internet Standards Track specification; it is
+   published for informational purposes.
+
+   This document is a product of the OpenOcto Standards Group (OOSG).
+   It has been approved for publication by the OOSG.  Not all documents
+   approved by the OOSG are candidates for any level of OpenOcto
+   Standard.
+
+   Information about the current status of this document, any errata,
+   and how to provide feedback on it may be obtained from the OOSG.
+
+Copyright Notice
+
+   Copyright (c) 2026 OOSG and the persons identified as the document
+   authors.  All rights reserved.
+
+   This document is distributed under the MIT License: permission is
+   granted, free of charge, to use, copy, modify, merge, publish,
+   distribute, sublicense and/or sell copies of this document, subject
+   to the inclusion of the above notice in all such copies.  The
+   document is provided without warranty of any kind.  Code Components
+   extracted from this document are subject to the same terms.
+
+Table of Contents
+
+   1.  Introduction
+   2.  Conventions
+   3.  Scope: What Air Keeps and Drops
+   4.  Frame Layer Reductions
+   5.  Value Layer Reductions: a CBOR Subset
+   6.  Message Layer Reductions
+   7.  Session, Flags and Capabilities
+   8.  Service Profile
+   9.  Transport Binding for an MCU
+   10. Resource Budgets
+   11. Interoperability with Full OCP
+   12. Security Considerations
+   13. IANA Considerations
+   14. References
+
+1.  Introduction
+
+   An STM32-class microcontroller can run OCP, but it cannot run all of
+   [RFC0004].  Three parts of that document are excluded by an Air
+   device by policy, not by inability to parse them: they are simply too
+   large for the device's RAM or for its threat model.
+
+   *  Compression (Section 3.5, 3.6).  zstd, brotli, DEFLATE and friends
+      need windows of tens of kilobytes and dynamic structures an MCU
+      rarely has room for.  Air drops compression entirely.
+
+   *  Frame-layer security [RFC0009].  Its longer header, per-frame
+      cryptography and key schedule are out of scope for Air.
+
+   *  Secure transport [RFC0010].  TLS, DTLS and QUIC each need a TCP/IP
+      stack plus a cryptography suite measured in tens of kilobytes; Air
+      does not use them.
+
+   Everything else in [RFC0004] is kept, sometimes with a smaller bound.
+   Air is therefore a declared profile: a full OCP peer that meets an
+   Air device negotiates the intersection and proceeds exactly as the
+   core document allows.
+
+2.  Conventions
+
+   The key words of [IETF-RFC2119] and [IETF-RFC8174] apply within this
+   document to the Air profile.  All other rules are those of [RFC0004];
+   this document changes none of them.  Multi-octet integers are
+   big-endian.  "Air device" means an implementation that claims
+   conformance to this profile.
+
+3.  Scope: What Air Keeps and Drops
+
+   Table 1 summarises every area of [RFC0004] and the Air decision.  A
+   "Keep" row is implemented as written in [RFC0004].  A "Drop" row is
+   not implemented by an Air device.  An "Optional" row MAY be left out
+   to save code and RAM; when present it follows [RFC0004] unchanged.
+
+   +================+=========+========================================+
+   |Area            |Decision |Note                                    |
+   +================+=========+========================================+
+   |Frame header    |Keep     |16-octet form; header_len=0x0010        |
+   +----------------+---------+----------------------------------------+
+   |Frame security  |Drop     |RFC0009 not in Air                      |
+   +----------------+---------+----------------------------------------+
+   |Compression     |Drop     |F_COMP, algs; too heavy                 |
+   +----------------+---------+----------------------------------------+
+   |Authentication  |Optional |pre-shared "token" only                 |
+   +----------------+---------+----------------------------------------+
+   |CBOR decoder    |Keep     |subset of types (Section 4)             |
+   +----------------+---------+----------------------------------------+
+   |HELLO/WELCOME   |Keep     |no auth/algs members                    |
+   +----------------+---------+----------------------------------------+
+   |CALL/RESULT     |Keep     |core RPC                                |
+   +----------------+---------+----------------------------------------+
+   |EVENT/SUB/UNSUB |Keep     |pubsub                                  |
+   +----------------+---------+----------------------------------------+
+   |TUNDATA/TUNSTAT |Optional |blobtun; needs RAM                      |
+   +----------------+---------+----------------------------------------+
+   |ACK/F_ACK       |Drop     |stream transport only                   |
+   +----------------+---------+----------------------------------------+
+   |Capabilities    |Keep     |rpc+pubsub min; blobtun opt             |
+   +----------------+---------+----------------------------------------+
+   |Core profile    |Keep     |7 instructions (Section 9)              |
+   +----------------+---------+----------------------------------------+
+   |Topic spaces    |Keep     |device.* and core.*                     |
+   +----------------+---------+----------------------------------------+
+   |Stream transport|Keep     |UART/USB/TCP baseline                   |
+   +----------------+---------+----------------------------------------+
+   |Datagram trans. |Optional |UDP; needs ACK logic                    |
+   +----------------+---------+----------------------------------------+
+   |Error codes     |Keep     |0x0000-0x000E; reused                   |
+   +----------------+---------+----------------------------------------+
+
+                     Table 1: Air Scope Decisions
+
+   An Air device MUST NOT implement the frame security of [RFC0009] or
+   the transports of [RFC0010]; doing so is a different product, not
+   Air.  It MUST NOT set F_COMP (Section 4 of [RFC0004]).
+
+4.  Frame Layer Reductions
+
+   Air keeps the sixteen-octet header of [RFC0004] Section 3.1 exactly,
+   including the magic octets and "header_len" (always 0x0010).  These
+   fields cost nothing and let the receiver find the payload before it
+   knows anything else, which is exactly what a small parser wants.
+
+   *  Flag bits.  Only the header form of [RFC0004] is used.  F_COMP
+      (0x02) is never set.  F_AUTH (0x04) is permitted only together
+      with the authentication option of Section 7.  F_ACK (0x01) is not
+      used, because Air runs on a reliable stream (Section 9).
+
+   *  Trailers and longer headers.  None.  [RFC0009] is not used, so the
+      extension points of [RFC0004] Section 3.8 are inert for Air.
+
+   *  Sequence numbers.  Kept as written.  The 32-bit counter and the
+      serial-number arithmetic are cheap; an Air device MAY close a
+      long-lived session well before 2^31 frames, which [RFC0004]
+      Section 3.4 already permits.
+
+   *  Limits.  Kept, but with a small bound, see Section 10.
+
+5.  Value Layer Reductions: a CBOR Subset
+
+   Air keeps the one-value-per-frame rule and the member rules of
+   [RFC0004] Section 4.  To keep the decoder small, an Air device
+   implements a CBOR subset rather than the standard [IETF-RFC8949].
+
+   *  Types an Air decoder MUST accept: unsigned integer, negative
+      integer, byte string, text string, array, map, boolean, null.
+
+   *  Floating point: OPTIONAL.  Measurements on an MCU are usually
+      integers or fixed-point; an Air device that omits floats answers
+      E_BAD_PAYLOAD to a float item.  A device that accepts floats needs
+      only the 32-bit and 64-bit major types, not half-precision.
+
+   *  Tags: an Air decoder MUST reject a tagged item with E_BAD_PAYLOAD.
+      [RFC0004] defines none, so this only rejects future extensions.
+
+   *  Indefinite-length items (major types 2, 3, 4, 5 with the
+      additional-information value 31): an Air decoder SHOULD reject
+      them.  A definite-length-only decoder is far smaller and the core
+      profile of [RFC0004] never needs indefinite length.
+
+   *  A decoder MUST still accept a non-canonical but legal encoding, as
+      [RFC0004] Section 2 requires; "subset" means fewer types, not a
+      stricter encoder.
+
+6.  Message Layer Reductions
+
+   The message types an Air device MUST implement are the session and
+   RPC/PubSub set: HELLO, WELCOME, CALL, RESULT, EVENT, SUBSCRIBE,
+   UNSUBSCRIBE, BYE and ERROR (types 0x01 to 0x0B of [RFC0004] Table 5).
+
+   *  ACK (0x0C) is dropped.  It exists for datagram transports only,
+      and Air's baseline transport is a stream (Section 9).  An Air
+      device that also implements the datagram option of Section 9 MAY
+      add ACK and F_ACK back, unchanged.
+
+   *  TUNDATA (0x08) and TUNSTAT (0x09) are OPTIONAL.  The blob tunnel
+      needs a sliding-window buffer and retransmission state that an MCU
+      may not afford; see Section 10.  An Air device that omits it
+      simply does not advertise "blobtun" and never opens a tunnel.
+
+   *  ERROR and the error registry are kept.  Air reuses the codes
+      0x0000 to 0x000E of [RFC0004] Appendix A and defines none of its
+      own, so a full peer reads Air errors without a new table.  Codes
+      0x000C and 0x000D (tunnel) are unused when blobtun is omitted.
+
+7.  Session, Flags and Capabilities
+
+   Session establishment follows [RFC0004] Section 6, simplified:
+
+   *  HELLO and WELCOME carry "proto", "client"/"server", "caps",
+      "max_payload" and "flags".  The "algs" member is absent (no
+      compression).  The "auth" member is absent unless the
+      authentication option below is taken.
+
+   *  "flags" is 0 in Air, or 0x04 only when authentication is used.
+      There is no compression flag to negotiate.
+
+   *  Authentication is OPTIONAL.  When an Air device authenticates, it
+      uses exactly one method: "token", a pre-shared bearer ticket
+      carried in the "auth" member as [RFC0004] Section 6.2 shows.  The
+      mutual "hmac" method, [RFC0009] and [RFC0010] are not used.  A
+      deployment that needs stronger assurance runs a full OCP stack.
+
+   *  Capabilities: an Air device advertises at least "rpc" and
+      "pubsub".  It adds "blobtun" only when it implements the tunnel.
+      The effective set is the intersection, as [RFC0004] Section 8
+      states, so a full peer quietly stops using what Air lacks.
+
+   *  The abandonment timeout of [RFC0004] Section 6.3 is kept; an MCU
+      cannot hold a half-open session forever.
+
+8.  Service Profile
+
+   Air keeps the Core Profile of [RFC0004] Section 9.1: the seven
+   instructions ping, status, metadata, sense, actuate, get_param and
+   set_param.  They are small, and they are exactly what an MCU device
+   exposes -- read a sensor, move an actuator, read or write a setting,
+   report state, and let a peer discover the rest through metadata.
+
+   *  Topic namespaces: an Air device publishes and subscribes the
+      device.* topic of [RFC0004] Table 21.  The pseudo-topics
+      "published" by a client runtime ([RFC0004] Section 9.2.1) are a
+      peer-side concern; an Air device MAY publish device.event,
+      device.fault, device.status and device.param.
+
+   *  Wildcards "+" and "#" in SUBSCRIBE are kept; they cost almost
+      nothing and [RFC0004] Section 6.5.2 already defines them.
+
+9.  Transport Binding for an MCU
+
+   Air's baseline is the stream transport of [RFC0004] Section 7.1:
+   frames written back to back, delimited only by "payload_len".  Good
+   fits for an STM32 are a UART, a USB CDC ACM endpoint, or a TCP socket
+   handed to the device by an external network module (for example an
+   ESP-class Wi-Fi coprocessor in AT-passthrough mode, or an Ethernet
+   PHY with a small IP stack).  None of these needs the device to run
+   TLS itself.
+
+   *  A datagram (UDP) transport is OPTIONAL.  It brings ACK, F_ACK,
+      retransmission and dedup, which an MCU can do but which cost code
+      and a small per-frame state.  An Air device that stays on a stream
+      never implements them.
+
+   *  The RECOMMENDED port of [RFC0004] Section 7.4 (6286) and the
+      "ocp://" scheme apply unchanged; they are conventions, not wire
+      content.
+
+10. Resource Budgets
+
+   Table 2 gives the [RFC0004] default and an Air recommendation for the
+   numbers that drive RAM use.  An Air device advertises its own small
+   "max_payload" in HELLO; the effective limit is the smaller of the
+   two, so a full peer sends only what the MCU can buffer.
+
+   +================+============+=====================================+
+   |Resource        |RFC0004     |Air                                  |
+   +================+============+=====================================+
+   |max_payload     |1048576     |up to 1024 octets                    |
+   +----------------+------------+-------------------------------------+
+   |rx frame buf    |1048576     |1024 octets                          |
+   +----------------+------------+-------------------------------------+
+   |tunnel window   |65536       |omit or 2048                         |
+   +----------------+------------+-------------------------------------+
+   |tunnel slice    |8192        |omit or 256                          |
+   +----------------+------------+-------------------------------------+
+   |receive buf     |262144      |omit or 4096                         |
+   +----------------+------------+-------------------------------------+
+   |abandon timeout |15 s        |15-60 s                              |
+   +----------------+------------+-------------------------------------+
+   |ping interval   |5 s         |5-30 s                               |
+   +----------------+------------+-------------------------------------+
+
+                  Table 2: Air Resource Budgets
+
+   With these bounds a minimal Air responder needs roughly one frame
+   buffer (1 KiB), a small outstanding-call table, and the metadata it
+   chooses to publish -- well within an STM32 with a few kilobytes of
+   RAM.  Flash cost is dominated by the CBOR subset decoder and the
+   procedure handlers the device defines; compression, TLS and the
+   tunnel are the pieces that are omitted to keep it small.
+
+11. Interoperability with Full OCP
+
+   Air is not a separate version.  An Air device sends "proto": 1 and is
+   read by any [RFC0004] peer as an ordinary OCP 1 endpoint.  Because
+   the core document already treats unknown members, unknown message
+   types and absent capabilities as harmless, the two interoperate by
+   intersection:
+
+   *  A full peer that offers compression sees no "algs" in Air's HELLO
+      and proceeds without it.
+
+   *  A full peer that implements blobtun but meets an Air device that
+      advertises only "rpc" and "pubsub" never opens a tunnel.
+
+   *  Error codes, sequence arithmetic and the header are identical, so
+      no translation shim is needed on either side.
+
+   The only thing an Air device cannot do is accept a session that
+   requires [RFC0009] or [RFC0010]; per [RFC0004] Section 6.1 it closes
+   such a session rather than downgrade silently.
+
+12. Security Considerations
+
+   Air carries cleartext, exactly as [RFC0004] Section 12 describes for
+   a session with no extension.  It is suitable only for a controlled
+   environment: a lab bench, a trusted LAN, or a link that is already
+   protected by the hardware around it (a private UART, a USB wire, a
+   VLAN).  An Air device MUST NOT be placed on an untrusted network
+   without an outer protection that this document does not provide.
+
+   The OPTIONAL "token" authentication proves only that the peer holds a
+   shared secret; it gives no confidentiality or forward secrecy, and it
+   authenticates the initiator but not (in the token method) the
+   responder.  Deployments that need real confidentiality or mutual
+   authentication use a full OCP stack with [RFC0009] or [RFC0010].
+
+13. IANA Considerations
+
+   This document requests no IANA action and defines no new registry,
+   code point or name.  It reuses the message types, flag bits,
+   capability names and error codes of [RFC0004] without change, and it
+   adds no topic under a reserved prefix.
+
+14. References
+
+14.1. Normative References
+
+   [RFC0004]  Yang, S., "Octopus Control Protocol (OCP)", RFC 0004,
+             September 2026.
+
+   [IETF-RFC2119] Bradner, S., "Key words for use in RFCs to Indicate
+             Requirement Levels", IETF BCP 14, IETF RFC 2119
+             March 1997.
+
+   [IETF-RFC8174] Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+             2119 Key Words", IETF BCP 14, IETF RFC 8174, May 2017.
+
+   [IETF-RFC8949] Bormann, C. and P. Hoffman, "Concise Binary Object
+             Representation (CBOR)", IETF STD 94, IETF RFC 8949
+             December 2020.
+
+14.2. Informative References
+
+   [RFC0009]  Yang, S., "OCP with Frame-Level Security", RFC 0009,
+             September 2026.
+
+   [RFC0010]  Yang, S., "OCP over Secure Transport", RFC 0010, September
+             2026.
+
+Authors' Addresses
+
+   Shining Yang
+   HFUT

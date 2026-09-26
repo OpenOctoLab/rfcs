@@ -374,19 +374,25 @@ Table of Contents
 
 14.1. Normative References
 
-   [RFC0005]  "The OpenOcto Device Descriptor Format", this series.
+   [RFC0005]  Yang, S., "The OpenOcto Device Descriptor Format",
+             RFC 0005,
+             September 2026.
 
-   [RFC0003]  "The OctoScript Language", this series.
+   [RFC0003]  Yang, S., "The OctoScript Language", RFC 0003,
+             September 2026.
 
-   [RFC0004]  "Octopus Control Protocol (OCP)", this series.
+   [RFC0004]  Yang, S., "Octopus Control Protocol (OCP)", RFC 0004,
+             September 2026.
 
    [TOML]  "TOML: Tom's Obvious, Minimal Language", version 1.0.
 
 14.2. Informative References
 
-   [RFC0002]  "OpenOcto Ecosystem Architecture", this series.
+   [RFC0002]  Yang, S., "OpenOcto Ecosystem Architecture", RFC 0002,
+             September 2026.
 
-   [RFC0006]  "OpenOcto Device Daemon Behaviour", this series.
+   [RFC0006]  Yang, S., "OpenOcto Device Daemon Behaviour", RFC 0006,
+             September 2026.
 
 Appendix A.  Environment Variables
 
