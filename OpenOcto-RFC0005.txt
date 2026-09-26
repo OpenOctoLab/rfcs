@@ -15,9 +15,11 @@ Abstract
    knowledge of the machine it serves; everything it knows comes from a
    descriptor.  A descriptor is a TOML document that names the buses,
    states how a procedure call becomes octets on a bus and how received
-   octets become named values again, declares what the device publishes
-   and what it does on its own, and states the sessions it will and will
-   not accept.  This document specifies that format completely: every
+   octets become named values again, declares what the device
+   publishes, and states the sessions it will and will not accept.  It
+   carries no control logic: a descriptor translates, and what decides
+   what is to be done about what a device reports is a program and not
+   a file.  This document specifies that format completely: every
    table, every key, its type and its default, the rules that tie the
    tables to one another, the validation a descriptor undergoes before
    any of it is applied, and the diagnostics a violation produces.
@@ -69,17 +71,16 @@ Table of Contents
    10. Instruction Tables
    11. Parameter Tables
    12. Signal Tables
-   13. Rule Tables
-   14. Validation
-   15. Discovery and Publication
-     15.1.  Reserved Names
-     15.2.  Standard Instructions
-     15.3.  Topics
-   16. Security Considerations
-   17. IANA Considerations
-   18. References
-     18.1. Normative References
-     18.2. Informative References
+   13. Validation
+   14. Discovery and Publication
+     14.1.  Reserved Names
+     14.2.  Standard Instructions
+     14.3.  Topics
+   15. Security Considerations
+   16. IANA Considerations
+   17. References
+     17.1. Normative References
+     17.2. Informative References
    Appendix A.  Diagnostics
    Appendix B.  A Complete Descriptor
    Authors' Addresses
@@ -94,13 +95,23 @@ Table of Contents
    endpoint for as long as it runs, so that changing what a device does
    means changing a file and not a program.
 
-   Four ideas shape the format.
+   Five ideas shape the format.
 
    Transport is separate from signalling.  A bus either carries frames
    that this descriptor encodes and decodes, or it is a remote peer
    reached over a session of [RFC0004], and then the peer owns the
    octets.  No other table of the format is affected by which of the two
    it is.
+
+   A remote bus is the recommended one.  A descriptor SHOULD reach a
+   device over OCP: the device, or the program that stands in front of
+   it, speaks [RFC0004], owns its own octets and is discovered rather
+   than described.  A local bus, whose octets this descriptor encodes
+   and decodes, is the compatibility path: it is there for a device
+   that cannot speak the protocol, whether because it predates it,
+   because it will never be updated, or because it is a bus and not a
+   computer.  Everything this document says about codecs, parameters
+   and signals is about that path and about nothing else.
 
    One codec serves both directions.  A codec is an ordered list of
    fields, each with a name, a position and a type.  Encoding renders
@@ -114,25 +125,37 @@ Table of Contents
    arguments, and what distinguishes them is the name a program calls
    and what the procedure does to the machine.
 
-   A rule is configuration.  A device may react to what it observes
-   without a program being involved, and the reaction is declared here
-   rather than written somewhere else.
+   A descriptor translates and does not control.  It holds no
+   reaction, no policy and no program: it says what an instruction
+   means on a bus and what a frame means to a program, and nothing in
+   it decides what is to be done about what the device reports.  That
+   decision belongs to a program on the far side of a session, and
+   writing it is not the business of this format.  A descriptor is
+   therefore not a place to put behaviour: it is a translation table,
+   and the only thing in it that acts is a caller, from outside,
+   through an instruction.
 
    What a descriptor declares reaches a peer through the mechanisms
    [RFC0004] already defines: its instructions appear in discovery
-   (Section 15), what it observes is published on the topics of
-   Section 15.3, and an instruction on a remote bus is a call on a
+   (Section 14), what it observes is published on the topics of
+   Section 14.3, and an instruction on a remote bus is a call on a
    session.  What it declares about a session, including what it
    requires before it will serve one, is Section 6 and is governed by
    [RFC0009] and [RFC0010].
 
-   A descriptor is read by the device daemon of [RFC0006], which owns
-   the buses and serves them to programs, and a program written in the
-   language of the series [RFC0003] calls what a descriptor declares by
-   the names declared here.  The architecture that puts the daemon, the
-   programs and the protocol together is [RFC0002], and a term that
-   this document takes from it carries the meaning that document gives
-   it.
+   A descriptor is read by the device daemon of [RFC0006] and by
+   nothing else: it is the daemon's translation table and not a
+   description that a peer consumes or a device carries.  A program
+   written in the language of the series [RFC0003] calls what a
+   descriptor declares by the names declared here, and a device that is
+   reached directly, with no daemon in front of it, is not described by
+   one at all.  Such a device has to speak [RFC0004] itself, which is
+   to say that whoever puts it on the network implements an
+   OCP-speaking control program on its behalf; the program that calls
+   it then needs no descriptor, because the device answers for itself.
+   The architecture that puts the daemon, the programs and the protocol
+   together is [RFC0002], and a term that this document takes from it
+   carries the meaning that document gives it.
 
    This document replaces an earlier revision of the same name.  A
    descriptor of that revision is rejected and is not migrated: no
@@ -173,8 +196,8 @@ Table of Contents
                  Table 1: Type Names Used in This Document
 
    Names.  Every object of this format has a name: a bus, a codec, an
-   instruction, a parameter, a signal, a rule, an endpoint, a session,
-   an enumeration and a field.  A name is a non-empty string and is
+   instruction, a parameter, a signal, an endpoint, a session, an
+   enumeration and a field.  A name is a non-empty string and is
    compared as exact octets.  A name SHOULD consist only of ASCII
    letters, digits and the three characters "_", "-" and "."; a name
    that contains anything else is accepted but is awkward to carry in a
@@ -189,7 +212,7 @@ Table of Contents
 
    Paths.  A key path is written as the TOML path of the table or the
    key it names, for example bus.main.transport.  Diagnostics are
-   written with it (Section 14).
+   written with it (Section 13).
 
    Strictness.  A key that a table does not define is an error, in
    every table of this format and not only in some of them.  Nothing is
@@ -226,8 +249,6 @@ Table of Contents
    |                      | (Section 11).                              |
    +----------------------+--------------------------------------------+
    | [signal.<name>]      | One thing the device reports (Section 12). |
-   +----------------------+--------------------------------------------+
-   | [rule.<name>]        | One reaction of the device (Section 13).   |
    +----------------------+--------------------------------------------+
 
                       Table 2: Top-Level Tables
@@ -271,7 +292,7 @@ Table of Contents
    +-------------+----------------+------------------------------------+
    | id          | string         | OPTIONAL.  A stable identity of    |
    |             |                | the device.  Reported with the     |
-   |             |                | descriptor topic (Section 15.3).   |
+   |             |                | descriptor topic (Section 14.3).   |
    +-------------+----------------+------------------------------------+
    | name        | string         | OPTIONAL.  A name meant for a      |
    |             |                | human.                             |
@@ -445,7 +466,7 @@ Table of Contents
    +-------------+----------------+------------------------------------+
    | secret      | string         | OPTIONAL.  The secret, written in  |
    |             |                | the descriptor.  Discouraged       |
-   |             |                | (Section 16).                      |
+   |             |                | (Section 15).                      |
    +-------------+----------------+------------------------------------+
    | secret_env  | string         | OPTIONAL.  The name of an          |
    |             |                | environment variable that holds    |
@@ -564,7 +585,9 @@ Table of Contents
    [bus.<name>] declares one frame carrier.  A bus is local when it
    names a "transport" and remote when it names an "endpoint": a remote
    bus is a peer reached over a session, and the octets belong to that
-   peer.  The keys are listed in Table 9.
+   peer.  The recommended kind is the remote one, and the local kind
+   exists for a device that cannot be reached over the protocol
+   (below).  The keys are listed in Table 9.
 
    +=============+================+====================================+
    | Key         | Type           | Meaning                            |
@@ -599,12 +622,12 @@ Table of Contents
 
    The name of a bus is the name a program passes in the "bus" member
    of a bus write ([RFC0004], Section 9.2) and the name that appears in
-   the events of Section 15.3.
+   the events of Section 14.3.
 
    The transport name "loopback" MUST be implemented by every
    conforming implementation.  It retains every frame that is sent so
    that it can be received again, touches no hardware, and is the means
-   of    exercising a descriptor without a device.  Every other name is
+   of exercising a descriptor without a device.  Every other name is
    implementation-defined and is discoverable from the command line
    [RFC0007]; a name this implementation does not implement is an error
    of the descriptor.
@@ -612,8 +635,25 @@ Table of Contents
    A local bus is one whose octets this descriptor describes; a remote
    bus is one whose octets a peer describes.  No codec, no parameter and
    no local instruction MAY be declared for a remote bus (Sections 9,
-   11 and 10), and an instruction on a remote bus is a call forwarded
+   10 and 11), and an instruction on a remote bus is a call forwarded
    to the peer.
+
+   Which of the two a descriptor uses is not a matter of taste, and a
+   descriptor SHOULD use a remote bus.  [RFC0004] already carries
+   calls, events and byte streams, and a peer that speaks it is
+   discovered rather than described: no file has to say what its octets
+   mean, and the device answers for itself.  A local bus is the
+   compatibility path, taken when a device cannot speak the protocol:
+   hardware that predates it, a machine that will never be updated, a
+   bus that is a bus and not a computer.  Everything in Sections 9 to
+   12 exists for that path and for nothing else.
+
+   A device that is called directly, with no daemon in front of it, is
+   not described here at all.  Such a device speaks [RFC0004] itself,
+   which is to say that whoever puts it on the network implements an
+   OCP-speaking control program on its behalf; the program that calls
+   it then needs no descriptor, because there is nothing left to
+   translate.
 
 8.  Enumeration Tables
 
@@ -734,7 +774,7 @@ Table of Contents
    |             |                | physical value, meant for a human  |
    |             |                | and for discovery.                 |
    +-------------+----------------+------------------------------------+
-   | range       | array, float   | OPTIONAL.  Two floats, the         |
+   | range       | array, float   | OPTIONAL.  Two numbers, the        |
    |             |                | smallest and the largest physical  |
    |             |                | value. Checked when encoding       |
    |             |                | (Section 9.2).                     |
@@ -845,10 +885,10 @@ Table of Contents
 
    Encoding renders a codec and a set of bound values into the data
    octets of a frame.  A value is bound to a field by its name: by an
-   argument of an instruction (Section 10), by a value of a rule
-   (Section 13) or by the "default" of the field.  Every field that has
-   a name MUST be bound, and a binding that names no field is an error
-   of the descriptor.
+   argument of an instruction (Section 10), by the value a parameter is
+   written with (Section 11) or by the "default" of the field.  Every
+   field that has a name MUST be bound, and a binding that names no
+   field is an error of the descriptor.
 
    For each field, in order:
 
@@ -904,7 +944,7 @@ Table of Contents
 
    A frame that matches no codec is not discarded silently.  It is
    published on the topic "bus.rx" with its bus, its address and its
-   octets (Section 15.3), so that no traffic that a bus carried is
+   octets (Section 14.3), so that no traffic that a bus carried is
    invisible to a program.
 
 10.  Instruction Tables
@@ -955,7 +995,7 @@ Table of Contents
    +-------------+----------------+------------------------------------+
    | unit        | string         | OPTIONAL.  The unit of the value.  |
    +-------------+----------------+------------------------------------+
-   | range       | array, float   | OPTIONAL.  Two floats, checked     |
+   | range       | array, float   | OPTIONAL.  Two numbers, checked    |
    |             |                | before encoding, in addition to    |
    |             |                | the range of the field.            |
    +-------------+----------------+------------------------------------+
@@ -973,7 +1013,7 @@ Table of Contents
 
    The name of an instruction is the name a program passes in the "name"
    member of CALL ([RFC0004], Section 5.3).  It MUST NOT be one of the
-   reserved names of Section 15.1.
+   reserved names of Section 14.1.
 
    On a local bus the instruction renders "req" with the arguments of
    the call and writes it to the bus.  The rules of binding are those of
@@ -1041,7 +1081,7 @@ Table of Contents
    +-------------+----------------+------------------------------------+
    | unit        | string         | OPTIONAL.  The unit of the value.  |
    +-------------+----------------+------------------------------------+
-   | range       | array, float   | OPTIONAL.  Two floats, checked     |
+   | range       | array, float   | OPTIONAL.  Two numbers, checked    |
    |             |                | when the value is written.         |
    +-------------+----------------+------------------------------------+
    | enum        | string         | OPTIONAL.  The name of an          |
@@ -1109,8 +1149,8 @@ Table of Contents
    fresh one asks for it with "block" set to true.
 
    A program reaches a parameter through the instructions of
-   Section 15.2.  Whenever the value changes, the endpoint publishes it
-   (Section 15.3).
+   Section 14.2.  Whenever the value changes, the endpoint publishes it
+   (Section 14.3).
 
 12.  Signal Tables
 
@@ -1148,7 +1188,7 @@ Table of Contents
 
    A frame is decoded once, by the first codec that matches it
    (Section 9.3).  When a signal names that codec, the values are
-   published under the name of the signal (Section 15.3); when several
+   published under the name of the signal (Section 14.3); when several
    signals name it, they are published once per signal, because one
    frame may mean two things at once.
 
@@ -1164,71 +1204,7 @@ Table of Contents
    is reported.  A consumer that wants the present value asks for it
    with a call instead.
 
-13.  Rule Tables
-
-   [rule.<name>] declares one reaction: the device acts on what it
-   observes without a program being involved.  Its keys are listed in
-   Table 19.
-
-   +=============+================+====================================+
-   | Key         | Type           | Meaning                            |
-   +=============+================+====================================+
-   | signal      | string         | The name of the signal that        |
-   |             |                | triggers the rule.  Exactly one of |
-   |             |                | "signal" and "param" MUST be       |
-   |             |                | given.                             |
-   +-------------+----------------+------------------------------------+
-   | param       | string         | The name of the parameter whose    |
-   |             |                | change triggers the rule.          |
-   +-------------+----------------+------------------------------------+
-   | call        | string         | REQUIRED.  The instruction to      |
-   |             |                | execute.                           |
-   +-------------+----------------+------------------------------------+
-   | args        | table          | OPTIONAL.  The values of the       |
-   |             |                | arguments of "call" (below).       |
-   +-------------+----------------+------------------------------------+
-   | enabled     | boolean        | Default true.  When false the rule |
-   |             |                | is declared but not armed.         |
-   +-------------+----------------+------------------------------------+
-   | help        | string         | OPTIONAL.  A description meant for |
-   |             |                | a human.                           |
-   +-------------+----------------+------------------------------------+
-
-                        Table 19: Keys of a Rule
-
-   The value of a member of "args" is either a value of the type of the
-   argument, or a string of the form "$<name>".  Such a string names a
-   field of what triggered the rule: a field of the codec of the signal,
-   or the name "value" for a parameter.  A string that begins with "$"
-   and is meant as text is written with two of them.
-
-   The rules of a rule are:
-
-   *  "call" MUST name an instruction that is declared, and every
-      argument of it that has no "default" MUST appear in "args".  A
-      member of "args" that names no argument is an error of the
-      descriptor.
-
-   *  A rule MUST NOT arm itself: the instruction it calls MUST NOT
-      declare a "res" that is the codec of the signal that triggers the
-      rule.  An implementation MUST additionally bound how many rules
-      one observation may set off; the RECOMMENDED bound is four.
-
-   *  A rule is executed after the publication of what triggered it, and
-      a rule that fails is reported without interrupting the handler
-      that observed the frame.  A device does not stop listening because
-      a reaction did not work.
-
-      [rule.halt_on_overtemp]
-      signal = "overtemp"
-      call   = "halt"
-
-      [rule.log_temp]
-      param = "temp"
-      call  = "record"
-      args  = { value = "$value" }
-
-14.  Validation
+13.  Validation
 
    A descriptor is validated before any of it is applied, in the
    following order.  A later phase is not begun while an earlier one has
@@ -1244,15 +1220,13 @@ Table of Contents
    3.  References.  Every name that a key names is declared and is of
        the kind the key wants: a bus names a transport or an endpoint, a
        codec names a local bus, an instruction names a codec, a signal
-       names a codec, a rule names a signal or a parameter and an
-       instruction, a field names an enumeration.
+       names a codec, a field names an enumeration.
 
    4.  Meaning.  The rules of the tables themselves: a field fits the
        "mtu" and shares no octet; an argument binds to a field of its
        own value type (Section 9.1); a parameter names a field of the
        codec it names; a session offers what it requires and does not
-       offer [RFC0009] together with [RFC0010]; a rule does not arm
-       itself.
+       offer [RFC0009] together with [RFC0010].
 
    5.  Compile.  Every codec is compiled: the offsets are resolved, the
        widths are fixed and the defaults are checked against their
@@ -1278,9 +1252,9 @@ Table of Contents
    taxonomy of [RFC0008]; the tools that read and check a descriptor
    belong to [RFC0007].
 
-15.  Discovery and Publication
+14.  Discovery and Publication
 
-15.1.  Reserved Names
+14.1.  Reserved Names
 
    The names of the core profile of [RFC0004], Section 9.1 -- "ping",
    "list_instructions", "device_status" and "poll_events" -- are
@@ -1288,9 +1262,9 @@ Table of Contents
    "device.".  A descriptor MUST NOT declare an instruction with a
    reserved name; such a declaration is an error of the descriptor.
 
-15.2.  Standard Instructions
+14.2.  Standard Instructions
 
-   The instructions of Table 20 are provided by every conforming
+   The instructions of Table 19 are provided by every conforming
    implementation, in addition to the core profile of [RFC0004],
    Section 9.1, and in addition to those a descriptor declares.
 
@@ -1313,7 +1287,7 @@ Table of Contents
    |                    |                       | fault.               |
    +--------------------+-----------------------+----------------------+
 
-                  Table 20: Standard Instructions
+                  Table 19: Standard Instructions
 
    "bus.write" is provided for every bus.  On a local bus it writes the
    octets; on a remote bus it is forwarded to the peer, which is what
@@ -1323,10 +1297,10 @@ Table of Contents
    accept and a value that does not fit are answered in RESULT and not
    with ERROR, as [RFC0004], Section 6.4.2, requires.
 
-15.3.  Topics
+14.3.  Topics
 
    What a descriptor declares is published on the topics of
-   [RFC0004], Section 9.3, listed in Table 21 with the shape of the
+   [RFC0004], Section 9.3, listed in Table 20 with the shape of the
    "data" member of the EVENT.
 
    +===================+===============================================+
@@ -1357,7 +1331,7 @@ Table of Contents
    |                   | state.                                        |
    +-------------------+-----------------------------------------------+
 
-                     Table 21: Topics Published
+                     Table 20: Topics Published
 
    Publishing is best effort and an event is a fact and not a state, as
    [RFC0004], Section 10.2, states: a consumer that has missed one asks
@@ -1365,13 +1339,13 @@ Table of Contents
    an event for a topic it does not own, and a republished event carries
    the data of the original.
 
-16.  Security Considerations
+15.  Security Considerations
 
-   *  A descriptor is trusted input.  It can cause arbitrary frames to
-      be written to hardware and it can arm a rule that acts without a
-      program.  It MUST NOT be accepted from a peer, from a session or
-      from anything else that is not the operator, and it SHOULD be
-      readable only by the account that runs the endpoint.
+   *  A descriptor is trusted input.  It decides what an instruction
+      does to a machine, and it can cause arbitrary frames to be
+      written to hardware.  It MUST NOT be accepted from a peer, from a
+      session or from anything else that is not the operator, and it
+      SHOULD be readable only by the account that runs the endpoint.
 
    *  A secret in the descriptor is a secret in a file.  "secret_env" is
       preferred over "secret" because an environment variable is not
@@ -1404,12 +1378,15 @@ Table of Contents
       filtering of its own: what the peer accepts is what it declares,
       and authorisation belongs to the peer.
 
-   *  A rule runs without a program.  An attacker who can write the
-      descriptor can make a device act on its own, which is the same
-      power that writing the descriptor always granted and is a reason
-      to protect the file.
+   *  A descriptor contains no control logic, and that is a property
+      worth keeping: nothing in this format acts on what a device
+      reports, so the only thing that can move a machine through a
+      descriptor is a caller on the other side of a session, which can
+      be authenticated, logged and refused.  A deployment that wants a
+      device to act on its own writes a program, and puts it where it
+      can be reviewed.
 
-17.  IANA Considerations
+16.  IANA Considerations
 
    This document has no IANA actions.  It requests no name, no number
    and no code point, and it establishes no registry administered by
@@ -1422,14 +1399,14 @@ Table of Contents
 
    *  The field types of Table 13.
 
-   *  The reserved instruction names of Section 15.1.
+   *  The reserved instruction names of Section 14.1.
 
    One namespace is not maintained at all.  A bus transport name other
    than "loopback" is chosen by the implementation that provides it,
    carries no meaning beyond that implementation and is never
    registered.
 
-18.  References
+17.  References
 
 18.1. Normative References
 
@@ -1460,7 +1437,7 @@ Table of Contents
    bear on this one.  They are listed for the reader who wants the
    wider picture, and none of them is normative for this one: a
    conforming implementation is written from this document and from
-   Section 18.1 alone.  The series itself is defined by [RFC0001].
+   Section 17.1 alone.  The series itself is defined by [RFC0001].
 
    [RFC0001]  "OpenOcto Standards Series (OOS)", this series.
 
@@ -1473,8 +1450,8 @@ Table of Contents
 
 Appendix A.  Diagnostics
 
-   The diagnostics of this document are listed in Table 22.  Each is
-   written after the key path of what is at fault, as Section 14
+   The diagnostics of this document are listed in Table 21.  Each is
+   written after the key path of what is at fault, as Section 13
    states, so only the message is given here.  The list is not
    exhaustive: a message that no row covers is written in the same
    shape, and an implementation MAY word one differently as long as it
@@ -1547,12 +1524,6 @@ Appendix A.  Diagnostics
    | A field is not in the codec    | '<name>' is not a field of      |
    |                                | codec '<codec>'                 |
    +--------------------------------+---------------------------------+
-   | A rule names two triggers      | exactly one of 'signal' and     |
-   |                                | 'param' is required             |
-   +--------------------------------+---------------------------------+
-   | A rule arms itself             | rule '<name>' would trigger     |
-   |                                | itself                          |
-   +--------------------------------+---------------------------------+
    | A requirement cannot be met    | 'require.<key>' is set but the  |
    |                                | session does not offer it       |
    +--------------------------------+---------------------------------+
@@ -1567,19 +1538,21 @@ Appendix A.  Diagnostics
    |                                | 'secret_env' is allowed         |
    +--------------------------------+---------------------------------+
 
-                        Table 22: Diagnostics
+                        Table 21: Diagnostics
 
 Appendix B.  A Complete Descriptor
 
-   The descriptor below is complete and valid.  It describes a device
-   with one local bus and one remote peer, three instructions, one
-   parameter, three signals and one rule.
+   The descriptor below is complete and valid.  Every bus in it is a
+   remote one: each is a peer reached over [RFC0004], and the
+   descriptor says nothing about the octets those peers use.  What it
+   declares is what the daemon serves to its own callers, and how it
+   reaches the peers it translates for.
 
       [descriptor]
       format = 1
       id     = "octo-arm-01"
       name   = "Left arm"
-      help   = "Six-axis arm on the port manipulator."
+      help   = "Arm controller: two peers, one session each."
 
       [endpoint.ctl]
       mode    = "listen"
@@ -1597,102 +1570,39 @@ Appendix B.  A Complete Descriptor
       [session.ctl.require]
       auth = true
 
-      [endpoint.peer]
+      [endpoint.arm]
       mode    = "connect"
       host    = "10.0.0.7"
       port    = 16286
-      session = "peer"
+      session = "arm"
 
-      [session.peer.transport]
+      [session.arm.transport]
       kind = "quic"
       pin  = "sha256:9f86d081884c7d659a2feaa0c55ad015"
 
-      [bus.main]
-      transport = "socketcan"
-      mtu       = 8
+      [endpoint.gripper]
+      mode    = "connect"
+      host    = "10.0.0.8"
+      port    = 6286
+      session = "gripper"
 
-      [bus.main.options]
-      interface = "can0"
-      bitrate   = 1000000
+      [session.gripper]
+      comp = ["zstd", "deflate"]
 
-      [bus.remote]
-      endpoint = "peer"
+      [bus.arm]
+      endpoint = "arm"
 
-      [enum.mode]
-      values = { 0 = "idle", 1 = "run", 2 = "fault" }
-      help   = "State of the drive."
-
-      [codec.drive]
-      bus  = "main"
-      addr = 0x123
-      len  = 8
-
-      [[codec.drive.field]]
-      name  = "cmd"
-      type  = "u8"
-      const = 0xA1
-
-      [[codec.drive.field]]
-      name  = "speed"
-      type  = "i16"
-      scale = 0.01
-      unit  = "rad/s"
-      range = [-31.0, 31.0]
-
-      [[codec.drive.field]]
-      name    = "mode"
-      type    = "u8"
-      enum    = "mode"
-      default = 1
-
-      [codec.halt]
-      bus  = "main"
-      addr = 0x123
-
-      [[codec.halt.field]]
-      name  = "cmd"
-      type  = "u8"
-      const = 0xA0
-
-      [codec.status]
-      bus  = "main"
-      addr = 0x201
-
-      [[codec.status.field]]
-      name  = "angle"
-      type  = "i16"
-      scale = 0.01
-      unit  = "rad"
-
-      [[codec.status.field]]
-      name = "mode"
-      type = "u8"
-      enum = "mode"
-
-      [codec.temp_req]
-      bus  = "main"
-      addr = 0x300
-
-      [[codec.temp_req.field]]
-      name  = "cmd"
-      type  = "u8"
-      const = 0x10
-
-      [codec.temp_res]
-      bus  = "main"
-      addr = 0x301
-
-      [[codec.temp_res.field]]
-      name  = "value"
-      type  = "i16"
-      scale = 0.1
-      unit  = "degC"
-      range = [-40.0, 125.0]
+      [bus.gripper]
+      endpoint = "gripper"
 
       [instruction.drive]
-      bus  = "main"
-      req  = "drive"
-      help = "Spin the joint at a speed."
+      bus  = "arm"
+      help = "Spin a joint at a speed."
+
+      [[instruction.drive.arg]]
+      name  = "joint"
+      type  = "u8"
+      range = [0, 5]
 
       [[instruction.drive.arg]]
       name  = "speed"
@@ -1701,44 +1611,27 @@ Appendix B.  A Complete Descriptor
       range = [-31.0, 31.0]
 
       [instruction.halt]
-      bus  = "main"
-      req  = "halt"
-      help = "Stop the joint."
+      bus  = "arm"
+      help = "Stop every joint."
 
       [instruction.grip]
-      bus  = "remote"
-      help = "Close the gripper of the peer."
+      bus  = "gripper"
+      help = "Close the gripper at a force."
 
       [[instruction.grip.arg]]
-      name = "force"
-      type = "u8"
+      name  = "force"
+      type  = "u8"
+      range = [0, 100]
 
-      [param.temp]
-      bus   = "main"
-      type  = "f32"
-      unit  = "degC"
-      range = [-40.0, 125.0]
-      read  = { req = "temp_req", res = "temp_res",
-                field = "value" }
-
-      [signal.status]
-      codec = "status"
-      help  = "The angle and the state of the joint."
-
-      [signal.overtemp]
-      codec = "temp_res"
-      fault = true
-      help  = "The drive is too hot."
-
-      [signal.cooled]
-      codec  = "temp_res"
-      clears = "overtemp"
-      help   = "The drive is cool again."
-
-      [rule.halt_on_overtemp]
-      signal = "overtemp"
-      call   = "halt"
-      help   = "Stop before the drive cooks."
+   Every instruction above is forwarded: the daemon answers a call by
+   sending a CALL of the same name to the peer of its bus, and returns
+   what the peer answers.  A program reaches the buses themselves with
+   the standard instruction "bus.write" (Section 14.2), which is
+   forwarded in the same way.  A descriptor that also drives a device
+   which cannot speak the protocol declares a local bus for it, with
+   the codecs, parameters and signals that go with it; those are the
+   examples of Sections 9.1, 11 and 12, and they are the compatibility
+   path rather than this one.
 
 Authors' Addresses
 
