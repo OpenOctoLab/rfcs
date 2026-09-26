@@ -1669,18 +1669,18 @@ Table of Contents
    array rather than omitting the member.
 
    instructions  [{name, args, help}]: the procedures of the peer other
-      than the ones of Table 20.  The peer MAY list one of Table 20
-      here as well, and a caller MUST NOT rely on it doing so.
+      than the ones of Table 20.  The peer MAY list one of Table 20 here
+      as well, and a caller MUST NOT rely on it doing so.
 
    sensors  [{name, type, unit, help}]: what "sense" reads.
 
    actuators  [{name, args, help}]: what "actuate" operates.
 
    params  [{name, type, unit, range, default, mode, help}]: what
-      "get_param" and "set_param" reach.  "mode" is the access in
-      Linux permission notation -- 4 read-only, 6 read-write, 2
-      write-only, the x bit unused -- mirroring "read"/"write" of
-      the descriptor (Section 9.1.3).
+      "get_param" and "set_param" reach.  "mode" is the access in Linux
+      permission notation -- 4 read-only, 6 read-write, 2 write-only,
+      the x bit unused -- mirroring "read"/"write" of the descriptor
+      (Section 9.1.3).
 
    events  [{name, help}]: what the peer publishes, under the name that
       appears in the "name" member of the event.
@@ -1689,13 +1689,13 @@ Table of Contents
    or of the actuator, in positional order.  A caller MAY use those
    names as the keys of "args"; the entry states no preference between
    the forms, and an entry that names no parameters can only be called
-   by position.  A handler decides for itself whether it takes one
-   form, the other or a mix of both, and refuses what it does not take
-   in RESULT.  "type" names a value type, "unit" the unit of the
-   value, "range" the two numbers the value lies between and "default"
-   the value used when a call supplies none; all four are OPTIONAL and
-   all four are meant for a program.  "help" is a short text meant for
-   a human.  "mode" is the access of the parameter as a number in Linux
+   by position.  A handler decides for itself whether it takes one form,
+   the other or a mix of both, and refuses what it does not take in
+   RESULT.  "type" names a value type, "unit" the unit of the value,
+   "range" the two numbers the value lies between and "default" the
+   value used when a call supplies none; all four are OPTIONAL and all
+   four are meant for a program.  "help" is a short text meant for a
+   human.  "mode" is the access of the parameter as a number in Linux
    permission notation (r=4, w=2, x unused): 4 read-only, 6 read-write,
    2 write-only.  It is the application-layer signal that tells a caller
    whether "get_param" and "set_param" will be answered or refused
@@ -1715,20 +1715,19 @@ Table of Contents
    *  "actuate" operates one actuator.  Its "name" argument names a
       member of the "actuators" array, and the arguments that follow
       are those the actuator declares, bound by name or, after "name",
-      by position.  An actuator has no name of its own in this
-      protocol: a call that names one directly is unknown.
+      by position.  An actuator has no name of its own in this protocol:
+      a call that names one directly is unknown.
 
    *  "get_param" and "set_param" read and write one device parameter.
       "name" names a member of the "params" array and "value" is the
       value written.  A parameter is a setting of the device and not a
-      measurement; a measurement is a sensor.  A parameter whose
-      "mode" member of metadata is 4 (read-only) MUST refuse
-      "set_param" in RESULT; 2 (write-only) refuses "get_param" too.
+      measurement; a measurement is a sensor.  A parameter whose "mode"
+      member of metadata is 4 (read-only) MUST refuse "set_param" in
+      RESULT; 2 (write-only) refuses "get_param" too.
 
    A name that is not in the corresponding array is unknown, and an
-   actuator that refuses what it was asked to do, like any other
-   failure of a call, is answered in RESULT and not with ERROR (Section
-   6.4.2).
+   actuator that refuses what it was asked to do, like any other failure
+   of a call, is answered in RESULT and not with ERROR (Section 6.4.2).
 
 
 9.2.  Topic Namespaces
@@ -1757,8 +1756,8 @@ Table of Contents
    |device.param        |peer          |A parameter was written {name, |
    |                    |              |value}.                        |
    +--------------------+--------------+-------------------------------+
-   |device.event        |peer          |A named device event           |
-   |                    |              |{name, data}.                  |
+   |device.event        |peer          |A named device event {name,    |
+   |                    |              |data}.                         |
    +--------------------+--------------+-------------------------------+
    |device.fault        |peer          |A device fault {name, data}; a |
    |                    |              |consumer SHOULD latch it.      |
@@ -1780,30 +1779,29 @@ Table of Contents
    |blobtun.open        |tunnel        |Tunnel established {tun,       |
    |                    |              |window}.                       |
    +--------------------+--------------+-------------------------------+
-   |blobtun.data        |tunnel        |Tunnel bytes {tun, data,       |
-   |                    |              |len}.                          |
+   |blobtun.data        |tunnel        |Tunnel bytes {tun, data, len}. |
    +--------------------+--------------+-------------------------------+
-   |blobtun.state       |tunnel        |Tunnel state {tun, ack,        |
-   |                    |              |window, off, eof}.             |
+   |blobtun.state       |tunnel        |Tunnel state {tun, ack, window,|
+   |                    |              |off, eof}.                     |
    +--------------------+--------------+-------------------------------+
    |blobtun.close       |tunnel        |Tunnel destroyed {tun, error}. |
    +--------------------+--------------+-------------------------------+
    |core.metadata       |runtime       |What the responder offers      |
    |                    |              |changed.                       |
    +--------------------+--------------+-------------------------------+
-   |core.session        |runtime       |A session state change         |
-   |                    |              |{state, reason}.               |
+   |core.session        |runtime       |A session state change {state, |
+   |                    |              |reason}.                       |
    +--------------------+--------------+-------------------------------+
    |core.heartbeat      |runtime       |A heartbeat report {rtt, time}.|
    +--------------------+--------------+-------------------------------+
    |core.error          |runtime       |A protocol error {code,        |
    |                    |              |message}.                      |
    +--------------------+--------------+-------------------------------+
-   |rpc.call            |runtime       |A call was issued or           |
-   |                    |              |received {id, name, dir}.      |
+   |rpc.call            |runtime       |A call was issued or received  |
+   |                    |              |{id, name, dir}.               |
    +--------------------+--------------+-------------------------------+
-   |rpc.result          |runtime       |A result arrived for a         |
-   |                    |              |call {id, ok, dir}.            |
+   |rpc.result          |runtime       |A result arrived for a call    |
+   |                    |              |{id, ok, dir}.                 |
    +--------------------+--------------+-------------------------------+
    |rpc.timeout         |runtime       |A call passed its deadline     |
    |                    |              |{id, name}.                    |
@@ -1826,11 +1824,11 @@ Table of Contents
 
                        Table 21: Topic Namespaces
 
-   device.connection is dual: when daemon virtualizes the device link
-   it is a PubSub topic published by the peer, but when it reports a
-   direct device link or the daemon's own connection state it is a
-   pseudo-topic raised by the runtime or tunnel.  device.descriptor
-   applies only to virtual devices.
+   device.connection is dual: when daemon virtualizes the device link it
+   is a PubSub topic published by the peer, but when it reports a direct
+   device link or the daemon's own connection state it is a pseudo-topic
+   raised by the runtime or tunnel.  device.descriptor applies only to
+    virtual devices.
 
    To the application layer the two are indistinguishable: an OctoScript
    script or any client handles a pseudo-topic exactly as it handles a
@@ -1844,14 +1842,14 @@ Table of Contents
 
    *  "peer": the endpoint that owns the device being reported on.
 
-   *  "tunnel": the machinery of Section 6.6, for the tunnel whose
-      name appears in the data.  Its topics are pseudo-topics
-      (Section 9.2.1): raised from tunnel messages, not EVENT.
+   *  "tunnel": the machinery of Section 6.6, for the tunnel whose name
+      appears in the data.  Its topics are pseudo-topics (Section
+      9.2.1): raised from tunnel messages, not EVENT.
 
    *  "runtime": the local client runtime.  Its topics are
       pseudo-topics (Section 9.2.1): they are raised in response to a
-      protocol frame or a local condition and never carried by an
-      EVENT frame, so no SUBSCRIBE applies to them.
+      protocol frame or a local condition and never carried by an EVENT
+      frame, so no SUBSCRIBE applies to them.
 
    *  "any": no restriction; the topic is an extension point.
 
@@ -1863,9 +1861,9 @@ Table of Contents
 
 9.2.3.  Assignment
 
-   The prefixes "device.", "core.", "blobtun.", "rpc." and "pubsub."
-   are reserved, and so is every name listed in Table 21.  A topic
-   whose name begins with an underscore is reserved for future standard
+   The prefixes "device.", "core.", "blobtun.", "rpc." and "pubsub." are
+   reserved, and so is every name listed in Table 21.  A topic whose
+   name begins with an underscore is reserved for future standard
    extensions.
 
    *  Matching is exact (Section 6.5.2).  No wildcard and no prefix
@@ -1898,16 +1896,15 @@ Table of Contents
 
    *  Delivery is best effort (Section 6.5.3).  A consumer that cannot
       afford to miss an event recovers by asking for the present state
-      with a call, which is what the core profile of Section 9.1 is
-      for.
+      with a call, which is what the core profile of Section 9.1 is for.
 
-   *  "device.fault" is latched.  A consumer SHOULD hold the fault
-      until "device.cleared" arrives for the same name, or until the
-      fault is cleared by a call.  A latched fault is not repeated.
+   *  "device.fault" is latched.  A consumer SHOULD hold the fault until
+      "device.cleared" arrives for the same name, or until the fault is
+      cleared by a call.  A latched fault is not repeated.
 
-   *  "core.metadata" announces that what the responder offers
-      changed.  A consumer re-reads metadata (Section 6.7) and MUST NOT
-      go on using what it cached.
+   *  "core.metadata" announces that what the responder offers changed.
+      A consumer re-reads metadata (Section 6.7) and MUST NOT go on
+      using what it cached.
 
    *  "log.<name>" carries one record of a named facility.  Severity and
       time belong to the data and not to the name, so one subscription
@@ -1926,11 +1923,10 @@ Table of Contents
       (Section 5.3) and RESULT (Section 5.4).
 
    *  Publish/subscribe, capability "pubsub", uses SUBSCRIBE
-      (Section 5.6), UNSUBSCRIBE (Section 5.7) and EVENT
-      (Section 5.5).
+      (Section 5.6), UNSUBSCRIBE (Section 5.7) and EVENT (Section 5.5).
 
-   *  The blob tunnel, capability "blobtun", uses TUNDATA
-      (Section 5.8) and TUNSTAT (Section 5.9).
+   *  The blob tunnel, capability "blobtun", uses TUNDATA (Section 5.8)
+      and TUNSTAT (Section 5.9).
 
    Each primitive is symmetric: either endpoint MAY originate it, and
    the roles of initiator and responder established by Section 6 grant
@@ -1987,19 +1983,22 @@ Table of Contents
 
    *  keep both arguments and results small, and move anything large
       into a tunnel, since one frame carries one payload;
+   *  Delivery is best effort (Section 6.5.3).  A consumer that cannot
+      afford to miss an event recovers by asking for the present state
+      with a call, which is what the core profile of Section 9.1 is for.
 
    *  serialise explicitly when order matters, rather than relying on
       the order in which procedures are executed;
 
-   *  obtain names from metadata and re-read it when the peer
-      announces a change.
+   *  obtain names from metadata and re-read it when the peer  announces
+      a change.
 
 10.2. Publish and Subscribe
 
    A publisher sends EVENT on a topic; a subscriber receives the events
    of the topics it has subscribed to.  There is no broker, the two
-   roles meet directly, and either endpoint MAY publish, subscribe or
-   do both.  The procedure, and the rules it obeys, are specified in
+   roles meet directly, and either endpoint MAY publish, subscribe or do
+   both.  The procedure, and the rules it obeys, are specified in
    Section 6.5.
 
    The procedure is specified in Section 6.5 and the members in Sections
@@ -2311,8 +2310,8 @@ Appendix A.  Error Code Registry
 
    *  0x0004 to 0x0006: one frame and the value it carries.
 
-   *  0x0007 to 0x000B: a peer refuses what was asked of it, because
-      the session has ended, the feature is not supported, the peer is
+   *  0x0007 to 0x000B: a peer refuses what was asked of it, because the
+      session has ended, the feature is not supported, the peer is
       limiting or busy, or the caller is not authorised.
 
    *  0x000C and 0x000D: a tunnel.
