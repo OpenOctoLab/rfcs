@@ -1,28 +1,31 @@
 
 
-
-
 OpenOcto Standards Group (OOSG)                                  S. Yang
 Request for Comments: 0005                                          HFUT
 Category: Standards Track                                 September 2026
-
 
                  The OpenOcto Device Descriptor Format
 
 Abstract
 
-   A device endpoint of the Octopus Control Protocol [RFC0004] holds no
-   knowledge of the machine it serves; everything it knows comes from a
-   descriptor.  A descriptor is a TOML document that names the buses,
-   states how a procedure call becomes octets on a bus and how received
-   octets become named values again, declares what the device
-   publishes, and states the sessions it will and will not accept.  It
-   carries no control logic: a descriptor translates, and what decides
-   what is to be done about what a device reports is a program and not
-   a file.  This document specifies that format completely: every
-   table, every key, its type and its default, the rules that tie the
-   tables to one another, the validation a descriptor undergoes before
-   any of it is applied, and the diagnostics a violation produces.
+   A device daemon is a virtual device: it answers the Octopus Control
+   Protocol [RFC0004] on one side, talks to hardware on the other, and
+   lets no caller see the difference.  A descriptor is the translation:
+   a TOML document that names the buses, states how a call becomes
+   octets on a bus and how received octets become named values again,
+   declares the procedures, sensors, actuators, parameters and events
+   the device offers, and states the sessions it will and will not
+   accept.  A peer that already speaks [RFC0004] is not described and is
+   not translated: it is relayed, and a descriptor carries nothing about
+   its octets.  A descriptor contains no control logic: it translates,
+   and what acts on what a device reports is a program and not a file.
+   This document specifies that format completely: every table, every
+   key, its type and its default, the rules that tie the tables to one
+   another, the validation a descriptor undergoes before any of it is
+   applied, and the diagnostics a violation produces.  It replaces the
+   format of the same name of an earlier revision and recognises nothing
+   of it: a descriptor written for that revision is rejected, not
+   migrated.
 
 Status of This Memo
 
@@ -56,62 +59,73 @@ Table of Contents
    2.  Conventions
    3.  Document Structure
    4.  The Descriptor Table
-   5.  Endpoint Tables
-   6.  Session Tables
-     6.1.  Offers
-     6.2.  Authentication
-     6.3.  Secure Transport
-     6.4.  Requirements
-   7.  Bus Tables
-   8.  Enumeration Tables
-   9.  Codec Tables
-     9.1.  Fields
-     9.2.  Encoding
-     9.3.  Decoding and Matching
-   10. Instruction Tables
-   11. Parameter Tables
-   12. Signal Tables
-   13. Validation
-   14. Discovery and Publication
-     14.1.  Reserved Names
-     14.2.  Standard Instructions
-     14.3.  Topics
-   15. Security Considerations
-   16. IANA Considerations
-   17. References
-     17.1. Normative References
-     17.2. Informative References
+   5.  Session Tables
+     5.1.  Offers
+     5.2.  Authentication
+     5.3.  Secure Transport
+     5.4.  Requirements
+   6.  Serve Tables
+   7.  Peer Tables
+   8.  Relay Tables
+   9.  Bus Tables
+   10. Enumeration Tables
+   11. Codec Tables
+     11.1.  Fields
+     11.2.  Encoding
+     11.3.  Decoding and Matching
+   12. Instruction Tables
+   13. Actuator Tables
+   14. Sensor Tables
+   15. Parameter Tables
+   16. Signal Tables
+   17. Validation
+   18. Publication
+     18.1.  Reserved Names
+     18.2.  What the Core Instructions Do
+     18.3.  Topics
+   19. Security Considerations
+   20. IANA Considerations
+   21. References
+     21.1. Normative References
+     21.2. Informative References
    Appendix A.  Diagnostics
    Appendix B.  A Complete Descriptor
    Authors' Addresses
 
 1.  Introduction
 
-   A device endpoint of [RFC0004] knows nothing about the machine it
-   serves.  The protocol names no motor, no joint, no sensor and no bus,
-   and what a peer offers is discovered rather than assumed.  A
-   descriptor supplies that knowledge.  It is data and not code: it is
-   read once at start-up, validated as a whole, and then drives the
-   endpoint for as long as it runs, so that changing what a device does
-   means changing a file and not a program.
+   A device daemon of [RFC0004] is a virtual device.  It answers calls,
+   publishes events and moves byte streams on one side; it drives a bus
+   on the other; and the two sides never meet.  A caller sees a device
+   with procedures, sensors, actuators, parameters and events, and it
+   sees no bus, no address and no frame.  That is the point of the
+   arrangement: hardware differs between two machines that do the same
+   job, and nothing about the difference reaches a program.
+
+   A descriptor is the translation between the two sides.  It is data
+   and not code: it is read once at start-up, validated as a whole, and
+   then drives the daemon for as long as it runs, so that changing what
+   a device does means changing a file and not a program.
 
    Five ideas shape the format.
 
-   Transport is separate from signalling.  A bus either carries frames
-   that this descriptor encodes and decodes, or it is a remote peer
-   reached over a session of [RFC0004], and then the peer owns the
-   octets.  No other table of the format is affected by which of the two
-   it is.
+   Translation is the whole job.  A descriptor says what an instruction
+   means on a bus and what a frame means to a program.  It holds no
+   reaction, no policy and no program, and nothing in it decides what is
+   to be done about what the device reports: that decision belongs to a
+   program on the far side of a session.  What acts through a descriptor
+   is a caller, from outside, through an instruction.
 
-   A remote bus is the recommended one.  A descriptor SHOULD reach a
-   device over OCP: the device, or the program that stands in front of
-   it, speaks [RFC0004], owns its own octets and is discovered rather
-   than described.  A local bus, whose octets this descriptor encodes
-   and decodes, is the compatibility path: it is there for a device
-   that cannot speak the protocol, whether because it predates it,
-   because it will never be updated, or because it is a bus and not a
-   computer.  Everything this document says about codecs, parameters
-   and signals is about that path and about nothing else.
+   A bus is hardware.  It carries frames between the daemon and a
+   device, this descriptor encodes and decodes them, and nothing outside
+   Sections 9 to 11 knows that the bus exists.  A bus never appears in
+   what the daemon publishes.
+
+   A peer that speaks [RFC0004] is relayed and not translated.  There is
+   nothing to translate: the peer already answers for itself, so the
+   daemon passes the call on unchanged and passes the answer back
+   unchanged.  Relaying and translating are mutually exclusive, and a
+   name is either one or the other and never both (Section 8).
 
    One codec serves both directions.  A codec is an ordered list of
    fields, each with a name, a position and a type.  Encoding renders
@@ -120,42 +134,34 @@ Table of Contents
    template and a frame filter are the same object and cannot disagree
    about what a frame means.
 
-   An instruction is only a procedure.  There is no separate notion of
-   an actuator, a sensor or a command: each is a procedure with typed
-   arguments, and what distinguishes them is the name a program calls
-   and what the procedure does to the machine.
+   One device, several ways to serve it.  The translation is one, and a
+   descriptor MAY offer it on as many addresses and in as many variants
+   of [RFC0004] as a deployment wants (Section 6).  What differs between
+   two serve modes is where the device is offered, which variant is
+   spoken there, and which part of the translation is exposed; the
+   translation itself does not change.
 
-   A descriptor translates and does not control.  It holds no
-   reaction, no policy and no program: it says what an instruction
-   means on a bus and what a frame means to a program, and nothing in
-   it decides what is to be done about what the device reports.  That
-   decision belongs to a program on the far side of a session, and
-   writing it is not the business of this format.  A descriptor is
-   therefore not a place to put behaviour: it is a translation table,
-   and the only thing in it that acts is a caller, from outside,
-   through an instruction.
+   What a descriptor declares reaches a caller through the mechanisms
+   [RFC0004] already defines: what the device offers is answered by the
+   core instruction "metadata" (Section 18.2), a call is answered by
+   translation or by a relay, and what the device reports is published
+   on the topics of Section 18.3.  What it declares about a session,
+   including what it requires before it will serve one, is Section 5 and
+   is governed by [RFC0009] and [RFC0010].
 
-   What a descriptor declares reaches a peer through the mechanisms
-   [RFC0004] already defines: its instructions appear in discovery
-   (Section 14), what it observes is published on the topics of
-   Section 14.3, and an instruction on a remote bus is a call on a
-   session.  What it declares about a session, including what it
-   requires before it will serve one, is Section 6 and is governed by
-   [RFC0009] and [RFC0010].
-
-   A descriptor is read by the device daemon of [RFC0006] and by
-   nothing else: it is the daemon's translation table and not a
-   description that a peer consumes or a device carries.  A program
-   written in the language of the series [RFC0003] calls what a
-   descriptor declares by the names declared here, and a device that is
-   reached directly, with no daemon in front of it, is not described by
-   one at all.  Such a device has to speak [RFC0004] itself, which is
-   to say that whoever puts it on the network implements an
-   OCP-speaking control program on its behalf; the program that calls
-   it then needs no descriptor, because the device answers for itself.
-   The architecture that puts the daemon, the programs and the protocol
-   together is [RFC0002], and a term that this document takes from it
-   carries the meaning that document gives it.
+   A descriptor is read by the device daemon of [RFC0006] and by nothing
+   else: it is the daemon's translation table and not a description that
+   a peer consumes or a device carries.  A device that is called
+   directly, with no daemon in front of it, is not described here at
+   all.  Such a device speaks [RFC0004] itself, which is to say that
+   whoever puts it on the network implements an OCP-speaking control
+   program on its behalf; the program that calls it then needs no
+   descriptor, because there is nothing left to translate.  A program
+   written in the language of the series [RFC0003] reaches what a
+   descriptor declares through the instructions of [RFC0004], Section
+   9.1.  The architecture that puts the daemon, the programs and the
+   protocol together is [RFC0002], and a term that this document takes
+   from it carries the meaning that document gives it.
 
    This document replaces an earlier revision of the same name.  A
    descriptor of that revision is rejected and is not migrated: no
@@ -167,11 +173,6 @@ Table of Contents
    The key words of [IETF-RFC2119] and [IETF-RFC8174] apply.  A
    descriptor is a TOML document [TOML].  The type names used in the
    tables of this document are listed in Table 1.
-
-   [RFC0002] and [RFC0003] are normative for this document.  A term
-   that [RFC0002] defines carries the same meaning here, and the
-   programs of the series, which are the callers a descriptor serves,
-   are written in the language of [RFC0003].
 
    +=========+=========================================================+
    | Type    | Meaning                                                 |
@@ -195,24 +196,30 @@ Table of Contents
 
                  Table 1: Type Names Used in This Document
 
-   Names.  Every object of this format has a name: a bus, a codec, an
-   instruction, a parameter, a signal, an endpoint, a session, an
-   enumeration and a field.  A name is a non-empty string and is
-   compared as exact octets.  A name SHOULD consist only of ASCII
-   letters, digits and the three characters "_", "-" and "."; a name
-   that contains anything else is accepted but is awkward to carry in a
-   procedure name or in a topic.  The namespaces are separate, so a bus
-   and an instruction MAY share a name and the key that names one says
-   which is meant; two objects of the same kind MUST NOT share one.
+   [RFC0002] and [RFC0003] are normative for this document.  A term
+   that [RFC0002] defines carries the same meaning here, and the
+   programs of the series, which are the callers a descriptor serves,
+   are written in the language of [RFC0003].
+
+   Names.  Every object of this format has a name: a session, a serve
+   mode, a peer, a relay, a bus, a codec, an instruction, an actuator, a
+   sensor, a parameter, a signal, an enumeration and a field.  A name is
+   a non-empty string and is compared as exact octets.  A name SHOULD
+   consist only of ASCII letters, digits and the three characters "_",
+   "-" and "."; a name that contains anything else is accepted but is
+   awkward to carry in a procedure name or in a topic.  The namespaces
+   are separate, so a bus and an instruction MAY share a name and the
+   key that names one says which is meant; two objects of the same kind
+   MUST NOT share one.
 
    Order.  Where a list is declared, as the fields of a codec or the
    arguments of an instruction, the order of declaration is part of its
-   meaning (Sections 9.1 and 10).  Everywhere else the order of keys
+   meaning (Sections 11.1 and 12).  Everywhere else the order of keys
    carries no meaning, and a descriptor MUST NOT rely on it.
 
    Paths.  A key path is written as the TOML path of the table or the
    key it names, for example bus.main.transport.  Diagnostics are
-   written with it (Section 13).
+   written with it (Section 17).
 
    Strictness.  A key that a table does not define is an error, in
    every table of this format and not only in some of them.  Nothing is
@@ -229,40 +236,49 @@ Table of Contents
    | [descriptor]         | Identity and format version of this        |
    |                      | document (Section 4).                      |
    +----------------------+--------------------------------------------+
-   | [endpoint.<name>]    | One place the endpoint listens or connects |
-   |                      | (Section 5).                               |
+   | [session.<name>]     | One variant of [RFC0004]: what it offers,  |
+   |                      | requires and is carried by (Section 5).    |
    +----------------------+--------------------------------------------+
-   | [session.<name>]     | What one session offers, requires and is   |
-   |                      | carried by (Section 6).                    |
+   | [serve.<name>]       | One way the device is served (Section 6).  |
    +----------------------+--------------------------------------------+
-   | [bus.<name>]         | One frame carrier, local or remote         |
+   | [peer.<name>]        | One peer the daemon connects to            |
    |                      | (Section 7).                               |
    +----------------------+--------------------------------------------+
-   | [enum.<name>]        | A map from integers to names (Section 8).  |
+   | [relay.<name>]       | One peer whose calls are passed on         |
+   |                      | unchanged (Section 8).                     |
    +----------------------+--------------------------------------------+
-   | [codec.<name>]       | One frame layout (Section 9).              |
+   | [bus.<name>]         | One hardware bus (Section 9).              |
+   +----------------------+--------------------------------------------+
+   | [enum.<name>]        | A map from integers to names (Section 10). |
+   +----------------------+--------------------------------------------+
+   | [codec.<name>]       | One frame layout (Section 11).             |
    +----------------------+--------------------------------------------+
    | [instruction.<name>] | One procedure a program may call           |
-   |                      | (Section 10).                              |
+   |                      | (Section 12).                              |
    +----------------------+--------------------------------------------+
-   | [param.<name>]       | One named value of the device              |
-   |                      | (Section 11).                              |
+   | [actuator.<name>]    | One thing "actuate" operates (Section 13). |
    +----------------------+--------------------------------------------+
-   | [signal.<name>]      | One thing the device reports (Section 12). |
+   | [sensor.<name>]      | One thing "sense" reads (Section 14).      |
+   +----------------------+--------------------------------------------+
+   | [param.<name>]       | One setting of the device (Section 15).    |
+   +----------------------+--------------------------------------------+
+   | [signal.<name>]      | One thing the device reports (Section 16). |
    +----------------------+--------------------------------------------+
 
                       Table 2: Top-Level Tables
 
-   A descriptor MUST declare at least one bus.  A key that names
-   another object MUST name one that is declared; a reference to
-   nothing is a load-time error and not a run-time surprise.  Three
-   keys, the "bus" of a codec, of an instruction and of a parameter,
-   default to the first bus declared; a descriptor SHOULD state the bus
-   rather than rely on the order of the tables.
+   A descriptor MUST declare at least one serve mode, and it MUST
+   declare at least one bus or one relay: a daemon that neither
+   translates nor relays has nothing to do.  A key that names another
+   object MUST name one that is declared; a reference to nothing is a
+   load-time error and not a run-time surprise.  Three keys, the "bus"
+   of a codec, of an instruction and of an actuator, default to the
+   first bus declared; a descriptor SHOULD state the bus rather than
+   rely on the order of the tables.
 
    The descriptor is found by, in decreasing priority:
 
-   1.  an explicit path given to the endpoint;
+   1.  an explicit path given to the daemon;
 
    2.  the environment variable OCTO_DESCRIPTOR;
 
@@ -273,8 +289,8 @@ Table of Contents
    5.  a default packaged with the implementation.
 
    A missing file and a malformed document are both fatal and both name
-   the path (Appendix A).  A descriptor is applied as a whole: an
-   endpoint MUST NOT start with a part of one.
+   the path (Appendix A).  A descriptor is applied as a whole: a daemon
+   MUST NOT start with a part of one.
 
    A conforming implementation reads a descriptor of format 1, the
    version defined here.  A descriptor whose "format" is a value it does
@@ -284,23 +300,22 @@ Table of Contents
 
    The keys of [descriptor] are listed in Table 3.
 
-   +=============+================+====================================+
-   | Key         | Type           | Meaning                            |
-   +=============+================+====================================+
-   | format      | integer        | REQUIRED.  The version of the      |
-   |             |                | format; 1 in this document.        |
-   +-------------+----------------+------------------------------------+
-   | id          | string         | OPTIONAL.  A stable identity of    |
-   |             |                | the device.  Reported with the     |
-   |             |                | descriptor topic (Section 14.3).   |
-   +-------------+----------------+------------------------------------+
-   | name        | string         | OPTIONAL.  A name meant for a      |
-   |             |                | human.                             |
-   +-------------+----------------+------------------------------------+
-   | help        | string         | OPTIONAL.  A description of the    |
-   |             |                | device, in English, meant for a    |
-   |             |                | human.                             |
-   +-------------+----------------+------------------------------------+
+   +=============+==============+======================================+
+   | Key         | Type         | Meaning                              |
+   +=============+==============+======================================+
+   | format      | integer      | REQUIRED.  The version of the        |
+   |             |              | format; 1 in this document.          |
+   +-------------+--------------+--------------------------------------+
+   | id          | string       | OPTIONAL.  A stable identity of the  |
+   |             |              | device.  Reported with the           |
+   |             |              | descriptor topic (Section 18.3).     |
+   +-------------+--------------+--------------------------------------+
+   | name        | string       | OPTIONAL.  A name meant for a human. |
+   +-------------+--------------+--------------------------------------+
+   | help        | string       | OPTIONAL.  A description of the      |
+   |             |              | device, in English, meant for a      |
+   |             |              | human.                               |
+   +-------------+--------------+--------------------------------------+
 
                    Table 3: Keys of the Descriptor Table
 
@@ -313,119 +328,46 @@ Table of Contents
       name   = "Left arm"
       help   = "Six-axis arm on the port manipulator."
 
-5.  Endpoint Tables
+5.  Session Tables
 
-   [endpoint.<name>] declares one place the endpoint listens on or
-   connects to.  An endpoint whose "mode" is "listen" is the responder
-   of [RFC0004], Section 6; one whose "mode" is "connect" is the
-   initiator and sends HELLO.  The keys are listed in Table 4.
+   [session.<name>] declares one variant of [RFC0004]: what it offers,
+   what it requires and what carries it.  Every serve mode names one,
+   and so does every peer.  A session named "default" is assumed when a
+   key names a session that is not declared: it offers the defaults of
+   Section 5.1, has no authentication, no secure transport and no
+   requirement.
 
-   +=============+================+====================================+
-   | Key         | Type           | Meaning                            |
-   +=============+================+====================================+
-   | mode        | string         | REQUIRED.  "listen" or "connect".  |
-   +-------------+----------------+------------------------------------+
-   | host        | string         | The address to bind, for "listen", |
-   |             |                | or to reach, for "connect".        |
-   |             |                | Default "127.0.0.1" for "listen";  |
-   |             |                | REQUIRED for "connect".            |
-   +-------------+----------------+------------------------------------+
-   | port        | integer        | Default 6286, the port recommended |
-   |             |                | by [RFC0004], Section 7.4, or      |
-   |             |                | 16286 when the session of this     |
-   |             |                | endpoint uses a secure transport   |
-   |             |                | [RFC0010].                         |
-   +-------------+----------------+------------------------------------+
-   | session     | string         | The session this endpoint speaks.  |
-   |             |                | Default "default".                 |
-   +-------------+----------------+------------------------------------+
-   | caps        | array, text    | The capabilities of [RFC0004],     |
-   |             |                | Section 8.  Default ["rpc",        |
-   |             |                | "pubsub", "blobtun"].              |
-   +-------------+----------------+------------------------------------+
-   | max_payload | integer        | Largest payload accepted, in       |
-   |             |                | octets. Default 1048576.           |
-   +-------------+----------------+------------------------------------+
-   | window      | integer        | Tunnel receive window, in octets.  |
-   |             |                | Default 65536.                     |
-   +-------------+----------------+------------------------------------+
-   | slice       | integer        | Tunnel slice size, in octets.      |
-   |             |                | Default 8192.                      |
-   +-------------+----------------+------------------------------------+
-   | buffer      | integer        | Bound on received but unconsumed   |
-   |             |                | tunnel octets.  Default 262144.    |
-   +-------------+----------------+------------------------------------+
-   | heartbeat   | float          | Seconds between heartbeat calls; 0 |
-   |             |                | disables them.  Default 5.0.       |
-   +-------------+----------------+------------------------------------+
-   | liveness    | float          | Seconds without an answer before a |
-   |             |                | peer is considered lost.  Default  |
-   |             |                | 15.0.                              |
-   +-------------+----------------+------------------------------------+
-   | timeout     | float          | Seconds to wait for a connection,  |
-   |             |                | or for WELCOME.  Default 3.0.      |
-   +-------------+----------------+------------------------------------+
-   | retry       | float          | For "connect": seconds between     |
-   |             |                | attempts; 0 gives up after one.    |
-   |             |                | Default 5.0.                       |
-   +-------------+----------------+------------------------------------+
-   | enabled     | boolean        | Default true.  When false the      |
-   |             |                | endpoint is declared but not       |
-   |             |                | opened.                            |
-   +-------------+----------------+------------------------------------+
+5.1.  Offers
 
-                     Table 4: Keys of an Endpoint Table
-
-   The numbers of Table 4 are the recommendations of [RFC0004],
-   Sections 3.3, 6.6.7 and 6.7, restated as defaults; a deployment MAY
-   change any of them and none of them is negotiated by this document.
-
-   Several endpoints MAY be declared.  Two endpoints of the same mode
-   MUST NOT share a host and a port.  An endpoint whose mode is
-   "connect" and whose session requires more than the peer offers is a
-   run-time failure of the session and not an error of the descriptor:
-   what the peer answers is not known when a file is read.
-
-6.  Session Tables
-
-   [session.<name>] declares what one session offers, what it requires
-   and what carries it.  Every endpoint names one, and so does every
-   remote bus through its endpoint.  A session named "default" is
-   assumed when a key names a session that is not declared: it offers
-   the defaults of Section 6.1, has no authentication, no secure
-   transport and no requirement.
-
-6.1.  Offers
-
-   The keys of Table 5 are offers: what this endpoint is willing to
+   The keys of Table 4 are offers: what this endpoint is willing to
    use.  Each is an array of algorithm names, most preferred first, as
    [RFC0004], Section 3.6, requires of an offer.
 
-   +=============+================+====================================+
-   | Key         | Type           | Meaning                            |
-   +=============+================+====================================+
-   | comp        | array, text    | Compression algorithms.  Default   |
-   |             |                | ["zstd"], which is the default of  |
-   |             |                | [RFC0004], Section 3.6.  An empty  |
-   |             |                | array offers none.                 |
-   +-------------+----------------+------------------------------------+
-   | enc         | array, text    | Encryption algorithms of           |
-   |             |                | [RFC0009]. Default empty:          |
-   |             |                | encryption is not offered.         |
-   +-------------+----------------+------------------------------------+
-   | itg         | array, text    | Integrity algorithms of [RFC0009]. |
-   |             |                | Default empty.                     |
-   +-------------+----------------+------------------------------------+
-   | ztr         | array, text    | Zero-trust algorithms of           |
-   |             |                | [RFC0009]. Default empty.          |
-   +-------------+----------------+------------------------------------+
-   | hdr         | array, text    | Header forms of [RFC0009], Section |
-   |             |                | 3.3: "ext", and "core" for the     |
-   |             |                | form of [RFC0004].  Default empty, |
-   |             |                | which is the core form.            |
-   +-------------+----------------+------------------------------------+
+   +=============+==============+======================================+
+   | Key         | Type         | Meaning                              |
+   +=============+==============+======================================+
+   | comp        | array, text  | Compression algorithms.  Default     |
+   |             |              | ["zstd"], which is the default of    |
+   |             |              | [RFC0004], Section 3.6.  An empty    |
+   |             |              | array offers none.                   |
+   +-------------+--------------+--------------------------------------+
+   | enc         | array, text  | Encryption algorithms of [RFC0009].  |
+   |             |              | Default empty: encryption is not     |
+   |             |              | offered.                             |
+   +-------------+--------------+--------------------------------------+
+   | itg         | array, text  | Integrity algorithms of [RFC0009].   |
+   |             |              | Default empty.                       |
+   +-------------+--------------+--------------------------------------+
+   | ztr         | array, text  | Zero-trust algorithms of [RFC0009].  |
+   |             |              | Default empty.                       |
+   +-------------+--------------+--------------------------------------+
+   | hdr         | array, text  | Header forms of [RFC0009], Section   |
+   |             |              | 3.3: "ext", and "core" for the form  |
+   |             |              | of [RFC0004].  Default empty, which  |
+   |             |              | is the core form.                    |
+   +-------------+--------------+--------------------------------------+
 
-                      Table 5: Keys of an Offer
+                      Table 4: Keys of an Offer
 
    The rules of the exchange are those of [RFC0004], Section 6.1, and
    of [RFC0009], Section 9.  Three of them are restated here because a
@@ -441,7 +383,7 @@ Table of Contents
       offers one without the other is an error of the descriptor.
 
    *  A session that offers "enc" or "ztr" MUST declare authentication
-      with a secret (Section 6.2), or a method that yields one, because
+      with a secret (Section 5.2), or a method that yields one, because
       a primitive that has no key produces a session that fails on its
       first protected frame.
 
@@ -449,31 +391,30 @@ Table of Contents
    name an endpoint does not implement MUST be ignored in an offer and
    MUST NOT be confirmed, as [RFC0004], Section 3.6, requires.
 
-6.2.  Authentication
+5.2.  Authentication
 
    The [session.<name>.auth] table is OPTIONAL.  Its keys are listed in
-   Table 6; every other key of the table is defined by the method and is
+   Table 5; every other key of the table is defined by the method and is
    opaque to this document, exactly as the "auth" member of HELLO is
    opaque to [RFC0004], Section 6.2.
 
-   +=============+================+====================================+
-   | Key         | Type           | Meaning                            |
-   +=============+================+====================================+
-   | method      | string         | REQUIRED.  The authentication      |
-   |             |                | method, named as [RFC0004],        |
-   |             |                | Section 6.2, names one.  Compared  |
-   |             |                | exactly.                           |
-   +-------------+----------------+------------------------------------+
-   | secret      | string         | OPTIONAL.  The secret, written in  |
-   |             |                | the descriptor.  Discouraged       |
-   |             |                | (Section 15).                      |
-   +-------------+----------------+------------------------------------+
-   | secret_env  | string         | OPTIONAL.  The name of an          |
-   |             |                | environment variable that holds    |
-   |             |                | the secret.                        |
-   +-------------+----------------+------------------------------------+
+   +=============+==============+======================================+
+   | Key         | Type         | Meaning                              |
+   +=============+==============+======================================+
+   | method      | string       | REQUIRED.  The authentication        |
+   |             |              | method, named as [RFC0004], Section  |
+   |             |              | 6.2, names one.  Compared exactly.   |
+   +-------------+--------------+--------------------------------------+
+   | secret      | string       | OPTIONAL.  The secret, written in    |
+   |             |              | the descriptor.  Discouraged         |
+   |             |              | (Section 19).                        |
+   +-------------+--------------+--------------------------------------+
+   | secret_env  | string       | OPTIONAL.  The name of an            |
+   |             |              | environment variable that holds      |
+   |             |              | the secret.                          |
+   +-------------+--------------+--------------------------------------+
 
-                 Table 6: Keys of the Authentication Table
+                 Table 5: Keys of the Authentication Table
 
    At most one of "secret" and "secret_env" MAY be given.  A method
    that needs no secret is given neither.  When a session is
@@ -486,48 +427,47 @@ Table of Contents
    this implementation does not implement is an error of the
    descriptor.
 
-6.3.  Secure Transport
+5.3.  Secure Transport
 
    The [session.<name>.transport] table is OPTIONAL and selects the
-   binding of [RFC0010].  The keys are listed in Table 7.
+   binding of [RFC0010].  The keys are listed in Table 6.
 
-   +=============+================+====================================+
-   | Key         | Type           | Meaning                            |
-   +=============+================+====================================+
-   | kind        | string         | "none", "tls", "dtls" or "quic".   |
-   |             |                | Default "none": the session is     |
-   |             |                | carried by the transport of        |
-   |             |                | [RFC0004].                         |
-   +-------------+----------------+------------------------------------+
-   | alpn        | string         | The ALPN identifier of [RFC0010],  |
-   |             |                | Section 4.2.  Default "ocp/1".     |
-   +-------------+----------------+------------------------------------+
-   | ca          | string         | OPTIONAL.  Path to the trust       |
-   |             |                | anchors the peer is validated      |
-   |             |                | against.                           |
-   +-------------+----------------+------------------------------------+
-   | pin         | string         | OPTIONAL.  The pin of the peer:    |
-   |             |                | "sha256:" followed by the hex      |
-   |             |                | digits of the hash of its public   |
-   |             |                | key or of its certificate.         |
-   +-------------+----------------+------------------------------------+
-   | cert        | string         | OPTIONAL.  Path to the certificate |
-   |             |                | this endpoint presents as a        |
-   |             |                | client.                            |
-   +-------------+----------------+------------------------------------+
-   | key         | string         | OPTIONAL.  Path to the private key |
-   |             |                | of "cert".                         |
-   +-------------+----------------+------------------------------------+
-   | sni         | string         | OPTIONAL.  The name sent in the    |
-   |             |                | Server Name Indication.  Default   |
-   |             |                | "host".                            |
-   +-------------+----------------+------------------------------------+
-   | min_version | string         | The lowest version of the          |
-   |             |                | transport that is accepted: "1.2"  |
-   |             |                | or "1.3". Default "1.2".           |
-   +-------------+----------------+------------------------------------+
+   +=============+==============+======================================+
+   | Key         | Type         | Meaning                              |
+   +=============+==============+======================================+
+   | kind        | string       | "none", "tls", "dtls" or "quic".     |
+   |             |              | Default "none": the session is       |
+   |             |              | carried by the transport of          |
+   |             |              | [RFC0004].                           |
+   +-------------+--------------+--------------------------------------+
+   | alpn        | string       | The ALPN identifier of [RFC0010],    |
+   |             |              | Section 4.2.  Default "ocp/1".       |
+   +-------------+--------------+--------------------------------------+
+   | ca          | string       | OPTIONAL.  Path to the trust         |
+   |             |              | anchors the peer is validated        |
+   |             |              | against.                             |
+   +-------------+--------------+--------------------------------------+
+   | pin         | string       | OPTIONAL.  The pin of the peer:      |
+   |             |              | "sha256:" followed by the hex        |
+   |             |              | digits of the hash of its public     |
+   |             |              | key or of its certificate.           |
+   +-------------+--------------+--------------------------------------+
+   | cert        | string       | OPTIONAL.  Path to the certificate   |
+   |             |              | this endpoint presents as a client.  |
+   +-------------+--------------+--------------------------------------+
+   | key         | string       | OPTIONAL.  Path to the private key   |
+   |             |              | of "cert".                           |
+   +-------------+--------------+--------------------------------------+
+   | sni         | string       | OPTIONAL.  The name sent in the      |
+   |             |              | Server Name Indication.  Default     |
+   |             |              | "host".                              |
+   +-------------+--------------+--------------------------------------+
+   | min_version | string       | The lowest version of the transport  |
+   |             |              | that is accepted: "1.2" or "1.3".    |
+   |             |              | Default "1.2".                       |
+   +-------------+--------------+--------------------------------------+
 
-                  Table 7: Keys of the Transport Table
+                  Table 6: Keys of the Transport Table
 
    The peer is always validated, as [RFC0010], Section 4.4, requires;
    this document defines no key that turns validation off.  A value of
@@ -541,32 +481,32 @@ Table of Contents
    that asks for both has not answered the question of which one
    protects the session.
 
-6.4.  Requirements
+5.4.  Requirements
 
    The [session.<name>.require] table is OPTIONAL.  Its keys are listed
-   in Table 8; each is a boolean and each is false by default.  A
+   in Table 7; each is a boolean and each is false by default.  A
    requirement says what a session that does not meet it does.
 
-   +=============+================+====================================+
-   | Key         | Type           | Meaning                            |
-   +=============+================+====================================+
-   | auth        | boolean        | Refuse a session that is not       |
-   |             |                | authenticated.                     |
-   +-------------+----------------+------------------------------------+
-   | comp        | boolean        | Refuse a session on which no       |
-   |             |                | compression algorithm was agreed.  |
-   +-------------+----------------+------------------------------------+
-   | enc         | boolean        | Refuse a session on which          |
-   |             |                | encryption was not agreed.         |
-   +-------------+----------------+------------------------------------+
-   | itg         | boolean        | Refuse a session on which no       |
-   |             |                | integrity algorithm was agreed.    |
-   +-------------+----------------+------------------------------------+
-   | ztr         | boolean        | Refuse a session on which no zero- |
-   |             |                | trust algorithm was agreed.        |
-   +-------------+----------------+------------------------------------+
+   +=============+==============+======================================+
+   | Key         | Type         | Meaning                              |
+   +=============+==============+======================================+
+   | auth        | boolean      | Refuse a session that is not         |
+   |             |              | authenticated.                       |
+   +-------------+--------------+--------------------------------------+
+   | comp        | boolean      | Refuse a session on which no         |
+   |             |              | compression algorithm was agreed.    |
+   +-------------+--------------+--------------------------------------+
+   | enc         | boolean      | Refuse a session on which            |
+   |             |              | encryption was not agreed.           |
+   +-------------+--------------+--------------------------------------+
+   | itg         | boolean      | Refuse a session on which no         |
+   |             |              | integrity algorithm was agreed.      |
+   +-------------+--------------+--------------------------------------+
+   | ztr         | boolean      | Refuse a session on which no zero-   |
+   |             |              | trust algorithm was agreed.          |
+   +-------------+--------------+--------------------------------------+
 
-                 Table 8: Keys of the Requirement Table
+                 Table 7: Keys of the Requirement Table
 
    A session that does not meet a requirement is refused, and is
    refused rather than served without what was required: an
@@ -580,49 +520,207 @@ Table of Contents
    an "auth" table, or requiring "enc" or "ztr" without a secret, is an
    error of the descriptor.
 
-7.  Bus Tables
+6.  Serve Tables
 
-   [bus.<name>] declares one frame carrier.  A bus is local when it
-   names a "transport" and remote when it names an "endpoint": a remote
-   bus is a peer reached over a session, and the octets belong to that
-   peer.  The recommended kind is the remote one, and the local kind
-   exists for a device that cannot be reached over the protocol
-   (below).  The keys are listed in Table 9.
+   [serve.<name>] declares one way the device is offered: one address
+   the daemon listens on, in one variant of [RFC0004].  Several MAY be
+   declared, and all of them serve the same device from the same
+   translation.  The keys are listed in Table 8.
 
-   +=============+================+====================================+
-   | Key         | Type           | Meaning                            |
-   +=============+================+====================================+
-   | transport   | string         | The name of a bus transport.       |
-   |             |                | REQUIRED for a local bus; MUST NOT |
-   |             |                | be given for a remote one.         |
-   +-------------+----------------+------------------------------------+
-   | endpoint    | string         | The name of an endpoint whose mode |
-   |             |                | is "connect".  REQUIRED for a      |
-   |             |                | remote bus; MUST NOT be given for  |
-   |             |                | a local one.                       |
-   +-------------+----------------+------------------------------------+
-   | mtu         | integer        | The largest number of data octets  |
-   |             |                | one frame carries.  Default 8.     |
-   +-------------+----------------+------------------------------------+
-   | timeout     | float          | Seconds to wait for a frame that   |
-   |             |                | answers one that was sent. Default |
-   |             |                | 3.0.                               |
-   +-------------+----------------+------------------------------------+
-   | enabled     | boolean        | Default true.  When false the bus  |
-   |             |                | is declared but not opened.        |
-   +-------------+----------------+------------------------------------+
+   +=============+==============+======================================+
+   | Key         | Type         | Meaning                              |
+   +=============+==============+======================================+
+   | host        | string       | The address to bind.  Default        |
+   |             |              | "127.0.0.1".                         |
+   +-------------+--------------+--------------------------------------+
+   | port        | integer      | Default 6286, the port recommended   |
+   |             |              | by [RFC0004], Section 7.4, or 16286  |
+   |             |              | when the session of this serve mode  |
+   |             |              | uses a secure transport [RFC0010].   |
+   +-------------+--------------+--------------------------------------+
+   | session     | string       | The variant of [RFC0004] spoken      |
+   |             |              | here.  Default "default".            |
+   +-------------+--------------+--------------------------------------+
+   | expose      | array, text  | OPTIONAL.  The names this serve mode |
+   |             |              | offers; default all of them.  A      |
+   |             |              | name MUST be one that is declared    |
+   |             |              | (Sections 12 to 16).                 |
+   +-------------+--------------+--------------------------------------+
+   | caps        | array, text  | The capabilities of [RFC0004],       |
+   |             |              | Section 8.  Default ["rpc",          |
+   |             |              | "pubsub", "blobtun"].                |
+   +-------------+--------------+--------------------------------------+
+   | max_payload | integer      | Largest payload accepted, in octets. |
+   |             |              | Default 1048576.                     |
+   +-------------+--------------+--------------------------------------+
+   | window      | integer      | Tunnel receive window, in octets.    |
+   |             |              | Default 65536.                       |
+   +-------------+--------------+--------------------------------------+
+   | slice       | integer      | Tunnel slice size, in octets.        |
+   |             |              | Default 8192.                        |
+   +-------------+--------------+--------------------------------------+
+   | buffer      | integer      | Bound on received but unconsumed     |
+   |             |              | tunnel octets.  Default 262144.      |
+   +-------------+--------------+--------------------------------------+
+   | heartbeat   | float        | Seconds between heartbeat calls; 0   |
+   |             |              | disables them.  Default 5.0.         |
+   +-------------+--------------+--------------------------------------+
+   | liveness    | float        | Seconds without an answer before a   |
+   |             |              | caller is considered lost.  Default  |
+   |             |              | 15.0.                                |
+   +-------------+--------------+--------------------------------------+
+   | enabled     | boolean      | Default true.  When false the serve  |
+   |             |              | mode is declared but not opened.     |
+   +-------------+--------------+--------------------------------------+
 
-                       Table 9: Keys of a Bus Table
+                    Table 8: Keys of a Serve Table
+
+   The numbers of Table 8 are the recommendations of [RFC0004],
+   Sections 3.3, 6.6.7 and 6.7, restated as defaults; a deployment MAY
+   change any of them and none of them is negotiated by this document.
+
+   Two serve modes MUST NOT share a host and a port.  What they differ
+   in is where the device is offered and which variant of [RFC0004] is
+   spoken there, and optionally in which part of the translation is
+   offered: a name that a serve mode does not expose is unknown to a
+   caller on it, and is answered with an application error in RESULT, as
+   [RFC0004], Section 6.4.2, requires of any name that is not known.
+   The translation itself is shared and is never declared twice, so two
+   serve modes cannot disagree about what a call does.
+
+7.  Peer Tables
+
+   [peer.<name>] declares one peer the daemon connects to.  A peer
+   speaks [RFC0004]; it is reached by a relay (Section 8) and by nothing
+   else, because there is nothing to translate on the way to it.  The
+   keys are listed in Table 9.
+
+   +=============+==============+======================================+
+   | Key         | Type         | Meaning                              |
+   +=============+==============+======================================+
+   | host        | string       | REQUIRED.  The address of the peer.  |
+   +-------------+--------------+--------------------------------------+
+   | port        | integer      | Default 6286, or 16286 when the      |
+   |             |              | session of this peer uses a secure   |
+   |             |              | transport [RFC0010].                 |
+   +-------------+--------------+--------------------------------------+
+   | session     | string       | The variant of [RFC0004] spoken to   |
+   |             |              | this peer.  Default "default".       |
+   +-------------+--------------+--------------------------------------+
+   | timeout     | float        | Seconds to wait for WELCOME.         |
+   |             |              | Default 3.0.                         |
+   +-------------+--------------+--------------------------------------+
+   | retry       | float        | Seconds between attempts; 0 gives    |
+   |             |              | up after one.  Default 5.0.          |
+   +-------------+--------------+--------------------------------------+
+   | enabled     | boolean      | Default true.  When false the peer   |
+   |             |              | is declared but not connected to.    |
+   +-------------+--------------+--------------------------------------+
+
+                       Table 9: Keys of a Peer Table
+
+   The daemon is the initiator of the session to a peer, as [RFC0004],
+   Section 6, uses the word: it sends HELLO.  A peer whose session
+   requires more than the peer offers is a run-time failure of the
+   session and not an error of the descriptor: what the peer answers is
+   not known when a file is read.
+
+8.  Relay Tables
+
+   [relay.<name>] declares one peer whose calls are passed on unchanged.
+   A relay translates nothing: it is the case where there is nothing to
+   translate, because the peer already speaks [RFC0004].  The keys are
+   listed in Table 10.
+
+   +=============+==============+======================================+
+   | Key         | Type         | Meaning                              |
+   +=============+==============+======================================+
+   | peer        | string       | REQUIRED.  The name of a peer        |
+   |             |              | (Section 7).                         |
+   +-------------+--------------+--------------------------------------+
+   | prefix      | string       | OPTIONAL.  A namespace: a call whose |
+   |             |              | name begins with it is relayed with  |
+   |             |              | the prefix taken off.                |
+   +-------------+--------------+--------------------------------------+
+   | events      | boolean      | Default true.  Republish what the    |
+   |             |              | peer publishes (below).              |
+   +-------------+--------------+--------------------------------------+
+   | subscribe   | boolean      | Default true.  Forward a             |
+   |             |              | subscription this daemon does not    |
+   |             |              | publish itself (below).              |
+   +-------------+--------------+--------------------------------------+
+   | help        | string       | OPTIONAL.  A description meant for   |
+   |             |              | a human.                             |
+   +-------------+--------------+--------------------------------------+
+
+                      Table 10: Keys of a Relay Table
+
+   At most one relay MAY omit "prefix".  That relay takes every name
+   that this descriptor does not translate; a relay with a prefix takes
+   the names that begin with it.  A name is either translated here or
+   relayed, and never both:
+
+   *  A declared instruction (Section 12) MUST NOT begin with the
+      prefix of a relay.  Such a declaration is an error of the
+      descriptor.
+
+   *  A call that no relay takes and that no instruction declares is
+      unknown, and is answered with an application error in RESULT.
+
+   A relayed call is sent as a CALL of [RFC0004] with the name the
+   prefix leaves, with the arguments of the call unchanged and with
+   nothing decoded, re-encoded or renamed on the way.  The value of the
+   RESULT is returned unchanged, and an application error from the peer
+   is returned unchanged likewise.  "sense", "actuate", "get_param",
+   "set_param" and the rest of the core profile (Section 18.1) are never
+   relayed: they are answered here.
+
+   What a relay publishes and forwards:
+
+   *  With "events" set, what the peer publishes is republished on the
+      sessions of this daemon: with a prefix, under the topic the
+      prefix and the topic of the peer make when they are put together;
+      without one, under the topic itself.  A topic that this daemon
+      publishes itself is not republished.
+
+   *  With "subscribe" set, a subscription to a topic that this daemon
+      does not publish is forwarded to the peer that publishes it, and
+      the answer of the peer is returned.
+
+   A relay has no bus, no codec and no arguments, and no table of this
+   document other than this one applies to it.
+
+9.  Bus Tables
+
+   [bus.<name>] declares one hardware bus: a carrier of frames between
+   the daemon and a device, whose octets this descriptor encodes and
+   decodes.  A bus is never visible to a caller.  The keys are listed in
+   Table 11.
+
+   +=============+==============+======================================+
+   | Key         | Type         | Meaning                              |
+   +=============+==============+======================================+
+   | transport   | string       | REQUIRED.  The name of a bus         |
+   |             |              | transport.                           |
+   +-------------+--------------+--------------------------------------+
+   | mtu         | integer      | The largest number of data octets    |
+   |             |              | one frame carries.  Default 8.       |
+   +-------------+--------------+--------------------------------------+
+   | timeout     | float        | Seconds to wait for a frame that     |
+   |             |              | answers one that was sent. Default   |
+   |             |              | 3.0.                                 |
+   +-------------+--------------+--------------------------------------+
+   | enabled     | boolean      | Default true.  When false the bus    |
+   |             |              | is declared but not opened.          |
+   +-------------+--------------+--------------------------------------+
+
+                       Table 11: Keys of a Bus Table
 
    The [bus.<name>.options] table is OPTIONAL.  Its keys are defined by
    the transport named by "transport" and are passed to it unchanged,
    so that a transport gains settings without a change to this
    document; a transport that is given a key it does not define rejects
-   the descriptor.  A remote bus MUST NOT declare it.
-
-   The name of a bus is the name a program passes in the "bus" member
-   of a bus write ([RFC0004], Section 9.2) and the name that appears in
-   the events of Section 14.3.
+   the descriptor.
 
    The transport name "loopback" MUST be implemented by every
    conforming implementation.  It retains every frame that is sent so
@@ -632,48 +730,31 @@ Table of Contents
    [RFC0007]; a name this implementation does not implement is an error
    of the descriptor.
 
-   A local bus is one whose octets this descriptor describes; a remote
-   bus is one whose octets a peer describes.  No codec, no parameter and
-   no local instruction MAY be declared for a remote bus (Sections 9,
-   10 and 11), and an instruction on a remote bus is a call forwarded
-   to the peer.
+   A bus exists so that a device that cannot speak [RFC0004] can still
+   be served: hardware that predates the protocol, a machine that will
+   never be updated, a link that is a link and not a computer.  A device
+   that does speak it is a peer and is relayed (Section 8), and no bus
+   is declared for it.
 
-   Which of the two a descriptor uses is not a matter of taste, and a
-   descriptor SHOULD use a remote bus.  [RFC0004] already carries
-   calls, events and byte streams, and a peer that speaks it is
-   discovered rather than described: no file has to say what its octets
-   mean, and the device answers for itself.  A local bus is the
-   compatibility path, taken when a device cannot speak the protocol:
-   hardware that predates it, a machine that will never be updated, a
-   bus that is a bus and not a computer.  Everything in Sections 9 to
-   12 exists for that path and for nothing else.
-
-   A device that is called directly, with no daemon in front of it, is
-   not described here at all.  Such a device speaks [RFC0004] itself,
-   which is to say that whoever puts it on the network implements an
-   OCP-speaking control program on its behalf; the program that calls
-   it then needs no descriptor, because there is nothing left to
-   translate.
-
-8.  Enumeration Tables
+10.  Enumeration Tables
 
    [enum.<name>] maps integers onto names so that a value can be given
    as a name by a program and carried as an integer by a bus.  The keys
-   are listed in Table 10.
+   are listed in Table 12.
 
-   +=============+================+====================================+
-   | Key         | Type           | Meaning                            |
-   +=============+================+====================================+
-   | values      | table          | REQUIRED.  Maps an integer to a    |
-   |             |                | string. Two integers MUST NOT map  |
-   |             |                | to one string, and one integer     |
-   |             |                | MUST NOT map to two.               |
-   +-------------+----------------+------------------------------------+
-   | help        | string         | OPTIONAL.  A description meant for |
-   |             |                | a human.                           |
-   +-------------+----------------+------------------------------------+
+   +=============+==============+======================================+
+   | Key         | Type         | Meaning                              |
+   +=============+==============+======================================+
+   | values      | table        | REQUIRED.  Maps an integer to a      |
+   |             |              | string.  Two integers MUST NOT map   |
+   |             |              | to one string, and one integer       |
+   |             |              | MUST NOT map to two.                 |
+   +-------------+--------------+--------------------------------------+
+   | help        | string       | OPTIONAL.  A description meant for   |
+   |             |              | a human.                             |
+   +-------------+--------------+--------------------------------------+
 
-                   Table 10: Keys of an Enumeration
+                   Table 12: Keys of an Enumeration
 
       [enum.mode]
       values = { 0 = "idle", 1 = "run", 2 = "fault" }
@@ -684,11 +765,10 @@ Table of Contents
    integer, so that a device that gains a code does not become a
    descriptor that cannot be loaded.
 
-9.  Codec Tables
+11.  Codec Tables
 
    A frame on a bus is an address and a sequence of octets, as shown in
-   Figure 1.  The address is opaque: an integer identifier for one bus,
-   a port name for another, as [RFC0004], Section 9.2, states.
+   Figure 1.  The address is opaque and its meaning belongs to the bus.
 
    +-----------+-----------------------------------------+
    | addr      | data                                    |
@@ -698,137 +778,133 @@ Table of Contents
                        Figure 1: A Frame on a Bus
 
    [codec.<name>] declares one layout of those octets.  The keys are
-   listed in Table 11, and its fields in Section 9.1.
+   listed in Table 13, and its fields in Section 11.1.
 
-   +=============+================+====================================+
-   | Key         | Type           | Meaning                            |
-   +=============+================+====================================+
-   | bus         | string         | The bus the codec belongs to.      |
-   |             |                | Default the first bus declared.    |
-   |             |                | MUST NOT name a remote bus.        |
-   +-------------+----------------+------------------------------------+
-   | addr        | integer, text  | REQUIRED.  The address a frame     |
-   |             |                | carries.                           |
-   +-------------+----------------+------------------------------------+
-   | len         | integer        | OPTIONAL.  The exact number of     |
-   |             |                | data octets.  Default the width of |
-   |             |                | the fields (Section 9.1).          |
-   +-------------+----------------+------------------------------------+
-   | fields      | array of table | REQUIRED.  At least one field,     |
-   |             |                | declared as                        |
-   |             |                | [[codec.<name>.field]].            |
-   +-------------+----------------+------------------------------------+
-   | help        | string         | OPTIONAL.  A description meant for |
-   |             |                | a human.                           |
-   +-------------+----------------+------------------------------------+
+   +=============+==============+======================================+
+   | Key         | Type         | Meaning                              |
+   +=============+==============+======================================+
+   | bus         | string       | The bus the codec belongs to.        |
+   |             |              | Default the first bus declared.      |
+   +-------------+--------------+--------------------------------------+
+   | addr        | integer,     | REQUIRED.  The address a frame       |
+   |             | text         | carries.                             |
+   +-------------+--------------+--------------------------------------+
+   | len         | integer      | OPTIONAL.  The exact number of data  |
+   |             |              | octets.  Default the width of the    |
+   |             |              | fields (Section 11.1).               |
+   +-------------+--------------+--------------------------------------+
+   | fields      | array of     | REQUIRED.  At least one field,       |
+   |             | table        | declared as [[codec.<name>.field]].  |
+   +-------------+--------------+--------------------------------------+
+   | help        | string       | OPTIONAL.  A description meant for   |
+   |             |              | a human.                             |
+   +-------------+--------------+--------------------------------------+
 
-                       Table 11: Keys of a Codec
+                       Table 13: Keys of a Codec
 
    One codec is used in both directions.  Encoding takes a value per
-   named field and produces the octets (Section 9.2); decoding takes the
-   octets and produces a value per named field (Section 9.3).  A codec
-   is therefore at once the template of a frame that is sent and the
-   filter of a frame that is received, and the two cannot disagree.
+   named field and produces the octets (Section 11.2); decoding takes
+   the octets and produces a value per named field (Section 11.3).  A
+   codec is therefore at once the template of a frame that is sent and
+   the filter of a frame that is received, and the two cannot disagree.
 
-9.1.  Fields
+11.1.  Fields
 
    A field is declared as [[codec.<name>.field]].  Its keys are listed
-   in Table 12.
+   in Table 14.
 
-   +=============+================+====================================+
-   | Key         | Type           | Meaning                            |
-   +=============+================+====================================+
-   | name        | string         | The name the field binds to.       |
-   |             |                | REQUIRED unless "const" is given.  |
-   |             |                | Unique within the codec.           |
-   +-------------+----------------+------------------------------------+
-   | at          | integer        | Offset of the field in the data,   |
-   |             |                | in octets, counted from zero.      |
-   |             |                | Default the end of the previous    |
-   |             |                | field, or zero for the first.      |
-   +-------------+----------------+------------------------------------+
-   | type        | string         | REQUIRED.  One of the types of     |
-   |             |                | Table 13.                          |
-   +-------------+----------------+------------------------------------+
-   | endian      | string         | "be" or "le".  Default "be".       |
-   |             |                | Ignored for a type of one octet    |
-   |             |                | and for "bytes".                   |
-   +-------------+----------------+------------------------------------+
-   | count       | integer        | REQUIRED for "bytes", the number   |
-   |             |                | of octets.  MUST NOT be given      |
-   |             |                | otherwise.                         |
-   +-------------+----------------+------------------------------------+
-   | const       | value          | A literal.  Written when encoding  |
-   |             |                | (Section 9.2), required to be      |
-   |             |                | equal when matching (Section 9.3). |
-   |             |                | For "bytes" it is a string of hex  |
-   |             |                | digits.                            |
-   +-------------+----------------+------------------------------------+
-   | scale       | float          | Default 1.0.  Applied to the       |
-   |             |                | physical value (Section 9.2).      |
-   +-------------+----------------+------------------------------------+
-   | bias        | float          | Default 0.0.  Added to the         |
-   |             |                | physical value (Section 9.2).      |
-   +-------------+----------------+------------------------------------+
-   | unit        | string         | OPTIONAL.  The unit of the         |
-   |             |                | physical value, meant for a human  |
-   |             |                | and for discovery.                 |
-   +-------------+----------------+------------------------------------+
-   | range       | array, float   | OPTIONAL.  Two numbers, the        |
-   |             |                | smallest and the largest physical  |
-   |             |                | value. Checked when encoding       |
-   |             |                | (Section 9.2).                     |
-   +-------------+----------------+------------------------------------+
-   | saturate    | boolean        | Default false.  When true, a       |
-   |             |                | physical value outside "range" is  |
-   |             |                | clamped to it instead of rejected. |
-   +-------------+----------------+------------------------------------+
-   | enum        | string         | OPTIONAL.  The name of an          |
-   |             |                | enumeration (Section 8) that       |
-   |             |                | presents the value.                |
-   +-------------+----------------+------------------------------------+
-   | default     | value          | OPTIONAL.  The value used when the |
-   |             |                | binding supplies none.             |
-   +-------------+----------------+------------------------------------+
-   | help        | string         | OPTIONAL.  A description meant for |
-   |             |                | a human.                           |
-   +-------------+----------------+------------------------------------+
+   +=============+==============+======================================+
+   | Key         | Type         | Meaning                              |
+   +=============+==============+======================================+
+   | name        | string       | The name the field binds to.         |
+   |             |              | REQUIRED unless "const" is given.    |
+   |             |              | Unique within the codec.             |
+   +-------------+--------------+--------------------------------------+
+   | at          | integer      | Offset of the field in the data, in  |
+   |             |              | octets, counted from zero.  Default  |
+   |             |              | the end of the previous field, or    |
+   |             |              | zero for the first.                  |
+   +-------------+--------------+--------------------------------------+
+   | type        | string       | REQUIRED.  One of the types of       |
+   |             |              | Table 15.                            |
+   +-------------+--------------+--------------------------------------+
+   | endian      | string       | "be" or "le".  Default "be".         |
+   |             |              | Ignored for a type of one octet and  |
+   |             |              | for "bytes".                         |
+   +-------------+--------------+--------------------------------------+
+   | count       | integer      | REQUIRED for "bytes", the number of  |
+   |             |              | octets.  MUST NOT be given           |
+   |             |              | otherwise.                           |
+   +-------------+--------------+--------------------------------------+
+   | const       | value        | A literal.  Written when encoding    |
+   |             |              | (Section 11.2), required to be       |
+   |             |              | equal when matching (Section 11.3).  |
+   |             |              | For "bytes" it is a string of hex    |
+   |             |              | digits.                              |
+   +-------------+--------------+--------------------------------------+
+   | scale       | float        | Default 1.0.  Applied to the         |
+   |             |              | physical value (Section 11.2).       |
+   +-------------+--------------+--------------------------------------+
+   | bias        | float        | Default 0.0.  Added to the physical  |
+   |             |              | value (Section 11.2).                |
+   +-------------+--------------+--------------------------------------+
+   | unit        | string       | OPTIONAL.  The unit of the physical  |
+   |             |              | value, meant for a human and for     |
+   |             |              | metadata.                            |
+   +-------------+--------------+--------------------------------------+
+   | range       | array,       | OPTIONAL.  Two numbers, the          |
+   |             | float        | smallest and the largest physical    |
+   |             |              | value.  Checked when encoding        |
+   |             |              | (Section 11.2).                      |
+   +-------------+--------------+--------------------------------------+
+   | saturate    | boolean      | Default false.  When true, a         |
+   |             |              | physical value outside "range" is    |
+   |             |              | clamped to it instead of rejected.   |
+   +-------------+--------------+--------------------------------------+
+   | enum        | string       | OPTIONAL.  The name of an            |
+   |             |              | enumeration (Section 10) that        |
+   |             |              | presents the value.                  |
+   +-------------+--------------+--------------------------------------+
+   | default     | value        | OPTIONAL.  The value used when the   |
+   |             |              | binding supplies none.               |
+   +-------------+--------------+--------------------------------------+
+   | help        | string       | OPTIONAL.  A description meant for   |
+   |             |              | a human.                             |
+   +-------------+--------------+--------------------------------------+
 
-                       Table 12: Keys of a Field
+                       Table 14: Keys of a Field
 
-   The types of a field are listed in Table 13.  The width of a field is
+   The types of a field are listed in Table 15.  The width of a field is
    fixed by its type, and the width of a codec is the end of its last
    field.
 
-   +=============+================+====================================+
-   | Type        | Octets         | Meaning                            |
-   +=============+================+====================================+
-   | u8          | 1              | Unsigned integer.                  |
-   +-------------+----------------+------------------------------------+
-   | i8          | 1              | Signed integer, two's complement.  |
-   +-------------+----------------+------------------------------------+
-   | u16         | 2              | Unsigned integer.                  |
-   +-------------+----------------+------------------------------------+
-   | i16         | 2              | Signed integer.                    |
-   +-------------+----------------+------------------------------------+
-   | u32         | 4              | Unsigned integer.                  |
-   +-------------+----------------+------------------------------------+
-   | i32         | 4              | Signed integer.                    |
-   +-------------+----------------+------------------------------------+
-   | u64         | 8              | Unsigned integer.                  |
-   +-------------+----------------+------------------------------------+
-   | i64         | 8              | Signed integer.                    |
-   +-------------+----------------+------------------------------------+
-   | f32         | 4              | Float, IEEE 754 binary32           |
-   |             |                | [IEEE754].                         |
-   +-------------+----------------+------------------------------------+
-   | f64         | 8              | Float, IEEE 754 binary64           |
-   |             |                | [IEEE754].                         |
-   +-------------+----------------+------------------------------------+
-   | bytes       | count          | Opaque octets.                     |
-   +-------------+----------------+------------------------------------+
+   +=============+==============+======================================+
+   | Type        | Octets       | Meaning                              |
+   +=============+==============+======================================+
+   | u8          | 1            | Unsigned integer.                    |
+   +-------------+--------------+--------------------------------------+
+   | i8          | 1            | Signed integer, two's complement.    |
+   +-------------+--------------+--------------------------------------+
+   | u16         | 2            | Unsigned integer.                    |
+   +-------------+--------------+--------------------------------------+
+   | i16         | 2            | Signed integer.                      |
+   +-------------+--------------+--------------------------------------+
+   | u32         | 4            | Unsigned integer.                    |
+   +-------------+--------------+--------------------------------------+
+   | i32         | 4            | Signed integer.                      |
+   +-------------+--------------+--------------------------------------+
+   | u64         | 8            | Unsigned integer.                    |
+   +-------------+--------------+--------------------------------------+
+   | i64         | 8            | Signed integer.                      |
+   +-------------+--------------+--------------------------------------+
+   | f32         | 4            | Float, IEEE 754 binary32 [IEEE754].  |
+   +-------------+--------------+--------------------------------------+
+   | f64         | 8            | Float, IEEE 754 binary64 [IEEE754].  |
+   +-------------+--------------+--------------------------------------+
+   | bytes       | count        | Opaque octets.                       |
+   +-------------+--------------+--------------------------------------+
 
-                        Table 13: Field Types
+                        Table 15: Field Types
 
    A field carries a value of one of three kinds, and which one is
    decided by its type and by its "scale" and "bias".  A field of an
@@ -838,8 +914,8 @@ Table of Contents
    or biased, because what a program sees is the physical value and not
    the raw one.  A field of type "bytes" carries a byte string.  This is
    the value type of the field, and it is what the type of an argument
-   (Section 10) and the type of a parameter (Section 11) are checked
-   against.
+   (Section 12), of a sensor (Section 14) and of a parameter
+   (Section 15) is checked against.
 
    The layout rules are:
 
@@ -881,14 +957,15 @@ Table of Contents
    as zero because "len" is 8.  A caller that names no "mode" gets 1,
    which the enumeration calls "run".
 
-9.2.  Encoding
+11.2.  Encoding
 
    Encoding renders a codec and a set of bound values into the data
    octets of a frame.  A value is bound to a field by its name: by an
-   argument of an instruction (Section 10), by the value a parameter is
-   written with (Section 11) or by the "default" of the field.  Every
-   field that has a name MUST be bound, and a binding that names no
-   field is an error of the descriptor.
+   argument of an instruction (Section 12) or of an actuator
+   (Section 13), by the value a parameter is written with (Section 15)
+   or by the "default" of the field.  Every field that has a name MUST
+   be bound, and a binding that names no field is an error of the
+   descriptor.
 
    For each field, in order:
 
@@ -917,7 +994,7 @@ Table of Contents
    Constant fields are what make a codec a template rather than a
    record: they are the parts of a frame that a caller never chooses.
 
-9.3.  Decoding and Matching
+11.3.  Decoding and Matching
 
    A frame that a bus receives is offered to the codecs of that bus, in
    the order they are declared.  A codec matches when all of the
@@ -938,106 +1015,99 @@ Table of Contents
    reported under the name of its field, and the octets of a gap are
    discarded.
 
-   Decoding applies no "range": a range is a guard on what this
-   endpoint sends and not a filter on what a device reports, and a
-   device that reports a value outside one is still understood.
+   Decoding applies no "range": a range is a guard on what this daemon
+   sends and not a filter on what a device reports, and a device that
+   reports a value outside one is still understood.
 
-   A frame that matches no codec is not discarded silently.  It is
-   published on the topic "bus.rx" with its bus, its address and its
-   octets (Section 14.3), so that no traffic that a bus carried is
-   invisible to a program.
+   A frame that matches no codec is discarded.  A bus is the daemon's
+   own business and is not published: a caller sees devices, not
+   frames, and a frame that nothing understands is reported by the
+   device that owns it or is not reported at all.
 
-10.  Instruction Tables
+12.  Instruction Tables
 
-   [instruction.<name>] declares one procedure a program may call.  Its
-   keys are listed in Table 14, and its arguments in Table 15.
+   [instruction.<name>] declares one procedure a program may call by
+   its name.  Its keys are listed in Table 16, and its arguments in
+   Table 17.
 
-   +=============+================+====================================+
-   | Key         | Type           | Meaning                            |
-   +=============+================+====================================+
-   | bus         | string         | The bus the instruction acts on.   |
-   |             |                | Default the first bus declared.    |
-   +-------------+----------------+------------------------------------+
-   | req         | string         | The codec of the frame sent.       |
-   |             |                | REQUIRED for a local bus; MUST NOT |
-   |             |                | be given for a remote one.         |
-   +-------------+----------------+------------------------------------+
-   | res         | string         | OPTIONAL.  The codec of the frame  |
-   |             |                | that answers.  When given, the     |
-   |             |                | call waits for it and returns its  |
-   |             |                | values. MUST NOT be given for a    |
-   |             |                | remote bus.                        |
-   +-------------+----------------+------------------------------------+
-   | timeout     | float          | Seconds to wait for "res". Default |
-   |             |                | the "timeout" of the bus.          |
-   +-------------+----------------+------------------------------------+
-   | args        | array of table | OPTIONAL.  The arguments, declared |
-   |             |                | as [[instruction.<name>.arg]].     |
-   +-------------+----------------+------------------------------------+
-   | help        | string         | OPTIONAL.  A description meant for |
-   |             |                | a human.                           |
-   +-------------+----------------+------------------------------------+
+   +=============+==============+======================================+
+   | Key         | Type         | Meaning                              |
+   +=============+==============+======================================+
+   | bus         | string       | The bus the instruction acts on.     |
+   |             |              | Default the first bus declared.      |
+   +-------------+--------------+--------------------------------------+
+   | req         | string       | REQUIRED.  The codec of the frame    |
+   |             |              | sent.                                |
+   +-------------+--------------+--------------------------------------+
+   | res         | string       | OPTIONAL.  The codec of the frame    |
+   |             |              | that answers.  When given, the call  |
+   |             |              | waits for it and returns its values. |
+   +-------------+--------------+--------------------------------------+
+   | timeout     | float        | Seconds to wait for "res". Default   |
+   |             |              | the "timeout" of the bus.            |
+   +-------------+--------------+--------------------------------------+
+   | args        | array of     | OPTIONAL.  The arguments, declared   |
+   |             | table        | as [[instruction.<name>.arg]].       |
+   +-------------+--------------+--------------------------------------+
+   | help        | string       | OPTIONAL.  A description meant for   |
+   |             |              | a human.                             |
+   +-------------+--------------+--------------------------------------+
 
-                   Table 14: Keys of an Instruction
+                   Table 16: Keys of an Instruction
 
-   +=============+================+====================================+
-   | Key         | Type           | Meaning                            |
-   +=============+================+====================================+
-   | name        | string         | REQUIRED.  The name the argument   |
-   |             |                | binds to, and the name a program   |
-   |             |                | uses. Unique within the            |
-   |             |                | instruction.                       |
-   +-------------+----------------+------------------------------------+
-   | type        | string         | REQUIRED.  The type of the value   |
-   |             |                | the caller supplies: the value     |
-   |             |                | type of the field it binds to      |
-   |             |                | (Section 9.1).                     |
-   +-------------+----------------+------------------------------------+
-   | unit        | string         | OPTIONAL.  The unit of the value.  |
-   +-------------+----------------+------------------------------------+
-   | range       | array, float   | OPTIONAL.  Two numbers, checked    |
-   |             |                | before encoding, in addition to    |
-   |             |                | the range of the field.            |
-   +-------------+----------------+------------------------------------+
-   | enum        | string         | OPTIONAL.  The name of an          |
-   |             |                | enumeration.                       |
-   +-------------+----------------+------------------------------------+
-   | default     | value          | OPTIONAL.  The value used when a   |
-   |             |                | call supplies none.                |
-   +-------------+----------------+------------------------------------+
-   | help        | string         | OPTIONAL.  A description meant for |
-   |             |                | a human.                           |
-   +-------------+----------------+------------------------------------+
+   +=============+==============+======================================+
+   | Key         | Type         | Meaning                              |
+   +=============+==============+======================================+
+   | name        | string       | REQUIRED.  The name the argument     |
+   |             |              | binds to, and the name a program     |
+   |             |              | uses.  Unique within the             |
+   |             |              | instruction.                         |
+   +-------------+--------------+--------------------------------------+
+   | type        | string       | REQUIRED.  The type of the value     |
+   |             |              | the caller supplies: the value type  |
+   |             |              | of the field it binds to (Section    |
+   |             |              | 11.1).                               |
+   +-------------+--------------+--------------------------------------+
+   | unit        | string       | OPTIONAL.  The unit of the value.    |
+   +-------------+--------------+--------------------------------------+
+   | range       | array,       | OPTIONAL.  Two numbers, checked      |
+   |             | float        | before encoding, in addition to the  |
+   |             |              | range of the field.                  |
+   +-------------+--------------+--------------------------------------+
+   | enum        | string       | OPTIONAL.  The name of an            |
+   |             |              | enumeration.                         |
+   +-------------+--------------+--------------------------------------+
+   | default     | value        | OPTIONAL.  The value used when a     |
+   |             |              | call supplies none.                  |
+   +-------------+--------------+--------------------------------------+
+   | help        | string       | OPTIONAL.  A description meant for   |
+   |             |              | a human.                             |
+   +-------------+--------------+--------------------------------------+
 
-                     Table 15: Keys of an Argument
+                     Table 17: Keys of an Argument
 
    The name of an instruction is the name a program passes in the "name"
-   member of CALL ([RFC0004], Section 5.3).  It MUST NOT be one of the
-   reserved names of Section 14.1.
+   member of CALL ([RFC0004], Section 5.3), and it MUST NOT be one of
+   the reserved names of Section 18.1 or the name of an actuator
+   (Section 13).
 
-   On a local bus the instruction renders "req" with the arguments of
-   the call and writes it to the bus.  The rules of binding are those of
-   Section 9.2, with three additions:
+   The instruction renders "req" with the arguments of the call and
+   writes it to the bus.  The rules of binding are those of
+   Section 11.2, with three additions:
 
    *  Every argument MUST bind to a field of "req" by name, and every
       named field of "req" MUST be bound by an argument, by its
       "default" or by "const".  A mismatch is an error of the
-      descriptor, which is what makes discovery truthful.
+      descriptor, which is what makes metadata truthful.
 
    *  The type of an argument MUST be the value type of the field it
-      binds to (Section 9.1).
+      binds to (Section 11.1).
 
    *  When "res" is given, the call does not complete until a frame
       matching that codec arrives on the same bus, and returns the
       values of that codec.  When it is not given, the call completes
       when the frame has been written and returns null.  A call that
       waits and is not answered within "timeout" fails.
-
-   On a remote bus the instruction is forwarded: the call is sent as a
-   CALL of [RFC0004] with the same name and with its arguments under
-   their names, and the value of the RESULT is returned.  An instruction
-   on a remote bus is therefore a declaration that a peer offers
-   something, and the descriptor says nothing about its octets.
 
    A failure of an instruction is an application failure and is
    answered in RESULT, as [RFC0004], Section 6.4.2, requires: an
@@ -1048,163 +1118,267 @@ Table of Contents
       [instruction.drive]
       bus  = "main"
       req  = "drive"
-      help = "Spin the joint at a speed."
+      help = "Spin a joint at a speed."
 
       [[instruction.drive.arg]]
-      name = "speed"
-      type = "f32"
-      unit = "rad/s"
+      name  = "speed"
+      type  = "f32"
+      unit  = "rad/s"
       range = [-31.0, 31.0]
 
-      [instruction.grip]
-      bus  = "remote"
-      help = "Close the gripper of the peer."
+13.  Actuator Tables
 
-      [[instruction.grip.arg]]
-      name = "force"
-      type = "u8"
+   [actuator.<name>] declares one thing a program operates with the
+   core instruction "actuate" (Section 18.2).  Its keys are listed in
+   Table 18, and its arguments are those of Table 17.
 
-11.  Parameter Tables
+   +=============+==============+======================================+
+   | Key         | Type         | Meaning                              |
+   +=============+==============+======================================+
+   | bus         | string       | The bus the actuator acts on.        |
+   |             |              | Default the first bus declared.      |
+   +-------------+--------------+--------------------------------------+
+   | req         | string       | REQUIRED.  The codec of the frame    |
+   |             |              | sent.                                |
+   +-------------+--------------+--------------------------------------+
+   | res         | string       | OPTIONAL.  The codec of the frame    |
+   |             |              | that answers.                        |
+   +-------------+--------------+--------------------------------------+
+   | timeout     | float        | Seconds to wait for "res". Default   |
+   |             |              | the "timeout" of the bus.            |
+   +-------------+--------------+--------------------------------------+
+   | args        | array of     | OPTIONAL.  The arguments, declared   |
+   |             | table        | as [[actuator.<name>.arg]].          |
+   +-------------+--------------+--------------------------------------+
+   | help        | string       | OPTIONAL.  A description meant for   |
+   |             |              | a human.                             |
+   +-------------+--------------+--------------------------------------+
 
-   [param.<name>] declares one named value of the device that a program
-   may read and write by name.  Its keys are listed in Table 16.
+                     Table 18: Keys of an Actuator
 
-   +=============+================+====================================+
-   | Key         | Type           | Meaning                            |
-   +=============+================+====================================+
-   | bus         | string         | The bus that carries the value.    |
-   |             |                | Default the first bus declared.    |
-   |             |                | MUST NOT name a remote bus.        |
-   +-------------+----------------+------------------------------------+
-   | type        | string         | REQUIRED.  The type of the value   |
-   |             |                | (Section 9.1).                     |
-   +-------------+----------------+------------------------------------+
-   | unit        | string         | OPTIONAL.  The unit of the value.  |
-   +-------------+----------------+------------------------------------+
-   | range       | array, float   | OPTIONAL.  Two numbers, checked    |
-   |             |                | when the value is written.         |
-   +-------------+----------------+------------------------------------+
-   | enum        | string         | OPTIONAL.  The name of an          |
-   |             |                | enumeration.                       |
-   +-------------+----------------+------------------------------------+
-   | default     | value          | OPTIONAL.  The value held before   |
-   |             |                | anything is read.  Default zero.   |
-   +-------------+----------------+------------------------------------+
-   | read        | table          | OPTIONAL.  How the value is read   |
-   |             |                | (Table 17).                        |
-   +-------------+----------------+------------------------------------+
-   | write       | table          | OPTIONAL.  How the value is        |
-   |             |                | written (Table 17).                |
-   +-------------+----------------+------------------------------------+
-   | help        | string         | OPTIONAL.  A description meant for |
-   |             |                | a human.                           |
-   +-------------+----------------+------------------------------------+
+   An actuator is reached through "actuate" and has no name of its own
+   in the protocol: a call that names one directly is unknown, as
+   [RFC0004], Section 9.1.3, requires.  Everything else about it is as
+   it is for an instruction: the same binding rules, the same waiting
+   for "res" and the same answering of a failure in RESULT.
 
-                    Table 16: Keys of a Parameter
+      [actuator.gripper]
+      bus  = "tool"
+      req  = "grip"
+      help = "Close the gripper at a force."
+
+      [[actuator.gripper.arg]]
+      name  = "force"
+      type  = "u8"
+      range = [0, 100]
+
+14.  Sensor Tables
+
+   [sensor.<name>] declares one measurement of the device, which a
+   program reads with the core instruction "sense" (Section 18.2).  Its
+   keys are listed in Table 19.
+
+   +=============+==============+======================================+
+   | Key         | Type         | Meaning                              |
+   +=============+==============+======================================+
+   | bus         | string       | The bus that carries the value.      |
+   |             |              | Default the first bus declared.      |
+   +-------------+--------------+--------------------------------------+
+   | type        | string       | REQUIRED.  The type of the value     |
+   |             |              | (Section 11.1).                      |
+   +-------------+--------------+--------------------------------------+
+   | unit        | string       | OPTIONAL.  The unit of the value.    |
+   +-------------+--------------+--------------------------------------+
+   | range       | array,       | OPTIONAL.  Two numbers: the value a  |
+   |             | float        | reading is expected to lie between.  |
+   +-------------+--------------+--------------------------------------+
+   | enum        | string       | OPTIONAL.  The name of an            |
+   |             |              | enumeration.                         |
+   +-------------+--------------+--------------------------------------+
+   | default     | value        | OPTIONAL.  The value held before     |
+   |             |              | anything arrives.  Default zero.     |
+   +-------------+--------------+--------------------------------------+
+   | codec       | string       | OPTIONAL.  The codec whose decoded   |
+   |             |              | frame carries the reading.           |
+   +-------------+--------------+--------------------------------------+
+   | field       | string       | REQUIRED when "codec" is given: the  |
+   |             |              | name of the field that carries the   |
+   |             |              | reading.                             |
+   +-------------+--------------+--------------------------------------+
+   | read        | table        | OPTIONAL.  How a fresh reading is    |
+   |             |              | asked for (Table 21).                |
+   +-------------+--------------+--------------------------------------+
+   | help        | string       | OPTIONAL.  A description meant for   |
+   |             |              | a human.                             |
+   +-------------+--------------+--------------------------------------+
+
+                       Table 19: Keys of a Sensor
+
+   At least one of "codec" and "read" MUST be given.  The "field" of a
+   codec MUST name a field of it whose value type (Section 11.1) is the
+   type of the sensor.
+
+   A sensor is a measurement and not a setting: it is read-only, and no
+   instruction of [RFC0004], Section 9.1, writes one.  "sense" returns
+   the most recent reading the daemon holds.  When "read" is declared,
+   "sense" sends the request first, and waits when "block" is true; a
+   sensor with no "read" is fed by whatever the device sends, and a
+   reading that arrives unbidden updates it just the same.
+
+   A sensor is a state and not a fact, so it is not published: a
+   program that wants to follow one asks for it.  What the device
+   publishes is events (Section 16).
+
+15.  Parameter Tables
+
+   [param.<name>] declares one setting of the device, which a program
+   reads and writes with the core instructions "get_param" and
+   "set_param" (Section 18.2).  Its keys are listed in Table 21.
+
+   +=============+==============+======================================+
+   | Key         | Type         | Meaning                              |
+   +=============+==============+======================================+
+   | bus         | string       | The bus that carries the value.      |
+   |             |              | Default the first bus declared.      |
+   +-------------+--------------+--------------------------------------+
+   | type        | string       | REQUIRED.  The type of the value     |
+   |             |              | (Section 11.1).                      |
+   +-------------+--------------+--------------------------------------+
+   | unit        | string       | OPTIONAL.  The unit of the value.    |
+   +-------------+--------------+--------------------------------------+
+   | range       | array,       | OPTIONAL.  Two numbers, checked      |
+   |             | float        | when the value is written.           |
+   +-------------+--------------+--------------------------------------+
+   | enum        | string       | OPTIONAL.  The name of an            |
+   |             |              | enumeration.                         |
+   +-------------+--------------+--------------------------------------+
+   | default     | value        | OPTIONAL.  The value held before     |
+   |             |              | anything is read.  Default zero.     |
+   +-------------+--------------+--------------------------------------+
+   | read        | table        | OPTIONAL.  How the value is read     |
+   |             |              | (Table 21).                          |
+   +-------------+--------------+--------------------------------------+
+   | write       | table        | OPTIONAL.  How the value is written  |
+   |             |              | (Table 21).                          |
+   +-------------+--------------+--------------------------------------+
+   | help        | string       | OPTIONAL.  A description meant for   |
+   |             |              | a human.                             |
+   +-------------+--------------+--------------------------------------+
+
+                    Table 20: Keys of a Parameter
 
    At least one of "read" and "write" MUST be given; a parameter that
-   can be neither is a name and not a value.
+   can be neither is a name and not a value.  Giving "read" alone makes
+   the parameter read-only, giving "write" alone makes it write-only
+   and giving both makes it read-write.  This mode is the numeric
+   "mode" member the peer reports for the parameter in metadata: 4
+   for read-only, 6 for read-write and 2 for write-only, in Linux
+   permission notation with the x bit unused, so a caller learns it
+   at the application layer.
 
-   +=============+================+====================================+
-   | Key         | Type           | Meaning                            |
-   +=============+================+====================================+
-   | req         | string         | REQUIRED.  The codec of the frame  |
-   |             |                | sent.                              |
-   +-------------+----------------+------------------------------------+
-   | res         | string         | The codec of the frame that        |
-   |             |                | answers. REQUIRED for "read",      |
-   |             |                | OPTIONAL for "write".              |
-   +-------------+----------------+------------------------------------+
-   | field       | string         | REQUIRED.  The name of the field,  |
-   |             |                | of "req" for a write and of "res"  |
-   |             |                | for a read, that carries the       |
-   |             |                | value.                             |
-   +-------------+----------------+------------------------------------+
-   | block       | boolean        | For "read" only.  Default false.   |
-   |             |                | When true the call waits for the   |
-   |             |                | answer instead of returning what   |
-   |             |                | is cached.                         |
-   +-------------+----------------+------------------------------------+
-   | timeout     | float          | Seconds to wait.  Default the      |
-   |             |                | "timeout" of the bus.              |
-   +-------------+----------------+------------------------------------+
+   +=============+==============+======================================+
+   | Key         | Type         | Meaning                              |
+   +=============+==============+======================================+
+   | req         | string       | REQUIRED.  The codec of the frame    |
+   |             |              | sent.                                |
+   +-------------+--------------+--------------------------------------+
+   | res         | string       | The codec of the frame that          |
+   |             |              | answers.  REQUIRED for "read",       |
+   |             |              | OPTIONAL for "write".                |
+   +-------------+--------------+--------------------------------------+
+   | field       | string       | REQUIRED.  The name of the field,    |
+   |             |              | of "req" for a write and of "res"    |
+   |             |              | for a read, that carries the value.  |
+   +-------------+--------------+--------------------------------------+
+   | block       | boolean      | For "read" only.  Default false.     |
+   |             |              | When true the call waits for the     |
+   |             |              | answer instead of returning what     |
+   |             |              | is cached.                           |
+   +-------------+--------------+--------------------------------------+
+   | timeout     | float        | Seconds to wait.  Default the        |
+   |             |              | "timeout" of the bus.                |
+   +-------------+--------------+--------------------------------------+
 
-                Table 17: Keys of a Read or a Write
+                Table 21: Keys of a Read or a Write
 
    The "field" of a read or a write MUST name a field of the codec it
-   names, and the value type of that field (Section 9.1) MUST be the
+   names, and the value type of that field (Section 11.1) MUST be the
    type of the parameter.  Every other field of "req" is bound as in
-   Section 9.2, from its "default" or from its "const".
+   Section 11.2, from its "default" or from its "const".
 
-   A read sends "req" and answers with the value the endpoint holds.  It
+   A read sends "req" and answers with the value the daemon holds.  It
    does not block unless "block" is true, so a program that polls
    neither waits for the bus nor holds up the session; the value is
    replaced whenever a frame matching "res" arrives, whether the frame
    was asked for or not.  A write sends "req" with the value bound to
-   "field" and sets the value the endpoint holds to what was written;
+   "field" and sets the value the daemon holds to what was written;
    when "res" is given it waits for the answer and fails on timeout.
 
    A parameter is a cache and not a promise: what a read returns is the
-   most recent value this endpoint has seen, and a program that needs a
-   fresh one asks for it with "block" set to true.
+   most recent value this daemon has seen, and a program that needs a
+   fresh one asks for it with "block" set to true.  Whenever the value
+   changes, the daemon publishes it (Section 18.3).
 
-   A program reaches a parameter through the instructions of
-   Section 14.2.  Whenever the value changes, the endpoint publishes it
-   (Section 14.3).
+      [param.stiffness]
+      bus   = "main"
+      type  = "f32"
+      unit  = "N*m/rad"
+      range = [0.0, 200.0]
+      read  = { req = "p_read", res = "p_read_res",
+                field = "value" }
+      write = { req = "p_write", field = "value" }
 
-12.  Signal Tables
+16.  Signal Tables
 
    [signal.<name>] declares one thing the device reports: the frame that
-   carries it and what it means.  Its keys are listed in Table 18.
+   carries it and what it means.  Its keys are listed in Table 22.
 
-   +=============+================+====================================+
-   | Key         | Type           | Meaning                            |
-   +=============+================+====================================+
-   | codec       | string         | REQUIRED.  The codec that decodes  |
-   |             |                | the frame.  The bus of the signal  |
-   |             |                | is the bus of that codec.          |
-   +-------------+----------------+------------------------------------+
-   | fault       | boolean        | Default false.  When true the      |
-   |             |                | signal is a fault: it is published |
-   |             |                | as one and is latched until it is  |
-   |             |                | cleared.                           |
-   +-------------+----------------+------------------------------------+
-   | clears      | string         | OPTIONAL.  The name of another     |
-   |             |                | signal: when this one is reported, |
-   |             |                | the fault of that name is cleared. |
-   |             |                | The named signal MUST have "fault" |
-   |             |                | set to true.                       |
-   +-------------+----------------+------------------------------------+
-   | edge        | boolean        | Default true.  When true, a frame  |
-   |             |                | whose values are the same as those |
-   |             |                | of the last frame reported is not  |
-   |             |                | reported again.                    |
-   +-------------+----------------+------------------------------------+
-   | help        | string         | OPTIONAL.  A description meant for |
-   |             |                | a human.                           |
-   +-------------+----------------+------------------------------------+
+   +=============+==============+======================================+
+   | Key         | Type         | Meaning                              |
+   +=============+==============+======================================+
+   | codec       | string       | REQUIRED.  The codec that decodes    |
+   |             |              | the frame.  The bus of the signal is |
+   |             |              | the bus of that codec.               |
+   +-------------+--------------+--------------------------------------+
+   | fault       | boolean      | Default false.  When true the signal |
+   |             |              | is a fault: it is published as one   |
+   |             |              | and is latched until it is cleared.  |
+   +-------------+--------------+--------------------------------------+
+   | clears      | string       | OPTIONAL.  The name of another       |
+   |             |              | signal: when this one is reported,   |
+   |             |              | the fault of that name is cleared.   |
+   |             |              | The named signal MUST have "fault"   |
+   |             |              | set to true.                         |
+   +-------------+--------------+--------------------------------------+
+   | edge        | boolean      | Default true.  When true, a frame    |
+   |             |              | whose values are the same as those   |
+   |             |              | of the last frame reported is not    |
+   |             |              | reported again.                      |
+   +-------------+--------------+--------------------------------------+
+   | help        | string       | OPTIONAL.  A description meant for   |
+   |             |              | a human.                             |
+   +-------------+--------------+--------------------------------------+
 
-                       Table 18: Keys of a Signal
+                       Table 22: Keys of a Signal
 
    A frame is decoded once, by the first codec that matches it
-   (Section 9.3).  When a signal names that codec, the values are
-   published under the name of the signal (Section 14.3); when several
+   (Section 11.3).  When a signal names that codec, the values are
+   published under the name of the signal (Section 18.3); when several
    signals name it, they are published once per signal, because one
    frame may mean two things at once.
 
    A fault is latched.  Once one is published it is not published again
    until it is cleared, and it is cleared either by a call of
    "device.clear_fault" or by the signal named by "clears"; when it is
-   cleared, the endpoint publishes the fact.  A consumer SHOULD hold a
-   fault until it sees it cleared, as [RFC0004], Section 9.3.4,
-   requires.
+   cleared, the daemon publishes the fact.  A consumer SHOULD hold a
+   fault until it sees it cleared.
 
    "edge" is what keeps a status frame that a device sends a hundred
    times a second from becoming a hundred events a second: only a change
-   is reported.  A consumer that wants the present value asks for it
-   with a call instead.
+   is reported.  A consumer that wants the present state asks for it
+   with a call instead, which is what a sensor and a parameter are for.
 
-13.  Validation
+17.  Validation
 
    A descriptor is validated before any of it is applied, in the
    following order.  A later phase is not begun while an earlier one has
@@ -1218,15 +1392,18 @@ Table of Contents
        name is a valid name; no two objects of one kind share a name.
 
    3.  References.  Every name that a key names is declared and is of
-       the kind the key wants: a bus names a transport or an endpoint, a
-       codec names a local bus, an instruction names a codec, a signal
-       names a codec, a field names an enumeration.
+       the kind the key wants: a serve mode names a session, a relay
+       names a peer, a codec names a bus, an instruction and an
+       actuator name a codec, a signal names a codec, a field names an
+       enumeration.
 
    4.  Meaning.  The rules of the tables themselves: a field fits the
        "mtu" and shares no octet; an argument binds to a field of its
-       own value type (Section 9.1); a parameter names a field of the
-       codec it names; a session offers what it requires and does not
-       offer [RFC0009] together with [RFC0010].
+       own value type (Section 11.1); a session offers what it
+       requires and does not offer [RFC0009] together with [RFC0010];
+       an instruction does not begin with the prefix of a relay; at
+       most one relay omits a prefix; a name exposed by a serve mode is
+       one that is declared.
 
    5.  Compile.  Every codec is compiled: the offsets are resolved, the
        widths are fixed and the defaults are checked against their
@@ -1247,105 +1424,127 @@ Table of Contents
    All of them are in English.
 
    These are the diagnostics of loading a descriptor, and they are the
-   only diagnostics this document defines.  What a running endpoint
+   only diagnostics this document defines.  What a running daemon
    reports, and how a failure of one is classified, belong to the
    taxonomy of [RFC0008]; the tools that read and check a descriptor
    belong to [RFC0007].
 
-14.  Discovery and Publication
+18.  Publication
 
-14.1.  Reserved Names
+18.1.  Reserved Names
 
    The names of the core profile of [RFC0004], Section 9.1 -- "ping",
-   "list_instructions", "device_status" and "poll_events" -- are
-   reserved, and so is every name that begins with "bus." or with
-   "device.".  A descriptor MUST NOT declare an instruction with a
-   reserved name; such a declaration is an error of the descriptor.
+   "status", "metadata", "sense", "actuate", "get_param" and
+   "set_param" -- are reserved, and so is every name that begins with
+   "device." or with "core.".  A descriptor MUST NOT declare an
+   instruction, an actuator, a sensor or a parameter with a reserved
+   name; such a declaration is an error of the descriptor.  A sensor and
+   a parameter share no namespace with an instruction, but the reserved
+   names cover all of them.
 
-14.2.  Standard Instructions
+18.2.  What the Core Instructions Do
 
-   The instructions of Table 19 are provided by every conforming
-   implementation, in addition to the core profile of [RFC0004],
-   Section 9.1, and in addition to those a descriptor declares.
+   The daemon answers the core profile of [RFC0004], Section 9.1, from
+   what the descriptor declares.
 
-   +====================+=======================+======================+
-   | Instruction        | Signature             | Meaning              |
-   +====================+=======================+======================+
-   | bus.write          | (bus, addr, data)     | Writes one frame to  |
-   |                    | -> null               | a bus ([RFC0004],    |
-   |                    |                       | Section 9.2).        |
-   +--------------------+-----------------------+----------------------+
-   | device.list_params | () -> [{name, type,   | Discovery of the     |
-   |                    | unit, help}]          | parameters.          |
-   +--------------------+-----------------------+----------------------+
-   | device.read_param  | (name) -> value       | Reads one parameter. |
-   +--------------------+-----------------------+----------------------+
-   | device.write_param | (name, value) -> null | Writes one           |
-   |                    |                       | parameter.           |
-   +--------------------+-----------------------+----------------------+
-   | device.clear_fault | (name) -> null        | Clears one latched   |
-   |                    |                       | fault.               |
-   +--------------------+-----------------------+----------------------+
+   *  "metadata" reports what the device offers.  Its "instructions"
+      member carries the instructions of Section 12, its "actuators"
+      member the actuators of Section 13, its "sensors" member the
+      sensors of Section 14, its "params" member the parameters of
+      Section 15 and its "events" member the signals of Section 16,
+      each under the name that is declared for it and with the "unit",
+      "range", "default", "mode" and "help" that are declared for
+      it.  A serve
+      mode that exposes a part of the translation reports that part and
+      not the whole.
 
-                  Table 19: Standard Instructions
+   *  "sense" reads the sensor its "name" argument names and returns
+      the reading (Section 14).
 
-   "bus.write" is provided for every bus.  On a local bus it writes the
-   octets; on a remote bus it is forwarded to the peer, which is what
-   makes a remote bus usable before its peer's descriptor is known.
+   *  "actuate" operates the actuator its "name" argument names, with
+      the arguments that follow bound to the fields of its "req" as in
+      Section 11.2 (Section 13).
 
-   A name that a program does not recognise, an argument it does not
-   accept and a value that does not fit are answered in RESULT and not
-   with ERROR, as [RFC0004], Section 6.4.2, requires.
+   *  "get_param" and "set_param" read and write the parameter their
+      "name" argument names (Section 15).
 
-14.3.  Topics
+   *  "status" answers the state of the device: "fault" when a fault is
+      latched (Section 16), and then with the name of that fault;
+      "offline" when no bus it needs is open; "ready" otherwise.  Its
+      "time" and "uptime" members are the daemon's own.
 
-   What a descriptor declares is published on the topics of
-   [RFC0004], Section 9.3, listed in Table 20 with the shape of the
-   "data" member of the EVENT.
+   *  "device.clear_fault" clears the latched fault that its "name"
+      argument names (Section 16).  It is provided by the daemon, under
+      the reserved prefix, and is not part of the core profile: a relay
+      never takes it.
+
+   *  "ping" is answered as [RFC0004], Section 6.7, requires.
+
+   A call that names something a serve mode does not expose, and a call
+   that names something that is not declared, are answered with an
+   application error in RESULT and never with ERROR, as [RFC0004],
+   Section 6.4.2, requires of any name that is not known.  Nothing in
+   this document answers a call by acting on its own: the only thing
+   that acts is a caller.
+
+18.3.  Topics
+
+   What the device reports is published on the topics of [RFC0004],
+   Section 9.2, listed in Table 23 with the shape of the "data" member
+   of the EVENT.  No topic carries a bus, an address or a frame: a
+   caller sees a device and not the hardware behind it.
 
    +===================+===============================================+
    | Topic             | Data                                          |
    +===================+===============================================+
-   | bus.rx            | {bus, addr, data}: a frame that no codec      |
-   |                   | matched.                                      |
+   | device.param      | {name, value}: a parameter was written.       |
    +-------------------+-----------------------------------------------+
-   | bus.tx            | {bus, addr, data}: a frame that was written.  |
+   | device.event      | {name, data}: a signal was reported.  "data"  |
+   |                   | holds the values of its codec under the       |
+   |                   | names of its fields.                          |
    +-------------------+-----------------------------------------------+
-   | bus.error         | {bus, error}: a failure of a bus.             |
+   | device.fault      | {name, data}: a fault was reported.           |
    +-------------------+-----------------------------------------------+
-   | device.param      | {name, value, bus}: the value of a parameter  |
-   |                   | changed.                                      |
+   | device.cleared    | {name}: a latched fault was cleared.          |
    +-------------------+-----------------------------------------------+
-   | device.event      | {name, bus, data}: a signal was reported.     |
-   |                   | "data" holds the values of its codec under    |
-   |                   | the names of its fields.                      |
-   +-------------------+-----------------------------------------------+
-   | device.fault      | {name, bus, data}: a fault was reported.      |
-   +-------------------+-----------------------------------------------+
-   | device.cleared    | {name, bus}: a latched fault was cleared.     |
+   | device.connection | {state, reason}: the link to the device       |
+   |                   | changed state.                                |
    +-------------------+-----------------------------------------------+
    | device.descriptor | {id, version}: the descriptor was loaded or   |
-   |                   | reloaded; read discovery again.               |
+   |                   | reloaded; read metadata again.                |
    +-------------------+-----------------------------------------------+
-   | device.connection | {bus, state}: a bus or an endpoint changed    |
-   |                   | state.                                        |
+   | device.status     | {the value of "status"}: a status report.     |
+   +-------------------+-----------------------------------------------+
+   | core.metadata     | what the device offers changed; read          |
+   |                   | metadata again.                               |
+   +-------------------+-----------------------------------------------+
+   | core.session      | {state, reason}: a session changed state.     |
+   +-------------------+-----------------------------------------------+
+   | core.heartbeat    | {rtt, uptime}: a heartbeat report.            |
+   +-------------------+-----------------------------------------------+
+   | core.error        | {code, message}: a protocol error.            |
+   +-------------------+-----------------------------------------------+
+   | log.<name>        | one record of a named facility.               |
+   +-------------------+-----------------------------------------------+
+   | x.<name>          | private use; never assigned by this series.   |
    +-------------------+-----------------------------------------------+
 
-                     Table 20: Topics Published
+                     Table 23: Topics Published
 
    Publishing is best effort and an event is a fact and not a state, as
    [RFC0004], Section 10.2, states: a consumer that has missed one asks
-   for the present value with a call.  Nothing in this document invents
-   an event for a topic it does not own, and a republished event carries
-   the data of the original.
+   for the present state with a call, which is what a sensor and a
+   parameter are for.  Nothing in this document invents an event for a
+   topic it does not own, and what a relay republishes (Section 8)
+   carries the data of the original.
 
-15.  Security Considerations
+19.  Security Considerations
 
    *  A descriptor is trusted input.  It decides what an instruction
       does to a machine, and it can cause arbitrary frames to be
       written to hardware.  It MUST NOT be accepted from a peer, from a
       session or from anything else that is not the operator, and it
-      SHOULD be readable only by the account that runs the endpoint.
+      SHOULD be readable only by the account that runs the daemon.
 
    *  A secret in the descriptor is a secret in a file.  "secret_env" is
       preferred over "secret" because an environment variable is not
@@ -1360,7 +1559,7 @@ Table of Contents
 
    *  The two protections are alternatives.  A descriptor that offers
       both a secure transport and a primitive of [RFC0009] is rejected
-      (Section 6.3), because a session protected twice hides nothing
+      (Section 5.3), because a session protected twice hides nothing
       extra and leaves two places to make one mistake.
 
    *  A range is a guard and not an interlock.  It stops a caller from
@@ -1369,14 +1568,16 @@ Table of Contents
       A deployment that needs one puts it where it cannot be turned off
       by editing a file.
 
-   *  An endpoint SHOULD bind the loopback address unless remote access
-      is intended, and a remote endpoint SHOULD be authenticated.  A
-      session that is not authenticated and is not carried by a secure
-      transport is cleartext, as [RFC0004], Section 12, warns.
+   *  A serve mode SHOULD bind the loopback address unless remote access
+      is intended, and a serve mode that is reachable SHOULD be
+      authenticated.  A session that is not authenticated and is not
+      carried by a secure transport is cleartext, as [RFC0004], Section
+      12, warns.
 
-   *  A remote bus forwards instructions to a peer and applies no
-      filtering of its own: what the peer accepts is what it declares,
-      and authorisation belongs to the peer.
+   *  A relay passes a call on unchanged and applies no filtering of its
+      own: what the peer accepts is what it declares, and authorisation
+      belongs to the peer.  A relay is a way to reach a device and not
+      a way to limit what a caller may ask of it.
 
    *  A descriptor contains no control logic, and that is a property
       worth keeping: nothing in this format acts on what a device
@@ -1386,7 +1587,7 @@ Table of Contents
       device to act on its own writes a program, and puts it where it
       can be reviewed.
 
-16.  IANA Considerations
+20.  IANA Considerations
 
    This document has no IANA actions.  It requests no name, no number
    and no code point, and it establishes no registry administered by
@@ -1397,18 +1598,18 @@ Table of Contents
 
    *  The keys of every table of the format.
 
-   *  The field types of Table 13.
+   *  The field types of Table 15.
 
-   *  The reserved instruction names of Section 14.1.
+   *  The reserved names of Section 18.1.
 
    One namespace is not maintained at all.  A bus transport name other
    than "loopback" is chosen by the implementation that provides it,
    carries no meaning beyond that implementation and is never
    registered.
 
-17.  References
+21.  References
 
-18.1. Normative References
+21.1. Normative References
 
    [RFC0002]  "OpenOcto Ecosystem Architecture", this series.
 
@@ -1431,13 +1632,13 @@ Table of Contents
    [IETF-RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in
               RFC 2119 Key Words", BCP 14, IETF RFC 8174, May 2017.
 
-18.2. Informative References
+21.2. Informative References
 
    The documents below are the remaining documents of the series that
    bear on this one.  They are listed for the reader who wants the
    wider picture, and none of them is normative for this one: a
    conforming implementation is written from this document and from
-   Section 17.1 alone.  The series itself is defined by [RFC0001].
+   Section 21.1 alone.  The series itself is defined by [RFC0001].
 
    [RFC0001]  "OpenOcto Standards Series (OOS)", this series.
 
@@ -1450,8 +1651,8 @@ Table of Contents
 
 Appendix A.  Diagnostics
 
-   The diagnostics of this document are listed in Table 21.  Each is
-   written after the key path of what is at fault, as Section 13
+   The diagnostics of this document are listed in Table 24.  Each is
+   written after the key path of what is at fault, as Section 17
    states, so only the message is given here.  The list is not
    exhaustive: a message that no row covers is written in the same
    shape, and an implementation MAY word one differently as long as it
@@ -1469,7 +1670,11 @@ Appendix A.  Diagnostics
    | The format is not implemented  | unsupported format <n>: this    |
    |                                | implementation reads 1          |
    +--------------------------------+---------------------------------+
-   | No bus is declared             | at least one bus is required    |
+   | No serve mode is declared      | at least one serve mode is      |
+   |                                | required                        |
+   +--------------------------------+---------------------------------+
+   | Neither a bus nor a relay      | at least one of a bus and a     |
+   |                                | relay is required               |
    +--------------------------------+---------------------------------+
    | A key is not defined           | unknown key '<key>'             |
    +--------------------------------+---------------------------------+
@@ -1483,22 +1688,22 @@ Appendix A.  Diagnostics
    +--------------------------------+---------------------------------+
    | A reference names nothing      | unknown <kind> '<name>'         |
    +--------------------------------+---------------------------------+
-   | A bus names both or neither    | exactly one of 'transport' and  |
-   |                                | 'endpoint' is required          |
+   | Two serve modes share one      | serve '<name>' shares a host    |
+   |                                | and a port with '<other>'       |
    +--------------------------------+---------------------------------+
    | A transport is not implemented | unknown bus transport '<name>'  |
    +--------------------------------+---------------------------------+
-   | A mode is not one of two       | 'mode' must be 'listen' or      |
-   |                                | 'connect'                       |
+   | A peer has no host             | 'host' is required              |
    +--------------------------------+---------------------------------+
-   | A connect endpoint has no host | 'host' is required when 'mode'  |
-   |                                | is 'connect'                    |
+   | Two relays take everything     | at most one relay may omit      |
+   |                                | 'prefix'                        |
    +--------------------------------+---------------------------------+
-   | A bus names a listening one    | endpoint '<name>' must have     |
-   |                                | 'mode' set to 'connect'         |
+   | A relay and a translation      | instruction '<name>' begins     |
+   | collide                        | with the prefix of relay        |
+   |                                | '<relay>'                       |
    +--------------------------------+---------------------------------+
-   | Signalling on a remote bus     | '<bus>' is remote; signalling   |
-   |                                | is not declared here            |
+   | An exposed name is not         | '<name>' is not declared        |
+   | declared                       |                                 |
    +--------------------------------+---------------------------------+
    | A field passes the mtu         | field '<name>' extends past the |
    |                                | mtu of bus '<bus>'              |
@@ -1513,10 +1718,14 @@ Appendix A.  Diagnostics
    |                                | field                           |
    +--------------------------------+---------------------------------+
    | Two types disagree             | argument '<name>' is <type> but |
-   |                                | field '<name>' is <type>        |
+   |                                | the value of field '<name>' is  |
+   |                                | <type>                          |
    +--------------------------------+---------------------------------+
-   | An instruction is reserved     | instruction '<name>' uses a     |
-   |                                | reserved name                   |
+   | An object is reserved          | <kind> '<name>' uses a reserved |
+   |                                | name                            |
+   +--------------------------------+---------------------------------+
+   | A sensor neither listens nor   | at least one of 'codec' and     |
+   | reads                          | 'read' is required              |
    +--------------------------------+---------------------------------+
    | A parameter neither reads nor  | at least one of 'read' and      |
    | writes                         | 'write' is required             |
@@ -1538,71 +1747,157 @@ Appendix A.  Diagnostics
    |                                | 'secret_env' is allowed         |
    +--------------------------------+---------------------------------+
 
-                        Table 21: Diagnostics
+                        Table 24: Diagnostics
 
 Appendix B.  A Complete Descriptor
 
-   The descriptor below is complete and valid.  Every bus in it is a
-   remote one: each is a peer reached over [RFC0004], and the
-   descriptor says nothing about the octets those peers use.  What it
-   declares is what the daemon serves to its own callers, and how it
-   reaches the peers it translates for.
+   The descriptor below is complete and valid.  It describes a device
+   behind one CAN bus, offers it on two addresses in two variants of
+   [RFC0004], and relays one peer that speaks the protocol already.
 
       [descriptor]
       format = 1
       id     = "octo-arm-01"
       name   = "Left arm"
-      help   = "Arm controller: two peers, one session each."
+      help   = "Six-axis arm on the port manipulator."
 
-      [endpoint.ctl]
-      mode    = "listen"
+      [serve.local]
       host    = "127.0.0.1"
       port    = 6286
-      session = "ctl"
+      session = "local"
+      expose  = ["drive", "halt", "angle", "temp", "stiffness"]
 
-      [session.ctl]
+      [session.local]
       comp = ["zstd"]
 
-      [session.ctl.auth]
+      [session.local.auth]
       method     = "hmac"
       secret_env = "OCTO_ARM_HMAC"
 
-      [session.ctl.require]
+      [session.local.require]
       auth = true
 
-      [endpoint.arm]
-      mode    = "connect"
-      host    = "10.0.0.7"
+      [serve.remote]
+      host    = "0.0.0.0"
       port    = 16286
-      session = "arm"
+      session = "remote"
 
-      [session.arm.transport]
-      kind = "quic"
-      pin  = "sha256:9f86d081884c7d659a2feaa0c55ad015"
+      [session.remote.transport]
+      kind = "tls"
+      pin  = "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2"
 
-      [endpoint.gripper]
-      mode    = "connect"
-      host    = "10.0.0.8"
+      [peer.tool]
+      host    = "10.0.0.9"
       port    = 6286
-      session = "gripper"
+      session = "tool"
 
-      [session.gripper]
-      comp = ["zstd", "deflate"]
+      [session.tool]
+      comp = []
 
-      [bus.arm]
-      endpoint = "arm"
+      [relay.tool]
+      peer   = "tool"
+      prefix = "tool."
 
-      [bus.gripper]
-      endpoint = "gripper"
+      [bus.main]
+      transport = "socketcan"
+      mtu       = 8
+
+      [bus.main.options]
+      interface = "can0"
+      bitrate   = 1000000
+
+      [enum.mode]
+      values = { 0 = "idle", 1 = "run", 2 = "fault" }
+      help   = "State of the drive."
+
+      [codec.drive]
+      bus  = "main"
+      addr = 0x123
+      len  = 8
+
+      [[codec.drive.field]]
+      name  = "cmd"
+      type  = "u8"
+      const = 0xA1
+
+      [[codec.drive.field]]
+      name  = "speed"
+      type  = "i16"
+      scale = 0.01
+      unit  = "rad/s"
+      range = [-31.0, 31.0]
+
+      [[codec.drive.field]]
+      name    = "mode"
+      type    = "u8"
+      enum    = "mode"
+      default = 1
+
+      [codec.halt]
+      bus  = "main"
+      addr = 0x123
+
+      [[codec.halt.field]]
+      name  = "cmd"
+      type  = "u8"
+      const = 0xA0
+
+      [codec.status]
+      bus  = "main"
+      addr = 0x201
+
+      [[codec.status.field]]
+      name  = "angle"
+      type  = "i16"
+      scale = 0.01
+      unit  = "rad"
+
+      [[codec.status.field]]
+      name  = "temp"
+      type  = "i16"
+      scale = 0.1
+      unit  = "degC"
+
+      [codec.p_read]
+      bus  = "main"
+      addr = 0x300
+
+      [[codec.p_read.field]]
+      name  = "cmd"
+      type  = "u8"
+      const = 0x10
+
+      [codec.p_read_res]
+      bus  = "main"
+      addr = 0x301
+
+      [[codec.p_read_res.field]]
+      name  = "value"
+      type  = "i16"
+      scale = 0.1
+      unit  = "N*m/rad"
+      range = [0.0, 200.0]
+
+      [codec.p_write]
+      bus  = "main"
+      addr = 0x302
+
+      [[codec.p_write.field]]
+      name  = "cmd"
+      type  = "u8"
+      const = 0x11
+
+      [[codec.p_write.field]]
+      name  = "value"
+      type  = "i16"
+      scale = 0.1
+      unit  = "N*m/rad"
+      range = [0.0, 200.0]
 
       [instruction.drive]
-      bus  = "arm"
+      bus  = "main"
+      req  = "drive"
       help = "Spin a joint at a speed."
-
-      [[instruction.drive.arg]]
-      name  = "joint"
-      type  = "u8"
-      range = [0, 5]
 
       [[instruction.drive.arg]]
       name  = "speed"
@@ -1611,27 +1906,47 @@ Appendix B.  A Complete Descriptor
       range = [-31.0, 31.0]
 
       [instruction.halt]
-      bus  = "arm"
+      bus  = "main"
+      req  = "halt"
       help = "Stop every joint."
 
-      [instruction.grip]
-      bus  = "gripper"
-      help = "Close the gripper at a force."
+      [sensor.angle]
+      bus   = "main"
+      type  = "f32"
+      unit  = "rad"
+      codec = "status"
+      field = "angle"
+      help  = "Angle of the joint."
 
-      [[instruction.grip.arg]]
-      name  = "force"
-      type  = "u8"
-      range = [0, 100]
+      [sensor.temp]
+      bus   = "main"
+      type  = "f32"
+      unit  = "degC"
+      codec = "status"
+      field = "temp"
+      help  = "Temperature of the drive."
 
-   Every instruction above is forwarded: the daemon answers a call by
-   sending a CALL of the same name to the peer of its bus, and returns
-   what the peer answers.  A program reaches the buses themselves with
-   the standard instruction "bus.write" (Section 14.2), which is
-   forwarded in the same way.  A descriptor that also drives a device
-   which cannot speak the protocol declares a local bus for it, with
-   the codecs, parameters and signals that go with it; those are the
-   examples of Sections 9.1, 11 and 12, and they are the compatibility
-   path rather than this one.
+      [param.stiffness]
+      bus   = "main"
+      type  = "f32"
+      unit  = "N*m/rad"
+      range = [0.0, 200.0]
+      read  = { req = "p_read", res = "p_read_res",
+                field = "value" }
+      write = { req = "p_write", field = "value" }
+      help  = "Stiffness of the joint."
+
+      [signal.overtemp]
+      codec = "status"
+      fault = true
+      help  = "The drive is too hot."
+
+   A caller on the local address is authenticated and sees the part of
+   the translation that "expose" names; a caller on the remote address
+   sees the whole device over TLS.  Both see the same translation, and
+   neither sees the bus.  A call to "tool.open" is relayed to the peer
+   as "open", and what that peer publishes is republished under
+   "tool.<topic>".
 
 Authors' Addresses
 

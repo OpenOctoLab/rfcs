@@ -109,7 +109,7 @@ Table of Contents
        6.6.5.  Half Close
        6.6.6.  Destruction
        6.6.7.  Recommended Defaults
-     6.7.  Heartbeat and Discovery
+     6.7.  Heartbeat and Metadata
    7.  Transport Bindings
      7.1.  Stream Transport
      7.2.  Datagram Transport
@@ -118,12 +118,14 @@ Table of Contents
    8.  Capabilities
    9.  Service Profiles
      9.1.  Core Profile
-     9.2.  Bus Profile
-     9.3.  Topic Namespaces
-       9.3.1.  The Registry
-       9.3.2.  Publishers
-       9.3.3.  Assignment
-       9.3.4.  Using the Topics
+       9.1.1.  The State of a Peer
+       9.1.2.  Metadata
+       9.1.3.  Sensors, Actuators and Parameters
+     9.2.  Topic Namespaces
+       9.2.1.  The Registry
+       9.2.2.  Publishers
+       9.2.3.  Assignment
+       9.2.4.  Using the Topics
    10. Service Primitives
      10.1. Remote Procedure Call
      10.2. Publish and Subscribe
@@ -163,8 +165,8 @@ Table of Contents
 
    5.  structured values, encoded as CBOR.
 
-   Heartbeats and instruction discovery are not separate messages: both
-   are ordinary procedure calls (Sections 9.1 and 6.3).
+   Heartbeats and metadata are not separate messages: both are ordinary
+   procedure calls (Sections 9.1 and 6.3).
 
    OCP is a general-purpose control protocol for robots and for the
    devices attached to them.  It is deliberately silent about what is
@@ -173,9 +175,11 @@ Table of Contents
    particular machine is carried by profiles and by descriptors rather
    than by the protocol.
 
-   *  Neutral about the machine.  No motor, joint, sensor, actuator or
-      bus is named by the core; what a peer offers is described by the
-      service profiles of Section 9.
+   *  Neutral about the machine.  The core names no motor, no joint and
+      no bus.  It names five kinds of thing a device offers --
+      procedures, sensors, actuators, parameters and events -- and
+      leaves what each of them is to the peer, which reports them in
+      metadata (Section 9.1).
 
    *  Neutral about the transport.  A binding has only to deliver
       delimited frames and to state whether it is reliable (Section 7),
@@ -469,7 +473,7 @@ Table of Contents
 
 4.2.  Value Types
 
-   Table 7 lists the CBOR types used by this document, the notation
+   Table 4 lists the CBOR types used by this document, the notation
    used for them here, and what each of them carries.
 
    +============+=================+====================================+
@@ -483,7 +487,7 @@ Table of Contents
    |byte string |h'DEADBEEF'      |opaque octets: bus frames, tunnel   |
    |            |                 |slices, nonces, MACs                |
    +------------+-----------------+------------------------------------+
-   |text string |"bus.rx"         |names: member keys, topics,         |
+   |text string |"device.event"   |names: member keys, topics,         |
    |            |                 |procedures, tunnels, bus names      |
    +------------+-----------------+------------------------------------+
    |array       |["rpc","pubsub"] |ordered lists of names and records  |
@@ -497,7 +501,7 @@ Table of Contents
    |float       |3.1415926        |timestamps and measurements         |
    +------------+-----------------+------------------------------------+
 
-                          Table 7: Value Types
+                          Table 4: Value Types
 
    Byte strings are written in this document with the CBOR diagnostic
    notation h'...'.  No CBOR tag is defined by this document; a
@@ -554,8 +558,8 @@ Table of Contents
        the value of a member, as a member of another map, or as an
        element of an array.
 
-          {"topic": "bus.rx", "data": {"bus": "main", "addr": 42,
-              "data": h'DEADBEEF'}}
+          {"topic": "device.event", "data": {"name": "frame",
+              "data": {"addr": 42, "octets": h'DEADBEEF'}}
 
    3.  Answer: a map that carries either a value or an error, never
        both.
@@ -616,7 +620,7 @@ Table of Contents
 
 5.  Message Layer
 
-   The types of messages are listed in Table 8.
+   The types of messages are listed in Table 5.
 
    +=====+============+==========+=====================================+
    |Type |Name        |Direction |Purpose                              |
@@ -650,7 +654,7 @@ Table of Contents
    |     |            |          |(datagrams).                         |
    +-----+------------+----------+-------------------------------------+
 
-                         Table 8: Message Types
+                         Table 5: Message Types
 
    A message of unknown type MUST be reported with E_UNKNOWN_TYPE and
    MUST NOT by itself terminate the session, so that a later revision
@@ -685,7 +689,7 @@ Table of Contents
    A first frame that is not HELLO MUST be answered with
    E_HELLO_EXPECTED, after which the responder SHOULD close.
 
-   The members of HELLO are listed in Table 9.
+   The members of HELLO are listed in Table 6.
 
    +============+==============+=======================================+
    |Field       |Type          |Meaning                                |
@@ -716,7 +720,7 @@ Table of Contents
    |            |              |6.2).                                  |
    +------------+--------------+---------------------------------------+
 
-                         Table 9: HELLO Fields
+                         Table 6: HELLO Fields
 
 5.2.  WELCOME
 
@@ -736,7 +740,7 @@ Table of Contents
    WELCOME does not carry an instruction list: discovery is a call
    (Section 9.1).
 
-   The members of WELCOME are listed in Table 10.
+   The members of WELCOME are listed in Table 7.
 
    +============+==============+=======================================+
    |Field       |Type          |Meaning                                |
@@ -767,7 +771,7 @@ Table of Contents
    |            |              |6.2).                                  |
    +------------+--------------+---------------------------------------+
 
-                       Table 10: WELCOME Fields
+                       Table 7: WELCOME Fields
 
 5.3.  CALL
 
@@ -808,7 +812,7 @@ Table of Contents
    and a handler rejects what it does not accept with an application
    error in RESULT.
 
-   The members of CALL are listed in Table 11.
+   The members of CALL are listed in Table 8.
 
    +============+==============+=======================================+
    |Field       |Type          |Meaning                                |
@@ -827,7 +831,7 @@ Table of Contents
    |            |              |empty mean the same.                   |
    +------------+--------------+---------------------------------------+
 
-                         Table 11: CALL Fields
+                         Table 8: CALL Fields
 
 5.4.  RESULT
 
@@ -840,7 +844,7 @@ Table of Contents
    member is an application-level classification; its values are outside
    the scope of this document.
 
-   The members of RESULT are listed in Table 12.
+   The members of RESULT are listed in Table 9.
 
    +============+==============+=======================================+
    |Field       |Type          |Meaning                                |
@@ -858,17 +862,17 @@ Table of Contents
    |            |              |failure (Section 6.4.2).               |
    +------------+--------------+---------------------------------------+
 
-                        Table 12: RESULT Fields
+                        Table 9: RESULT Fields
 
 5.5.  EVENT
 
-      {"topic": "bus.rx", "data": {"bus": "main", "addr": 42, "data":
-          h'DEADBEEF'}}
+      {"topic": "device.event", "data": {"name": "frame",
+          "data": {"addr": 42, "octets": h'DEADBEEF'}}
 
    An event is delivered only to sessions subscribed to its topic.
    Events MAY interleave freely with responses.
 
-   The members of EVENT are listed in Table 13.
+   The members of EVENT are listed in Table 10.
 
    +============+==============+=======================================+
    |Field       |Type          |Meaning                                |
@@ -881,11 +885,11 @@ Table of Contents
    |            |              |its topic.                             |
    +------------+--------------+---------------------------------------+
 
-                         Table 13: EVENT Fields
+                         Table 10: EVENT Fields
 
 5.6.  SUBSCRIBE
 
-      {"id": 12, "topic": "bus.rx"}
+      {"id": 12, "topic": "device.event"}
 
    The identifier shares the numbering space of CALL identifiers, and
    the responder correlates its RESULT by that identifier.  Using the
@@ -898,7 +902,7 @@ Table of Contents
    Topic matching is exact, and subscribing twice is idempotent.  The
    answer carries null as its value.
 
-   The members of SUBSCRIBE are listed in Table 14.
+   The members of SUBSCRIBE are listed in Table 11.
 
    +============+==============+=======================================+
    |Field       |Type          |Meaning                                |
@@ -911,16 +915,16 @@ Table of Contents
    |            |              |exactly.                               |
    +------------+--------------+---------------------------------------+
 
-                       Table 14: SUBSCRIBE Fields
+                       Table 11: SUBSCRIBE Fields
 
 5.7.  UNSUBSCRIBE
 
-      {"id": 13, "topic": "bus.rx"}
+      {"id": 13, "topic": "device.event"}
 
    Unsubscribing from a topic that is not subscribed succeeds.  The
    answer carries null as its value.
 
-   The members of UNSUBSCRIBE are listed in Table 15.
+   The members of UNSUBSCRIBE are listed in Table 12.
 
    +============+==============+=======================================+
    |Field       |Type          |Meaning                                |
@@ -933,7 +937,7 @@ Table of Contents
    |            |              |matched exactly.                       |
    +------------+--------------+---------------------------------------+
 
-                      Table 15: UNSUBSCRIBE Fields
+                      Table 12: UNSUBSCRIBE Fields
 
 5.8.  TUNDATA
 
@@ -941,7 +945,7 @@ Table of Contents
 
    Carries a slice of a tunnel byte stream.  See Section 10.
 
-   The members of TUNDATA are listed in Table 16.
+   The members of TUNDATA are listed in Table 13.
 
    +============+==============+=======================================+
    |Field       |Type          |Meaning                                |
@@ -958,7 +962,7 @@ Table of Contents
    |            |              |stream (Section 6.6.5).                |
    +------------+--------------+---------------------------------------+
 
-                        Table 16: TUNDATA Fields
+                        Table 13: TUNDATA Fields
 
 5.9.  TUNSTAT
 
@@ -969,7 +973,7 @@ Table of Contents
    Carries tunnel state; every field but the tunnel name is OPTIONAL.
    See Section 10.
 
-   The members of TUNSTAT are listed in Table 17.
+   The members of TUNSTAT are listed in Table 14.
 
    +============+==============+=======================================+
    |Field       |Type          |Meaning                                |
@@ -1000,7 +1004,7 @@ Table of Contents
    |            |              |from the registry of Appendix A.       |
    +------------+--------------+---------------------------------------+
 
-                        Table 17: TUNSTAT Fields
+                        Table 14: TUNSTAT Fields
 
 5.10.  BYE
 
@@ -1010,7 +1014,7 @@ Table of Contents
    SHOULD stop publishing and close the transport.  No acknowledgement
    is needed: the transport close confirms it.
 
-   The members of BYE are listed in Table 18.
+   The members of BYE are listed in Table 15.
 
    +============+==============+=======================================+
    |Field       |Type          |Meaning                                |
@@ -1019,7 +1023,7 @@ Table of Contents
    |            |              |closing, in English.                   |
    +------------+--------------+---------------------------------------+
 
-                          Table 18: BYE Fields
+                          Table 15: BYE Fields
 
 5.11.  ERROR
 
@@ -1031,7 +1035,7 @@ Table of Contents
    application failure leaves the session usable, while a protocol error
    MAY require the session to be closed.
 
-   The members of ERROR are listed in Table 19.
+   The members of ERROR are listed in Table 16.
 
    +============+==============+=======================================+
    |Field       |Type          |Meaning                                |
@@ -1043,7 +1047,7 @@ Table of Contents
    |            |              |in English.                            |
    +------------+--------------+---------------------------------------+
 
-                         Table 19: ERROR Fields
+                         Table 16: ERROR Fields
 
 5.12.  ACK
 
@@ -1053,7 +1057,7 @@ Table of Contents
    sent only in response to a frame that requested acknowledgement, and
    an ACK frame MUST NOT itself request acknowledgement.
 
-   The members of ACK are listed in Table 20
+   The members of ACK are listed in Table 17
 
    +============+==============+=======================================+
    |Field       |Type          |Meaning                                |
@@ -1062,7 +1066,7 @@ Table of Contents
    |            |              |confirmed (Section 3.4).               |
    +------------+--------------+---------------------------------------+
 
-                          Table 20: ACK Fields
+                          Table 17: ACK Fields
 
 6.  Session Establishment and Lifetime
 
@@ -1185,7 +1189,7 @@ Table of Contents
        |                                    |  HELLO
        |<--- WELCOME -----------------------|  session established
        |  (OPTIONAL) CALL ping              |  heartbeat
-       |  (OPTIONAL) CALL list_instructions |  discovery
+       |  (OPTIONAL) CALL metadata          |  metadata
        |---- CALL ------------------------->|  RPC
        |<--- RESULT ------------------------|
        |---- (OPTIONAL) SUBSCRIBE --------->|  subscribe to a topic
@@ -1233,7 +1237,7 @@ Table of Contents
    3.  The caller matches the answer to the call by the identifier.
 
    4.  Heartbeats and discovery travel this path too: they are calls to
-       "ping" and to "list_instructions" (Sections 6.7 and 9.1).
+       "ping" and to "metadata" (Sections 6.7 and 9.1).
 
 6.4.2.  Answers and Failures
 
@@ -1335,7 +1339,7 @@ Table of Contents
       reconnect: the new session subscribes again.
 
    *  A topic name is matched exactly; no wildcard and no prefix
-      matching is defined.  The namespaces are listed in Section 9.3.
+      matching is defined.  The namespaces are listed in Section 9.2.
 
 6.5.3.  Delivery
 
@@ -1354,8 +1358,8 @@ Table of Contents
 
    *  Delivery is best effort.  A publisher cannot learn whether a
       subscriber received an event; a consumer that cannot afford to
-      miss one pulls it instead with the "poll_events" instruction
-      (Section 9.1).
+      recovers by asking for the present state with a call, which is
+      what the core profile of Section 9.1 is for.
 
    *  The payload, when there is one, is carried in "data"; its shape
       belongs to the topic and not to this document.
@@ -1475,29 +1479,30 @@ Table of Contents
    |interval               |                  |notifications.          |
    +-----------------------+------------------+------------------------+
 
-                 Table 21: Recommended Tunnel Defaults
+                 Table 18: Recommended Tunnel Defaults
 
-6.7.  Heartbeat and Discovery
+6.7.  Heartbeat and Metadata
 
    A heartbeat is one call to the core instruction "ping" with the
    sender's current time:
 
       CALL   {"id": 5, "name": "ping", "args": {0: 1726723200.125}}
       RESULT {"id": 5, "ok": true,
-              "value": {"t": 1726723200.125, "time": 1726723200.126,
-                        "uptime": 42.5}}
+              "value": {"t": 1726723200.125, "time": 1726723200.126}}
 
-   The "t" member echoes the request, "time" is the responder's wall
-   clock and "uptime" its running time in seconds.  Either endpoint MAY
-   originate a heartbeat, and a receiver MUST answer a ping call.  A
-   RECOMMENDED interval is five seconds, with a liveness timeout of
-   fifteen seconds; both are application policy.
+   The "t" member echoes the request and "time" is the responder's wall
+   clock.  Either endpoint MAY originate a heartbeat, and a receiver
+   MUST answer a ping call.  A RECOMMENDED interval is five seconds,
+   with a liveness timeout of fifteen seconds; both are application
+   policy.
 
-   Discovery is one call to the core instruction "list_instructions"
-   (Section 9.1).  An initiator SHOULD call it once after establishing a
-   session and cache the result.  When the responder's instruction set
-   changes it SHOULD publish the new list on the "core.instructions"
-   topic.
+   Metadata is one call to the core instruction "metadata" (Section
+   9.1), which reports what the responder offers: its procedures, its
+   sensors, its actuators, its parameters and its events.  An initiator
+   SHOULD call it once after establishing a session and cache the
+   result.  When what the responder offers changes it SHOULD publish the
+   fact on the "core.metadata" topic, and a consumer that sees it MUST
+   read metadata again rather than go on using what it cached.
 
 7.  Transport Bindings
 
@@ -1586,166 +1591,267 @@ Table of Contents
 8.  Capabilities
 
    A session declares exactly three capabilities, which are shown in
-   Table 8.
+   Table 19.
 
    +===========+=======================================================+
    |Capability |Meaning                                                |
    +===========+=======================================================+
    |rpc        |Supports CALL and RESULT; carries heartbeats and       |
-   |           |discovery.                                             |
+   |           |metadata.                                              |
    +-----------+-------------------------------------------------------+
    |pubsub     |Supports SUBSCRIBE and EVENT.                          |
    +-----------+-------------------------------------------------------+
    |blobtun    |Supports TUNSTAT and TUNDATA.                          |
    +-----------+-------------------------------------------------------+
 
-                         Table 22: Capabilities
+                         Table 19: Capabilities
 
    The effective set is the intersection of the two endpoints'
    declarations.  Anything not listed here is carried by one of these
-   three: heartbeats and discovery are calls, and the bus profile is
-   calls plus topics.  Authentication and compression are session flags,
-   and confidentiality, integrity and per-frame verification are
+   three: heartbeats and metadata are calls, and what a device reports
+   is events on a topic.  Authentication and compression are session
+   flags, and confidentiality, integrity and per-frame verification are
    extensions of Section 3.8.
 
 9.  Service Profiles
 
 9.1.  Core Profile
 
-   +==================+=======================+========================+
-   |Instruction       |Signature              |Meaning                 |
-   +==================+=======================+========================+
-   |ping              |(t) -> {t, time,       |Heartbeat               |
-   |                  |uptime}                |(Section 6.7).          |
-   +------------------+-----------------------+------------------------+
-   |list_instructions |() -> [{name, args,    |Discovery: the          |
-   |                  |help}]                 |instruction list.       |
-   +------------------+-----------------------+------------------------+
-   |device_status     |() -> str              |Human-readable status of|
-   |                  |                       |the peer.               |
-   +------------------+-----------------------+------------------------+
-   |poll_events       |() -> [{name, id,      |Drains the queued events|
-   |                  |data}]                 |of the peer.            |
-   +------------------+-----------------------+------------------------+
+   +============+=========================+============================+
+   |Instruction |Signature                |Meaning                     |
+   +============+=========================+============================+
+   |ping        |(t) -> {t, time}         |Heartbeat (Section 6.7).    |
+   +------------+-------------------------+----------------------------+
+   |status      |() -> {state, time,      |The state of the peer       |
+   |            |uptime, fault, message}  |(Section 9.1.1).            |
+   +------------+-------------------------+----------------------------+
+   |metadata    |() -> {instructions,     | What the peer offers       |
+   |            |sensors, actuators,      |(Section 9.1.2).            |
+   |            |params, events}          |                            |
+   +------------+-------------------------+----------------------------+
+   |sense       |(name) -> value          |Reads one sensor            |
+   |            |                         |(Section 9.1.3).            |
+   +------------+-------------------------+----------------------------+
+   |actuate     |(name, ...) -> null      |Operates one actuator       |
+   |            |                         |(Section 9.1.3).            |
+   +------------+-------------------------+----------------------------+
+   |get_param   |(name) -> value          |Reads one device parameter  |
+   |            |                         |(Section 9.1.3).            |
+   +------------+-------------------------+----------------------------+
+   |set_param   |(name, value) -> null    |Writes one device parameter |
+   |            |                         |(Section 9.1.3).            |
+   +------------+-------------------------+----------------------------+
 
-                  Table 23: Core Profile Instructions
+                  Table 20: Core Profile Instructions
 
-   The "args" member of a list entry names the parameters of the
-   instruction, in positional order.  A caller MAY use those names as
-   the keys of "args"; the entry states no preference between the forms,
-   and an instruction whose entry names no parameters can only be called
-   by position.  A handler decides for itself whether it takes one form,
-   the other or a mix of both, and refuses what it does not take in
-   RESULT.  "help" is a short text meant for a human.
+9.1.1.  The State of a Peer
 
-9.2.  Bus Profile
+   "status" answers a map and not a string, because a program has to be
+   able to act on what it reports:
 
-   Addresses are opaque and a bus is only a name.
+      {"state": "ready", "time": 1726723200.126, "uptime": 42.5,
+       "fault": null, "message": null}
 
-   * Sending: a call to "bus.write" with a single argument:
+   "state" is one of "ready", "busy", "fault" and "offline"; a peer that
+   has nothing better to say reports "ready" while it is answering
+   calls.  "time" is the wall clock of the peer and "uptime" running
+   time in seconds.  "fault" names the latched fault of Section 9.2.4
+   when there is one and is null otherwise; "message" is a text meant
+   for a human, or null.  A consumer MUST ignore a member it does not
+   define.
 
-      {"bus": "main", "addr": 42, "data": h'4200000000000042'}
+9.1.2.  Metadata
 
-     The bus name is defined by the responder's descriptor.  The address
-     is opaque: an integer identifier for a CAN bus, a port name for a
-     serial bus, or another value for another bus.  The data is a byte
-     string; the maximum length is a property of the bus (eight octets
-     for a classical CAN bus).
+   "metadata" reports what the peer offers, in one call and in one
+   shape, so that a program needs no other discovery mechanism.  Its
+   value is a map with five members.  Each is an array, each is
+   OPTIONAL, and a peer that offers none of a kind returns an empty
+   array rather than omitting the member.
 
-   * Receiving: an event on the topic "bus.rx" whose data has the same
-     shape.  A peer MAY additionally offer a pull-based interface
-     through "poll_events".
+   instructions  [{name, args, help}]: the procedures of the peer other
+      than the ones of Table 20.  The peer MAY list one of Table 20
+      here as well, and a caller MUST NOT rely on it doing so.
 
-9.3.  Topic Namespaces
+   sensors  [{name, type, unit, help}]: what "sense" reads.
 
-9.3.1.  The Registry
+   actuators  [{name, args, help}]: what "actuate" operates.
 
-   The topics of this document, of the profiles of Section 9 and of
-   [RFC0006] are listed in Table 24.  The columns are the topic name,
-   the component that publishes it and the shape of "data" in the EVENT
-   of Section 5.5.  A shape is informative: it belongs to the topic, and
-   a consumer MUST ignore a member it does not know (Section 11).
+   params  [{name, type, unit, range, default, mode, help}]: what
+      "get_param" and "set_param" reach.  "mode" is the access in
+      Linux permission notation -- 4 read-only, 6 read-write, 2
+      write-only, the x bit unused -- mirroring "read"/"write" of
+      the descriptor (Section 9.1.3).
 
-   +==================+============+===================================+
-   |Topic             |Publisher   |Data                               |
-   +==================+============+===================================+
-   |bus.rx            |bus profile |A received bus frame.              |
-   +------------------+------------+-----------------------------------+
-   |bus.tx            |bus profile |A transmitted bus frame {bus, addr,|
-   |                  |            |data}.                             |
-   +------------------+------------+-----------------------------------+
-   |bus.error         |bus profile |A bus error {bus, error}.          |
-   +------------------+------------+-----------------------------------+
-   |device.param      |peer        |A parameter value {name, value,    |
-   |                  |            |bus}.                              |
-   +------------------+------------+-----------------------------------+
-   |device.event      |peer        |A named device event.              |
-   +------------------+------------+-----------------------------------+
-   |device.fault      |peer        |A device fault; a consumer SHOULD  |
-   |                  |            |latch it.                          |
-   +------------------+------------+-----------------------------------+
-   |device.cleared    |peer        |A latched fault was cleared        |
-   |                  |            |{name, bus}.                       |
-   +------------------+------------+-----------------------------------+
-   |device.connection |peer        |A connection-state change.         |
-   +------------------+------------+-----------------------------------+
-   |device.descriptor |peer        |The descriptor changed {id,        |
-   |                  |            |version}; re-read discovery.       |
-   +------------------+------------+-----------------------------------+
-   |device.status     |peer        |A status report; the value of the  |
-   |                  |            |device_status instruction.         |
-   +------------------+------------+-----------------------------------+
-   |daemon.event      |daemon      |A daemon lifecycle event {event,   |
-   |                  |            |data}.                             |
-   +------------------+------------+-----------------------------------+
-   |daemon.bus        |daemon      |A bus was added or removed {bus}.  |
-   +------------------+------------+-----------------------------------+
-   |daemon.config     |daemon      |A configuration change {section,   |
-   |                  |            |keys}.                             |
-   +------------------+------------+-----------------------------------+
-   |blobtun.open      |tunnel      |Tunnel established {tun, window}.  |
-   +------------------+------------+-----------------------------------+
-   |blobtun.data      |tunnel      |Tunnel bytes {tun, data, len}.     |
-   +------------------+------------+-----------------------------------+
-   |blobtun.state     |tunnel      |Tunnel state {tun, ack, window,    |
-   |                  |            |off, eof}.                         |
-   +------------------+------------+-----------------------------------+
-   |blobtun.close     |tunnel      |Tunnel destroyed {tun, error}.     |
-   +------------------+------------+-----------------------------------+
-   |core.instructions |responder   |New instruction list.              |
-   +------------------+------------+-----------------------------------+
-   |core.session      |peer        |A session state change {state,     |
-   |                  |            |reason}.                           |
-   +------------------+------------+-----------------------------------+
-   |core.heartbeat    |peer        |A heartbeat report {rtt, uptime}.  |
-   +------------------+------------+-----------------------------------+
-   |core.error        |peer        |A protocol error {code, message}.  |
-   +------------------+------------+-----------------------------------+
-   |log.<name>        |any         |Structured logging (extension      |
-   |                  |            |point).                            |
-   +------------------+------------+-----------------------------------+
-   |x.<name>          |any         |Private use; never assigned by this|
-   |                  |            |this series.                       |
-   +------------------+------------+-----------------------------------+
+   events  [{name, help}]: what the peer publishes, under the name that
+      appears in the "name" member of the event.
 
-                       Table 24: Topic Namespaces
+   The "args" member of an entry names the parameters of the procedure
+   or of the actuator, in positional order.  A caller MAY use those
+   names as the keys of "args"; the entry states no preference between
+   the forms, and an entry that names no parameters can only be called
+   by position.  A handler decides for itself whether it takes one
+   form, the other or a mix of both, and refuses what it does not take
+   in RESULT.  "type" names a value type, "unit" the unit of the
+   value, "range" the two numbers the value lies between and "default"
+   the value used when a call supplies none; all four are OPTIONAL and
+   all four are meant for a program.  "help" is a short text meant for
+   a human.  "mode" is the access of the parameter as a number in Linux
+   permission notation (r=4, w=2, x unused): 4 read-only, 6 read-write,
+   2 write-only.  It is the application-layer signal that tells a caller
+   whether "get_param" and "set_param" will be answered or refused
+   before it is tried.
 
-9.3.2.  Publishers
+9.1.3.  Sensors, Actuators and Parameters
+
+   Besides its procedures, a device offers sensors, actuators and
+   parameters, and each is reached through one instruction of Table 20
+   rather than by a name of its own.
+
+   *  "sense" reads one sensor.  Its "name" argument names a member of
+      the "sensors" array of metadata, and the value returned is the
+      reading.  A sensor is read-only: no instruction of this profile
+      writes one.
+
+   *  "actuate" operates one actuator.  Its "name" argument names a
+      member of the "actuators" array, and the arguments that follow
+      are those the actuator declares, bound by name or, after "name",
+      by position.  An actuator has no name of its own in this
+      protocol: a call that names one directly is unknown.
+
+   *  "get_param" and "set_param" read and write one device parameter.
+      "name" names a member of the "params" array and "value" is the
+      value written.  A parameter is a setting of the device and not a
+      measurement; a measurement is a sensor.  A parameter whose
+      "mode" member of metadata is 4 (read-only) MUST refuse
+      "set_param" in RESULT; 2 (write-only) refuses "get_param" too.
+
+   A name that is not in the corresponding array is unknown, and an
+   actuator that refuses what it was asked to do, like any other
+   failure of a call, is answered in RESULT and not with ERROR (Section
+   6.4.2).
+
+
+9.2.  Topic Namespaces
+
+9.2.1.  The Registry
+
+   The topics of this document and of the profile of Section 9 are
+   listed in Table 21.  The columns are the topic name, the component
+   that raises the event and the shape of "data" in the event.  A shape
+   is informative: it belongs to the topic, and a consumer MUST ignore a
+   member it does not know (Section 11).
+
+   Two kinds of topic appear here.  A PubSub topic travels on the wire:
+   the peer publishes it as an EVENT frame and it reaches a session only
+   after that session has SUBSCRIBEd to it (Sections 5.5 to 5.7).  A
+   pseudo-topic never travels on the PubSub pipeline: the client runtime
+   raises it as an event of the same model in response to a protocol
+   frame or a local condition, no EVENT carries it and no SUBSCRIBE
+   applies to it.  In Table 21 a pseudo-topic has Publisher "runtime" or
+   "tunnel"; the "peer" and "any" topics are PubSub topics, except that
+   "device.connection" may be either (Section 9.2.1).
+
+   +====================+==============+===============================+
+   |Topic               |Publisher     |Data                           |
+   +--------------------+--------------+-------------------------------+
+   |device.param        |peer          |A parameter was written {name, |
+   |                    |              |value}.                        |
+   +--------------------+--------------+-------------------------------+
+   |device.event        |peer          |A named device event           |
+   |                    |              |{name, data}.                  |
+   +--------------------+--------------+-------------------------------+
+   |device.fault        |peer          |A device fault {name, data}; a |
+   |                    |              |consumer SHOULD latch it.      |
+   +--------------------+--------------+-------------------------------+
+   |device.cleared      |peer          |A latched fault was cleared    |
+   |                    |              |{name}.                        |
+   +--------------------+--------------+-------------------------------+
+   |device.connection   |peer / runtime|The link to the device changed |
+   |                    |              |{state, reason}.               |
+   +--------------------+--------------+-------------------------------+
+   |device.descriptor   |peer          |The descriptor was loaded or   |
+   |                    |              |reloaded {id, version}; read   |
+   |                    |              |metadata again (virtual only). |
+   +--------------------+--------------+-------------------------------+
+   |device.status       |peer          |A status report; the value of  |
+   |                    |              |the status instruction         |
+   |                    |              |(Section 9.1.1).               |
+   +--------------------+--------------+-------------------------------+
+   |blobtun.open        |tunnel        |Tunnel established {tun,       |
+   |                    |              |window}.                       |
+   +--------------------+--------------+-------------------------------+
+   |blobtun.data        |tunnel        |Tunnel bytes {tun, data,       |
+   |                    |              |len}.                          |
+   +--------------------+--------------+-------------------------------+
+   |blobtun.state       |tunnel        |Tunnel state {tun, ack,        |
+   |                    |              |window, off, eof}.             |
+   +--------------------+--------------+-------------------------------+
+   |blobtun.close       |tunnel        |Tunnel destroyed {tun, error}. |
+   +--------------------+--------------+-------------------------------+
+   |core.metadata       |runtime       |What the responder offers      |
+   |                    |              |changed.                       |
+   +--------------------+--------------+-------------------------------+
+   |core.session        |runtime       |A session state change         |
+   |                    |              |{state, reason}.               |
+   +--------------------+--------------+-------------------------------+
+   |core.heartbeat      |runtime       |A heartbeat report {rtt, time}.|
+   +--------------------+--------------+-------------------------------+
+   |core.error          |runtime       |A protocol error {code,        |
+   |                    |              |message}.                      |
+   +--------------------+--------------+-------------------------------+
+   |rpc.call            |runtime       |A call was issued or           |
+   |                    |              |received {id, name, dir}.      |
+   +--------------------+--------------+-------------------------------+
+   |rpc.result          |runtime       |A result arrived for a         |
+   |                    |              |call {id, ok, dir}.            |
+   +--------------------+--------------+-------------------------------+
+   |rpc.timeout         |runtime       |A call passed its deadline     |
+   |                    |              |{id, name}.                    |
+   +--------------------+--------------+-------------------------------+
+   |pubsub.subscribe    |runtime       |A subscription was added       |
+   |                    |              |{topic, id, ok}.               |
+   +--------------------+--------------+-------------------------------+
+   |pubsub.unsubscribe  |runtime       |A subscription was removed     |
+   |                    |              |{topic, id}.                   |
+   +--------------------+--------------+-------------------------------+
+   |pubsub.drop         |runtime       |An event was dropped           |
+   |                    |              |{topic, reason}.               |
+   +--------------------+--------------+-------------------------------+
+   |log.<name>          |any           |Structured logging             |
+   |                    |              |(extension point).             |
+   +--------------------+--------------+-------------------------------+
+   |x.<name>            |any           |Private use; never assigned    |
+   |                    |              |by this series.                |
+   +--------------------+--------------+-------------------------------+
+
+                       Table 21: Topic Namespaces
+
+   device.connection is dual: when daemon virtualizes the device link
+   it is a PubSub topic published by the peer, but when it reports a
+   direct device link or the daemon's own connection state it is a
+   pseudo-topic raised by the runtime or tunnel.  device.descriptor
+   applies only to virtual devices.
+
+   To the application layer the two are indistinguishable: an OctoScript
+   script or any client handles a pseudo-topic exactly as it handles a
+   PubSub topic -- the same event, the same handler, the same subscribe
+   call -- and the split is an implementation detail of how the event
+   reaches the client, not of the interface it is handled through.
+
+9.2.2.  Publishers
 
    The Publisher column names a role and not an implementation.
 
-   *  "peer": the endpoint that owns the device or the bus being
-      reported on.
-
-   *  "daemon": the host process of [RFC0006], which speaks for the
-      buses and the devices it holds.
-
-   *  "bus profile": the component that implements Section 9.2.
+   *  "peer": the endpoint that owns the device being reported on.
 
    *  "tunnel": the machinery of Section 6.6, for the tunnel whose
-      name appears in the data.
+      name appears in the data.  Its topics are pseudo-topics
+      (Section 9.2.1): raised from tunnel messages, not EVENT.
 
-   *  "responder": the endpoint that answered HELLO (Section 6.1).
+   *  "runtime": the local client runtime.  Its topics are
+      pseudo-topics (Section 9.2.1): they are raised in response to a
+      protocol frame or a local condition and never carried by an
+      EVENT frame, so no SUBSCRIBE applies to them.
 
    *  "any": no restriction; the topic is an extension point.
 
@@ -1755,15 +1861,15 @@ Table of Contents
    own.  A republished event carries the data of the original, and a
    consumer cannot tell the two apart unless the data says so.
 
-9.3.3.  Assignment
+9.2.3.  Assignment
 
-   The prefixes "bus.", "device.", "daemon.", "core.", "blobtun." and
-   "log." are reserved, and so is every name listed in Table 24.  A
-   topic whose name begins with an underscore is reserved for future
-   standard extensions.
+   The prefixes "device.", "core.", "blobtun.", "rpc." and "pubsub."
+   are reserved, and so is every name listed in Table 21.  A topic
+   whose name begins with an underscore is reserved for future standard
+   extensions.
 
    *  Matching is exact (Section 6.5.2).  No wildcard and no prefix
-      matching is defined, so "bus.*" names one topic and not the
+      matching is defined, so "device.*" names one topic and not the
       family.
 
    *  A name under a reserved prefix that is not listed is unassigned.
@@ -1773,7 +1879,7 @@ Table of Contents
    *  Names are assigned only by a document of this series.  An
       application MUST NOT use a reserved prefix for a topic of its own,
       and MUST NOT read a meaning into a reserved name that it does not
-      find in Table 24.
+      find in Table 21.
 
    *  "x." is reserved for private use.  A topic under it is
       application-defined, is never assigned by this series and MAY be
@@ -1784,28 +1890,24 @@ Table of Contents
       It SHOULD be named after the application that owns it, so that two
       applications cannot collide.
 
-9.3.4.  Using the Topics
+9.2.4.  Using the Topics
 
    *  An event reports a fact and not a state (Section 10.2): it says
       that something happened.  The present value is asked for with a
       call, and a consumer that has missed events recovers that way.
 
    *  Delivery is best effort (Section 6.5.3).  A consumer that cannot
-      afford to miss an event subscribes and also drains "poll_events"
-      (Section 9.1), which carries the same facts.
+      afford to miss an event recovers by asking for the present state
+      with a call, which is what the core profile of Section 9.1 is
+      for.
 
-   *  "device.fault" is latched.  A consumer SHOULD hold the fault until
-      "device.cleared" arrives for the same name and bus, or until the
-      fault is cleared by a call [RFC0002].  A latched fault is not
-      repeated.
+   *  "device.fault" is latched.  A consumer SHOULD hold the fault
+      until "device.cleared" arrives for the same name, or until the
+      fault is cleared by a call.  A latched fault is not repeated.
 
-   *  "bus.rx" is the floor and not a summary: a frame is reported there
-      when nothing else claims it, so nothing that arrived disappears
-      [RFC0006].
-
-   *  "core.instructions" announces that the instruction set of the
-      responder changed.  A consumer re-reads discovery (Section 6.7)
-      and MUST NOT go on using the list it cached.
+   *  "core.metadata" announces that what the responder offers
+      changed.  A consumer re-reads metadata (Section 6.7) and MUST NOT
+      go on using what it cached.
 
    *  "log.<name>" carries one record of a named facility.  Severity and
       time belong to the data and not to the name, so one subscription
@@ -1870,7 +1972,7 @@ Table of Contents
       does to a machine and how long that may take.
 
    *  One primitive also carries the incidental traffic.  Heartbeat and
-      discovery are ordinary calls (Section 6.7), so they need no
+      metadata are ordinary calls (Section 6.7), so they need no
       machinery of their own and appear in the same logs as everything
       else.
 
@@ -1889,8 +1991,8 @@ Table of Contents
    *  serialise explicitly when order matters, rather than relying on
       the order in which procedures are executed;
 
-   *  obtain procedure names from discovery and re-read them when the
-      peer announces a change.
+   *  obtain names from metadata and re-read it when the peer
+      announces a change.
 
 10.2. Publish and Subscribe
 
@@ -2198,7 +2300,7 @@ Appendix A.  Error Code Registry
    |0x000E |E_DECOMPRESS        |The compressed payload is malformed.  |
    +-------+--------------------+--------------------------------------+
 
-                     Table 25: Error Code Registry
+                     Table 22: Error Code Registry
 
    The codes are in five groups, lowest first, and the same order is
    used wherever they are listed:
@@ -2245,7 +2347,7 @@ B.1.  Minimal session
       S to C  WELCOME {"proto":1,"session":"s1","server":"octod-test",
                        "caps":["rpc", "blobtun"],
                        "max_payload":1048576, "flags":0}
-      C to S  CALL    {"id":1,"name":"list_instructions","args":{}}
+      C to S  CALL    {"id":1,"name":"metadata","args":{}}
       S to C  RESULT  {"id":1,"ok":true,"value":[]}
 
 B.2.  Compression
