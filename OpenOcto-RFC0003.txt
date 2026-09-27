@@ -1,6 +1,7 @@
 
 
 
+
 OpenOcto Standards Group (OOSG)                                  S. Yang
 Request for Comments: 0003                                          HFUT
 Category: Standards Track                                 September 2026
@@ -13,18 +14,18 @@ Abstract
    This document specifies OctoScript, a dynamically typed programming
    language for controlling robots and the devices attached to them.  It
    is designed to drive the Octopus Control Protocol [RFC0004] and its
-   extensions [RFC0009], [RFC0010] and [RFC0011] from a small,
-   C-family surface.  The language is built around asynchronous remote
-   procedure calls and asynchronous events: every call to a device is a
-   future, and every event from a device is a message a program waits
-   for.  To that end the language provides first-class constructs for
+   extensions [RFC0009], [RFC0010] and [RFC0011] from a small, C-family
+   surface.  The language is built around asynchronous remote procedure
+   calls and asynchronous events: every call to a device is a future,
+   and every event from a device is a message a program waits for.
+   To that end the language provides first-class constructs for
    concurrency (spawn), awaiting (await), racing several outcomes
    (race), and waiting on events, topics, channels and time (select, on,
    wait, sleep).  It defines the lexical structure, the syntax, the
    value and object model, the concurrency and cancellation model, the
    host interface that binds the language to an OCP session, the
-   standard library entry points visible to programs, the meta object
-   of an interpreter instance, and the diagnostics a conforming
+   standard library entry points visible to programs, the meta object of
+   an interpreter instance, and the diagnostics a conforming
    implementation produces.
 
 Status of This Memo
@@ -38,8 +39,8 @@ Status of This Memo
    Internet Standard and is not a candidate for any level of Internet
    Standard.  Distribution of this document is unlimited.
 
-   Information about the current status of this document, any errata
-   and how to provide feedback on it may be obtained from the OOSG.
+   Information about the current status of this document, any errata and
+   how to provide feedback on it may be obtained from the OOSG.
 
 Copyright Notice
 
@@ -131,7 +132,7 @@ Table of Contents
    C-family expression syntax with brace-delimited, indentation
    independent blocks, and it is designed to be embedded in a host
    environment that supplies the machine-facing operations by speaking
-   [RFC0004] on its behalf.  The value model, the operator set, the
+   OCP [RFC0004] on its behalf.  The value model, the operator set, the
    concurrency model and the library are defined by this document; they
    do not depend on the language in which an implementation is written.
 
@@ -209,7 +210,7 @@ Table of Contents
       finally  fn      for     from    globals if      import
       in      let     locals  loop    match   not     null
       on      or      panic   pass    race    return  select
-      sleep   spawn   this    true    try     var     wait
+      sleep   spawn   async   this    true    try     var     wait
       when    while   within  until
 
    Keywords are read-only: using any keyword as an assignment target,
@@ -354,8 +355,9 @@ Table of Contents
 3.5.  Future
 
    A future is a placeholder for a value that is not yet known.  It is
-   created by spawn (Section 6.2) and by every device call (Section
-   9.3).  A future is one of three states: pending, resolved or failed.
+   created by spawn (Section 6.2), by an async function (Section 7.1)
+   and by every device call (Section 9.3).  A future is one of three
+   states: pending, resolved or failed.
 
    *  pending: the work it stands for has not produced a result.
 
@@ -791,13 +793,17 @@ Table of Contents
 6.7.  Cancellation
 
    cancel(future) requests cancellation of the task behind a future or
-   of a subscription handle.  Cancellation is cooperative: a task
-   observes it at the next await, sleep, select or device call and then
-   stops; work already dispatched to a device is not recalled, because
-   [RFC0004], Section 6.4.4 defines no RPC cancellation, so a CALL that
-   has left the host is allowed to run to its RESULT, which is then
-   discarded.  A cancelled task settles its future as failed with the
-   kind Cancel.
+   of a subscription handle.  For a future that is a device CALL it is
+   implemented by the cancel procedure of the Core Profile: the
+   implementation sends CALL {name: "cancel", args: {"id": <the CALL's
+   id>}} to the device, which answers whether the cancellation took
+   (RFC0004, Sections 5.4 and 9.1.4).  Cancellation is cooperative for a
+   local task: the task observes the request at the next await, sleep,
+   select or device call and then stops; work already dispatched to a
+   device is not recalled, because a CALL that has left the host is
+   allowed to run to its RESULT (RFC0004, Section 6.4.4), which the
+   cancel procedure then reports as not taken.  A cancelled task settles
+   its future as failed with the kind Cancel.
 
    race (Section 6.3) cancels the losers, and select (Section 6.4)
    abandons the arms it did not choose; both use the same cooperative
@@ -904,6 +910,13 @@ Table of Contents
    default.  A call binds arguments by position or by name (Section
    5.1).  A function returns the value of its last expression or of an
    explicit return; a function that falls off the end returns null.
+
+   An fn MAY be prefixed with async: an async function returns a future,
+   not a value: calling it starts a task (as spawn would, Section 6.2)
+   and yields a future that resolves with the function's return value or
+   fails with its panic.  The future is observed with await, race or
+   select exactly as any other, and is cancelled with the same
+   cooperative mechanism (Section 6.7).
 
 7.2.  Closures
 
@@ -1467,7 +1480,7 @@ Appendix A. Collected Grammar (ABNF)
       pass-stmt   = "pass"
       let-stmt    = ( "let" / "const" / "var" ) name [ ":" type ]
                   [ "=" expr ]
-      fn-def      = "fn" name "(" [ param *( "," param ) ] ")"
+      fn-def   = [ "async" ] "fn" name "(" [ param *( "," param ) ] ")"
                   [ ":" type ] block
       param       = name [ ":" type ] [ "=" expr ]
                   / "..." name [ ":" type ] / "**" name [ ":" type ]

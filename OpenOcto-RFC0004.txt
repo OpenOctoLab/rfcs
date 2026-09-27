@@ -122,6 +122,7 @@ Table of Contents
        9.1.1.  The State of a Peer
        9.1.2.  Metadata
        9.1.3.  Sensors, Actuators and Parameters
+     9.1.4.  Cancel
      9.2.  Topic Namespaces
        9.2.1.  The Registry
        9.2.2.  Publishers
@@ -1434,9 +1435,10 @@ Table of Contents
    *  Answers MAY arrive in any order.  A caller that needs an order
       MUST wait for one answer before sending the next call.
 
-   *  Nothing bounds how long an answer may take, and no cancellation is
-      defined.  A caller that abandons a call ignores the RESULT when it
-      arrives.
+   *  Nothing bounds how long an answer may take.  To stop waiting for a
+      call sends the cancel procedure (Section 9.1.4) with the call's
+      identifier; a caller that merely abandons it ignores the RESULT
+      when it arrives.
 
 6.5.  Publish and Subscribe
 
@@ -1854,6 +1856,9 @@ Table of Contents
    |set_param   |(name, value) -> null    |Writes one device parameter |
    |            |                         |(Section 9.1.3).            |
    +------------+-------------------------+----------------------------+
+   |cancel      |(id) -> {ok, remark?}    |Cancels an outstanding CALL |
+   |            |                         |(Section 9.1.4).            |
+   +------------+-------------------------+----------------------------+
 
                   Table 20: Core Profile Instructions
 
@@ -1947,6 +1952,39 @@ Table of Contents
    actuator that refuses what it was asked to do, like any other failure
    of a call, is answered in RESULT and not with ERROR (Section 6.4.2).
 
+9.1.4.  Cancel
+
+   "cancel" stops an outstanding CALL.  It is an ordinary CALL
+   (Section 5.3) named "cancel", whose only argument is the identifier
+   of the CALL to cancel:
+
+      {"id": 19, "name": "cancel", "args": {"id": 7}}
+
+   The peer answers with a standard RESULT (Section 5.4).  On success
+   "ok" is true and the optional remark travels in "value" as a
+   confirmation note.  On failure "ok" is false and the remark is an
+   "error" object -- a failed cancel is a procedure error -- whose
+   "message" carries the reason and whose "kind" names a cancellation
+   error (for example "not a CALL" or "not cancellable").
+
+   A cancel applies only to CALL frames:
+
+   *  the id MUST name an outstanding CALL.  A cancel that names
+      a frame not a CALL -- EVENT, SUBSCRIBE, RESULT, TUNDATA and
+      the rest -- answers ok: false with an error whose message is
+      "not a CALL", and the named frame is unaffected;
+
+   *  a CALL whose name is "cancel" is itself not cancellable.  A cancel
+      directed at it answers ok: false with an error whose message is
+      "not cancellable";
+
+   *  an id that names no outstanding CALL, or one already answered,
+      answers ok: false with an error whose message is "unknown call".
+
+   When the named CALL exists and is cancellable, the peer MUST stop
+   servicing it and MUST NOT send a RESULT; the caller observes the
+   cancellation via the RFC0003 language binding (Section 6.7), which
+   fails the corresponding future with the kind Cancel.
 
 9.2.  Topic Namespaces
 
