@@ -188,8 +188,8 @@ Table of Contents
       E_BAD_PAYLOAD or truncate it to 32-bit, at its own discretion, and
       a peer MUST NOT rely on either behaviour.
 
-   *  Tags: an Air decoder MUST reject a tagged item with E_BAD_PAYLOAD.
-      [RFC0004] defines none, so this only rejects future extensions.
+   *  Tags: an Air decoder MUST ignore a tag and decode the tagged data
+      item directly, rather than reject it.
 
    *  Indefinite-length items (major types 2, 3, 4, 5 with the
       additional-information value 31): an Air decoder SHOULD reject
