@@ -75,6 +75,7 @@ Table of Contents
      4.3.  Members
      4.4.  Common Payload Forms
      4.5.  Decoding Order
+     4.6.  Semantic Tags
    5.  Message Layer
      5.1.  HELLO
      5.2.  WELCOME
@@ -504,9 +505,13 @@ Table of Contents
                           Table 4: Value Types
 
    Byte strings are written in this document with the CBOR diagnostic
-   notation h'...'.  No CBOR tag is defined by this document; a
-   receiver that cannot interpret a tagged value reports
-   E_BAD_PAYLOAD.
+   notation h'...'.  OCP defines no CBOR tags of its own.  Where a
+   value's meaning is a kind a standard CBOR tag names, a sender MAY
+   wrap the value in that standard tag from [IETF-RFC8949]; the tag is
+   OPTIONAL and supplementary and carries no data of its own.
+   A receiver MUST accept a value with or without a standard tag and
+   MUST ignore any tag it does not understand; it MUST NOT reject a
+   frame merely because a value is tagged or untagged.
 
    Member keys are text strings and are compared as exact octet
    sequences: a receiver MUST NOT fold case, trim space or apply any
@@ -593,6 +598,12 @@ Table of Contents
       identifiers and codes.  A float is appropriate only for a
       measurement whose precision is inherently limited.
 
+   *  Encode numeric values at 64-bit width: unsigned and negative
+      integers as the 8-octet form, and floats as [IEEE754] double; this
+      is a recommendation and not a requirement; a sender MAY use a
+      narrower legal form, and a receiver MUST still accept any legal
+      CBOR width, as Section 2 requires.
+
    *  Keep a payload small.  The negotiated limit (Section 3.3) bounds
       the octets of one frame, and a value that can be large belongs in
       a tunnel (Section 10).
@@ -617,6 +628,41 @@ Table of Contents
 
    A decoder MUST NOT reject a value merely because it uses a legal but
    non-canonical CBOR encoding (Section 2).
+
+4.6.  Semantic Tags
+
+   OCP defines no protocol-specific CBOR tags of its own.  Where a
+   value's meaning is a kind that a standard CBOR tag names, a sender
+   MAY wrap the value in that standard tag from the IANA CBOR Tags
+   registry [IETF-RFC8949]; the tag is OPTIONAL and supplementary and c
+   arries no data of its own.  The principal case in this document is a
+   timestamp: a float that denotes a point in time MAY be tagged 1
+   (epoch-based date/time), or, if the time is expressed as an RFC 3339
+   string, tagged 0 (standard date/time string).  A measurement that is
+   not a time has no applicable standard tag and is sent untagged.
+
+   Every other field of this document has a fixed CBOR type and no
+   applicable standard tag, so it is sent untagged; a sender SHOULD NOT
+   add a tag to such a field, and a receiver MUST ignore any tag it finds
+   on one.
+
+   The rules for a receiver are:
+
+   *  A receiver MUST accept a value whether or not it carries a standard
+      CBOR tag.
+
+   *  A receiver MUST ignore any tag it does not understand, in the manner
+      of [IETF-RFC8949]; the tag alone is never a reason to reject.  An
+      implementation that does not use tags, such as OCP Air [RFC0011],
+      simply strips and ignores any tag it meets and decodes the inner
+      value; this is always permitted and such an implementation remains
+      conformant.
+
+   *  A receiver MUST NOT derive meaning from the presence or absence of a
+      tag and MUST NOT reject a frame for either reason.
+
+   *  A malformed inner value is still reported with E_BAD_PAYLOAD; the
+      tag is never the cause of rejection.
 
 5.  Message Layer
 
@@ -1708,6 +1754,8 @@ Table of Contents
 
       ocp://host[:port]      cleartext; port defaults to 6286
 
+      The host is an IPv4 or IPv6 address, or a host name.
+
    A session inside a secure transport has a scheme of its own, which
    [RFC0010] defines; a tool that is given that scheme MUST NOT treat it
    as this one.
@@ -1792,21 +1840,21 @@ Table of Contents
    OPTIONAL, and a peer that offers none of a kind returns an empty
    array rather than omitting the member.
 
-   instructions  [{name, args, help}]: the procedures of the peer other
+   instructions  [{name, args, memo}]: the procedures of the peer other
       than the ones of Table 20.  The peer MAY list one of Table 20 here
       as well, and a caller MUST NOT rely on it doing so.
 
-   sensors  [{name, type, unit, help}]: what "sense" reads.
+   sensors  [{name, type, unit, memo}]: what "sense" reads.
 
-   actuators  [{name, args, help}]: what "actuate" operates.
+   actuators  [{name, args, memo}]: what "actuate" operates.
 
-   params  [{name, type, unit, range, default, mode, help}]: what
+   params  [{name, type, unit, range, default, mode, memo}]: what
       "get_param" and "set_param" reach.  "mode" is the access in Linux
       permission notation -- 4 read-only, 6 read-write, 2 write-only,
       the x bit unused -- mirroring "read"/"write" of the descriptor
       (Section 9.1.3).
 
-   events  [{name, help}]: what the peer publishes, under the name that
+   events  [{name, memo}]: what the peer publishes, under the name that
       appears in the "name" member of the event.
 
    The "args" member of an entry names the parameters of the procedure
@@ -1818,7 +1866,7 @@ Table of Contents
    RESULT.  "type" names a value type, "unit" the unit of the value,
    "range" the two numbers the value lies between and "default" the
    value used when a call supplies none; all four are OPTIONAL and all
-   four are meant for a program.  "help" is a short text meant for a
+   four are meant for a program.  "memo" is a short text meant for a
    human.  "mode" is the access of the parameter as a number in Linux
    permission notation (r=4, w=2, x unused): 4 read-only, 6 read-write,
    2 write-only.  It is the application-layer signal that tells a caller
@@ -2296,8 +2344,8 @@ Table of Contents
    *  A receiver MUST NOT interpret as cleartext a frame it has
       rejected, whatever the reason for the rejection.
 
-   *  An endpoint SHOULD bind the loopback address unless remote access
-      is intended.
+   *  An endpoint SHOULD bind the loopback address (IPv4 127.0.0.1 or
+      IPv6 ::1) unless remote access is intended.
 
 13. IANA Considerations
 
@@ -2342,6 +2390,9 @@ Table of Contents
 
 14.1. Normative References
 
+   [IEEE754]  IEEE, "IEEE Standard for Floating-Point Arithmetic", IEEE
+              Std 754-2019, July 2019.
+
    [IETF-RFC8949]  Bormann, C. and P. Hoffman, "Concise Binary Object
               Representation (CBOR)", IETF STD 94, IETF RFC 8949,
               December 2020.
@@ -2369,6 +2420,9 @@ Table of Contents
              September 2026.
 
    [RFC0010]  Yang, S., "OCP over Secure Transport", RFC 0010,
+             September 2026.
+
+   [RFC0011]  Yang, S., "OCP Air: an OCP Subset for MCUs", RFC 0011,
              September 2026.
 
    [IETF-RFC8878]  Collet, Y. and M. Kucherawy, "Zstandard Compression

@@ -808,9 +808,10 @@ Table of Contents
       the daemon to prove itself chooses one that does, or carries the
       session inside a secure transport [RFC0010].
 
-   *  A serve mode SHOULD bind the loopback address unless remote access
-      is intended, and a serve mode that is reachable SHOULD require
-      authentication.  A session that is neither authenticated nor
+   *  A serve mode SHOULD bind the loopback address (IPv4 127.0.0.1 or
+      IPv6 ::1) unless remote access is intended, and a serve mode that
+      is reachable SHOULD require authentication.  A session that is
+      neither authenticated nor
       carried by a secure transport is cleartext.
 
    *  Authorisation is not the daemon's job.  Knowing who a caller is,
@@ -924,19 +925,19 @@ Appendix A.  A Session from Start to Finish
       S to C  RESULT  {"id":1,"ok":true,"value":{
                  "instructions":[
                    {"name":"drive","args":["speed"],
-                    "help":"Spin a joint at a speed."},
-                   {"name":"halt","args":[],"help":"Stop."}],
+                    "memo":"Spin a joint at a speed."},
+                   {"name":"halt","args":[],"memo":"Stop."}],
                  "sensors":[{"name":"angle","type":"f32",
-                    "unit":"rad","help":"Angle of the joint."},
+                    "unit":"rad","memo":"Angle of the joint."},
                    {"name":"temp","type":"f32","unit":"degC",
-                    "help":"Temperature of the drive."}],
+                    "memo":"Temperature of the drive."}],
                  "actuators":[{"name":"gripper","args":["force"],
-                    "help":"Close the gripper."}],
+                    "memo":"Close the gripper."}],
                  "params":[{"name":"stiffness","type":"f32",
                     "unit":"N*m/rad","range":[0.0,200.0],
-                    "help":"Stiffness of the joint."}],
+                    "memo":"Stiffness of the joint."}],
                  "events":[{"name":"overtemp",
-                    "help":"The drive is too hot."}]}}
+                    "memo":"The drive is too hot."}]}}
 
    It subscribes, reads a sensor, writes a parameter, and calls an
    instruction and an actuator.

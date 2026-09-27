@@ -1,8 +1,11 @@
 
 
+
+
 OpenOcto Standards Group (OOSG)                                  S. Yang
 Request for Comments: 0005                                          HFUT
 Category: Standards Track                                 September 2026
+
 
                  The OpenOcto Device Descriptor Format
 
@@ -22,10 +25,7 @@ Abstract
    This document specifies that format completely: every table, every
    key, its type and its default, the rules that tie the tables to one
    another, the validation a descriptor undergoes before any of it is
-   applied, and the diagnostics a violation produces.  It replaces the
-   format of the same name of an earlier revision and recognises nothing
-   of it: a descriptor written for that revision is rejected, not
-   migrated.
+   applied, and the diagnostics a violation produces.
 
 Status of This Memo
 
@@ -58,7 +58,7 @@ Table of Contents
    1.  Introduction
    2.  Conventions
    3.  Document Structure
-   4.  The Descriptor Table
+   4.  The Meta Table
    5.  Session Tables
      5.1.  Offers
      5.2.  Authentication
@@ -94,13 +94,13 @@ Table of Contents
 
 1.  Introduction
 
-   A device daemon of [RFC0004] is a virtual device.  It answers calls,
-   publishes events and moves byte streams on one side; it drives a bus
-   on the other; and the two sides never meet.  A caller sees a device
-   with procedures, sensors, actuators, parameters and events, and it
-   sees no bus, no address and no frame.  That is the point of the
-   arrangement: hardware differs between two machines that do the same
-   job, and nothing about the difference reaches a program.
+   A device daemon of OCP [RFC0004] is a virtual device.  It answers
+   calls, publishes events and moves byte streams on one side; it drives
+   a bus on the other; and the two sides never meet.  A caller sees a
+   device with procedures, sensors, actuators, parameters and events,
+   and it sees no bus, no address and no frame.  That is the point of
+   the arrangement: hardware differs between two machines that do the
+   same job, and nothing about the difference reaches a program.
 
    A descriptor is the translation between the two sides.  It is data
    and not code: it is read once at start-up, validated as a whole, and
@@ -136,10 +136,15 @@ Table of Contents
 
    One device, several ways to serve it.  The translation is one, and a
    descriptor MAY offer it on as many addresses and in as many variants
-   of [RFC0004] as a deployment wants (Section 6).  What differs between
-   two serve modes is where the device is offered, which variant is
-   spoken there, and which part of the translation is exposed; the
-   translation itself does not change.
+   of [RFC0004] as a deployment wants (Section 6).  A serve mode is one
+   such way: it binds its own host and port, speaks its own variant of
+   [RFC0004], and the daemon opens every declared serve mode in
+   parallel, each from its own [serve.<name>] table, a
+   sub-configuration of the descriptor.  What differs between two
+   serve modes is where the device is offered, which variant is
+   spoken there, and which part of the
+   translation is exposed; the translation itself does not change, and
+   all serve modes serve the same device from it.
 
    What a descriptor declares reaches a caller through the mechanisms
    [RFC0004] already defines: what the device offers is answered by the
@@ -157,16 +162,11 @@ Table of Contents
    whoever puts it on the network implements an OCP-speaking control
    program on its behalf; the program that calls it then needs no
    descriptor, because there is nothing left to translate.  A program
-   written in the language of the series [RFC0003] reaches what a
-   descriptor declares through the instructions of [RFC0004], Section
-   9.1.  The architecture that puts the daemon, the programs and the
-   protocol together is [RFC0002], and a term that this document takes
-   from it carries the meaning that document gives it.
-
-   This document replaces an earlier revision of the same name.  A
-   descriptor of that revision is rejected and is not migrated: no
-   table, no key and no value of it is recognised here, and in
-   particular the table [device] is not a bus.
+   written in OctoScript [RFC0003] reaches what a descriptor declares
+   through the instructions of [RFC0004], Section 9.1.  The architecture
+   that puts the daemon, the programs and the protocol together is
+   [RFC0002], and a term that this document takes from it carries the
+   meaning that document gives it.
 
 2.  Conventions
 
@@ -175,42 +175,42 @@ Table of Contents
    tables of this document are listed in Table 1.
 
    +=========+=========================================================+
-   | Type    | Meaning                                                 |
+   |Type     |Meaning                                                  |
    +=========+=========================================================+
-   | integer | A TOML integer.                                         |
+   |integer  |A TOML integer.                                          |
    +---------+---------------------------------------------------------+
-   | float   | A TOML float; an integer is accepted.                   |
+   |float    |A TOML float; an integer is accepted.                    |
    +---------+---------------------------------------------------------+
-   | boolean | A TOML boolean.                                         |
+   |boolean  |A TOML boolean.                                          |
    +---------+---------------------------------------------------------+
-   | string  | A TOML string.                                          |
+   |string   |A TOML string.                                           |
    +---------+---------------------------------------------------------+
-   | array   | A TOML array; the element type is stated where used.    |
+   |array    |A TOML array; the element type is stated where used.     |
    +---------+---------------------------------------------------------+
-   | table   | A TOML table.                                           |
+   |table    |A TOML table.                                            |
    +---------+---------------------------------------------------------+
-   | value   | An integer, a float or a string.                        |
+   |value    |An integer, a float or a string.                         |
    +---------+---------------------------------------------------------+
-   | any     | Any of the above.                                       |
+   |any      |Any of the above.                                        |
    +---------+---------------------------------------------------------+
 
                  Table 1: Type Names Used in This Document
 
-   [RFC0002] and [RFC0003] are normative for this document.  A term
-   that [RFC0002] defines carries the same meaning here, and the
-   programs of the series, which are the callers a descriptor serves,
-   are written in the language of [RFC0003].
+   [RFC0002] and [RFC0003] are normative for this document.  A term that
+   [RFC0002] defines carries the same meaning here, and the programs of
+   the series, which are the callers a descriptor serves, are written in
+   OctoScript [RFC0003].
 
    Names.  Every object of this format has a name: a session, a serve
-   mode, a peer, a relay, a bus, a codec, an instruction, an actuator, a
-   sensor, a parameter, a signal, an enumeration and a field.  A name is
-   a non-empty string and is compared as exact octets.  A name SHOULD
-   consist only of ASCII letters, digits and the three characters "_",
-   "-" and "."; a name that contains anything else is accepted but is
-   awkward to carry in a procedure name or in a topic.  The namespaces
-   are separate, so a bus and an instruction MAY share a name and the
-   key that names one says which is meant; two objects of the same kind
-   MUST NOT share one.
+   mode, a whitelist, a blacklist, a relay, a bus, a codec, an
+   instruction, an actuator, a sensor, a parameter, a signal, an
+   enumeration and a field.  A name is a non-empty string and is
+   compared as exact octets.  A name SHOULD consist only of ASCII
+   letters, digits and the three characters "_", "-" and "."; a name
+   that contains anything else is accepted but is awkward to carry in a
+   procedure name or in a topic.  The namespaces are separate, so a bus
+   and an instruction MAY share a name and the key that names one says
+   which is meant; two objects of the same kind MUST NOT share one.
 
    Order.  Where a list is declared, as the fields of a codec or the
    arguments of an instruction, the order of declaration is part of its
@@ -231,38 +231,39 @@ Table of Contents
    The top-level tables are listed in Table 2.
 
    +======================+============================================+
-   | Table                | Purpose                                    |
+   |Table                 |Purpose                                     |
    +======================+============================================+
-   | [descriptor]         | Identity and format version of this        |
-   |                      | document (Section 4).                      |
+   |[meta]                |Identity and format version of this document|
+   |                      |(Section 4).                                |
    +----------------------+--------------------------------------------+
-   | [session.<name>]     | One variant of [RFC0004]: what it offers,  |
-   |                      | requires and is carried by (Section 5).    |
+   |[session.<name>]      |One variant of [RFC0004]: what it offers,   |
+   |                      |requires and is carried by (Section 5).     |
    +----------------------+--------------------------------------------+
-   | [serve.<name>]       | One way the device is served (Section 6).  |
+   |[serve.<name>]        |One way the device is served (Section 6).   |
    +----------------------+--------------------------------------------+
-   | [peer.<name>]        | One peer the daemon connects to            |
-   |                      | (Section 7).                               |
+   |[[whitelist]]         |An array of allowed callers (Section 7).    |
    +----------------------+--------------------------------------------+
-   | [relay.<name>]       | One peer whose calls are passed on         |
-   |                      | unchanged (Section 8).                     |
+   |[[blacklist]]         |An array of denied callers (Section 7).     |
    +----------------------+--------------------------------------------+
-   | [bus.<name>]         | One hardware bus (Section 9).              |
+   |[relay.<name>]        |One relay that passes calls on unchanged    |
+   |                      |(Section 8).                                |
    +----------------------+--------------------------------------------+
-   | [enum.<name>]        | A map from integers to names (Section 10). |
+   |[bus.<name>]          |One hardware bus (Section 9).               |
    +----------------------+--------------------------------------------+
-   | [codec.<name>]       | One frame layout (Section 11).             |
+   |[enum.<name>]         |A map from integers to names (Section 10).  |
    +----------------------+--------------------------------------------+
-   | [instruction.<name>] | One procedure a program may call           |
-   |                      | (Section 12).                              |
+   |[codec.<name>]        |One frame layout (Section 11).              |
    +----------------------+--------------------------------------------+
-   | [actuator.<name>]    | One thing "actuate" operates (Section 13). |
+   |[instruction.<name>]  |One procedure a program may call            |
+   |                      |(Section 12).                               |
    +----------------------+--------------------------------------------+
-   | [sensor.<name>]      | One thing "sense" reads (Section 14).      |
+   |[actuator.<name>]     |One thing "actuate" operates (Section 13).  |
    +----------------------+--------------------------------------------+
-   | [param.<name>]       | One setting of the device (Section 15).    |
+   |[sensor.<name>]       |One thing "sense" reads (Section 14).       |
    +----------------------+--------------------------------------------+
-   | [signal.<name>]      | One thing the device reports (Section 16). |
+   |[param.<name>]        |One setting of the device (Section 15).     |
+   +----------------------+--------------------------------------------+
+   |[signal.<name>]       |One thing the device reports (Section 16).  |
    +----------------------+--------------------------------------------+
 
                       Table 2: Top-Level Tables
@@ -282,57 +283,62 @@ Table of Contents
 
    2.  the environment variable OCTO_DESCRIPTOR;
 
-   3.  a file named "octo.toml" in the working directory;
+   3.  a file named "octo.toml" or "*.octo.toml" in the working
+       directory;
 
-   4.  a file of the same name below the user configuration directory;
+   4.  a file named "octo.toml" or "*.octo.toml" below the user
+       configuration directory;
 
    5.  a default packaged with the implementation.
+
+   The recommended file name extension is ".octo.toml".  A file so named
+   is recognised wherever this document is searched for; "octo.toml"
+   remains accepted for compatibility.
 
    A missing file and a malformed document are both fatal and both name
    the path (Appendix A).  A descriptor is applied as a whole: a daemon
    MUST NOT start with a part of one.
 
-   A conforming implementation reads a descriptor of format 1, the
+   A conforming implementation reads a descriptor of format 1, thez
    version defined here.  A descriptor whose "format" is a value it does
    not implement MUST be rejected and MUST NOT be guessed at.
 
-4.  The Descriptor Table
+4.  The Meta Table
 
-   The keys of [descriptor] are listed in Table 3.
+   The keys of [meta] are listed in Table 3.
 
    +=============+==============+======================================+
-   | Key         | Type         | Meaning                              |
+   |Key          |Type          |Meaning                               |
    +=============+==============+======================================+
-   | format      | integer      | REQUIRED.  The version of the        |
-   |             |              | format; 1 in this document.          |
+   |format       |integer       |REQUIRED.  The version of the format; |
+   |             |              |1 in this document.                   |
    +-------------+--------------+--------------------------------------+
-   | id          | string       | OPTIONAL.  A stable identity of the  |
-   |             |              | device.  Reported with the           |
-   |             |              | descriptor topic (Section 18.3).     |
+   |id           |string        |OPTIONAL.  A stable identity of the   |
+   |             |              |device.  Reported with the descriptor |
+   |             |              |topic (Section 18.3).                 |
    +-------------+--------------+--------------------------------------+
-   | name        | string       | OPTIONAL.  A name meant for a human. |
+   |name         |string        |OPTIONAL.  A name meant for a human.  |
    +-------------+--------------+--------------------------------------+
-   | help        | string       | OPTIONAL.  A description of the      |
-   |             |              | device, in English, meant for a      |
-   |             |              | human.                               |
+   |memo         |string        |OPTIONAL.  A description of the       |
+   |             |              |device, in English, meant for a human.|
    +-------------+--------------+--------------------------------------+
 
-                   Table 3: Keys of the Descriptor Table
+                   Table 3: Keys of the Meta Table
 
    An implementation MUST NOT infer a device identity from a name: "id"
    is the identity and "name" is a label.
 
-      [descriptor]
+      [meta]
       format = 1
-      id     = "octo-arm-01"
-      name   = "Left arm"
-      help   = "Six-axis arm on the port manipulator."
+      id     = "octo-bot-001"
+      name   = "OctoBot 001"
+      memo   = "A robot octopus."
 
 5.  Session Tables
 
    [session.<name>] declares one variant of [RFC0004]: what it offers,
    what it requires and what carries it.  Every serve mode names one,
-   and so does every peer.  A session named "default" is assumed when a
+   and a session named "default" is assumed when a
    key names a session that is not declared: it offers the defaults of
    Section 5.1, has no authentication, no secure transport and no
    requirement.
@@ -522,16 +528,24 @@ Table of Contents
 
 6.  Serve Tables
 
-   [serve.<name>] declares one way the device is offered: one address
-   the daemon listens on, in one variant of [RFC0004].  Several MAY be
-   declared, and all of them serve the same device from the same
-   translation.  The keys are listed in Table 8.
+   [serve.<name>] declares one serve mode: one way the device is
+   offered, as an independent listener that binds its own host and
+   port and speaks its own variant of [RFC0004].  Each
+   [serve.<name>] table is a sub-configuration of the descriptor;
+   several MAY be declared, and the daemon opens them all in
+   parallel, each serving the same device
+   from
+   the same translation.  The keys are listed in Table 8.
 
    +=============+==============+======================================+
    | Key         | Type         | Meaning                              |
    +=============+==============+======================================+
-   | host        | string       | The address to bind.  Default        |
-   |             |              | "127.0.0.1".                         |
+   | host        | string       | The address to bind: an IPv4 or      |
+   |             |              | IPv6 address, or a host name.  An    |
+   |             |              | IPv6 literal is written bare, without|
+   |             |              | brackets, because "port" is a        |
+   |             |              | separate key; "::" binds every IPv6  |
+   |             |              | interface.  Default "127.0.0.1".     |
    +-------------+--------------+--------------------------------------+
    | port        | integer      | Default 6286, the port recommended   |
    |             |              | by [RFC0004], Section 7.4, or 16286  |
@@ -588,55 +602,79 @@ Table of Contents
    The translation itself is shared and is never declared twice, so two
    serve modes cannot disagree about what a call does.
 
-7.  Peer Tables
+7.  Access Tables
 
-   [peer.<name>] declares one peer the daemon connects to.  A peer
-   speaks [RFC0004]; it is reached by a relay (Section 8) and by nothing
-   else, because there is nothing to translate on the way to it.  The
-   keys are listed in Table 9.
+   Access is controlled by whitelist and blacklist entries.  A whitelist
+   entry names an address that is allowed; a blacklist entry names an
+   address that is denied.  Both kinds share the keys of Table 9.
+
+   An entry is declared at one of two levels.  At the top level,
+   [[whitelist]] or [[blacklist]] is an array of entries that applies
+   to every serve mode.  Nested under a serve, an
+   [[serve.<name>.whitelist]] or [[serve.<name>.blacklist]]
+   applies only to that serve mode.
+   Each entry carries an "addr" that is a CIDR range, in IPv4 or
+   IPv6, such as "192.168.1.0/24" or "2001:db8::/32", or a bare
+   single address such as "10.0.0.9" (that host, /32) or
+   "2001:db8::1" (/128), and an optional "memo".
+
+   The two kinds are mutually exclusive at one level: a level
+   MUST NOT declare both a whitelist entry and a blacklist entry.
+   The inner level MUST declare the same kind as the outer level when
+   the outer level declares one; an inner blacklist under an outer
+   whitelist, or the reverse, is a load-time error.  When the outer
+   level declares no entry, the inner level MAY declare either kind.
+
+   The effective allow set of a serve mode is the intersection of the
+   outer allow set and the inner allow set.  The outer allow set is
+   the addresses an outer whitelist names, or every address an outer
+   blacklist does not name, or every address when the outer level is
+   silent; the inner allow set is the same per serve mode.  A caller
+   whose address is in the intersection is allowed; one outside it is
+   refused before authentication.  When both levels are silent, every
+   allowed: silence is not a denial.
 
    +=============+==============+======================================+
    | Key         | Type         | Meaning                              |
    +=============+==============+======================================+
-   | host        | string       | REQUIRED.  The address of the peer.  |
+   | addr        | string       | REQUIRED.  A CIDR range in IPv4 or   |
+   |             |              | IPv6, such as "192.168.1.0/24" or    |
+   |             |              | "2001:db8::/32", or a bare single    |
+   |             |              | address such as "10.0.0.9" (that     |
+   |             |              | host, /32) or "2001:db8::1" (/128).  |
+   +-------------+--------------+--------------------------------------+
+   | memo        | string       | OPTIONAL.  A description meant for   |
+   |             |              | a human.                             |
+   +-------------+--------------+--------------------------------------+
+
+                      Table 9: Keys of an Access Entry
+
+8.  Relay Tables
+
+   [relay.<name>] declares one relay: calls it takes are passed on
+   unchanged to a peer at the address it names.  A relay translates
+   nothing: it is the case where there is nothing to translate, because
+   the peer already speaks [RFC0004].  The keys are listed in Table 10.
+
+   +=============+==============+======================================+
+   | Key         | Type         | Meaning                              |
+   +=============+==============+======================================+
+   | host        | string       | REQUIRED.  The address of the peer   |
+   |             |              | the relay reaches: an IPv4 or IPv6   |
+   |             |              | address, or a host name.             |
    +-------------+--------------+--------------------------------------+
    | port        | integer      | Default 6286, or 16286 when the      |
-   |             |              | session of this peer uses a secure   |
+   |             |              | session of this relay uses a secure  |
    |             |              | transport [RFC0010].                 |
    +-------------+--------------+--------------------------------------+
    | session     | string       | The variant of [RFC0004] spoken to   |
-   |             |              | this peer.  Default "default".       |
+   |             |              | the peer.  Default "default".        |
    +-------------+--------------+--------------------------------------+
    | timeout     | float        | Seconds to wait for WELCOME.         |
    |             |              | Default 3.0.                         |
    +-------------+--------------+--------------------------------------+
    | retry       | float        | Seconds between attempts; 0 gives    |
    |             |              | up after one.  Default 5.0.          |
-   +-------------+--------------+--------------------------------------+
-   | enabled     | boolean      | Default true.  When false the peer   |
-   |             |              | is declared but not connected to.    |
-   +-------------+--------------+--------------------------------------+
-
-                       Table 9: Keys of a Peer Table
-
-   The daemon is the initiator of the session to a peer, as [RFC0004],
-   Section 6, uses the word: it sends HELLO.  A peer whose session
-   requires more than the peer offers is a run-time failure of the
-   session and not an error of the descriptor: what the peer answers is
-   not known when a file is read.
-
-8.  Relay Tables
-
-   [relay.<name>] declares one peer whose calls are passed on unchanged.
-   A relay translates nothing: it is the case where there is nothing to
-   translate, because the peer already speaks [RFC0004].  The keys are
-   listed in Table 10.
-
-   +=============+==============+======================================+
-   | Key         | Type         | Meaning                              |
-   +=============+==============+======================================+
-   | peer        | string       | REQUIRED.  The name of a peer        |
-   |             |              | (Section 7).                         |
    +-------------+--------------+--------------------------------------+
    | prefix      | string       | OPTIONAL.  A namespace: a call whose |
    |             |              | name begins with it is relayed with  |
@@ -649,7 +687,7 @@ Table of Contents
    |             |              | subscription this daemon does not    |
    |             |              | publish itself (below).              |
    +-------------+--------------+--------------------------------------+
-   | help        | string       | OPTIONAL.  A description meant for   |
+   | memo        | string       | OPTIONAL.  A description meant for   |
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
@@ -750,7 +788,7 @@ Table of Contents
    |             |              | to one string, and one integer       |
    |             |              | MUST NOT map to two.                 |
    +-------------+--------------+--------------------------------------+
-   | help        | string       | OPTIONAL.  A description meant for   |
+   | memo        | string       | OPTIONAL.  A description meant for   |
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
@@ -758,7 +796,7 @@ Table of Contents
 
       [enum.mode]
       values = { 0 = "idle", 1 = "run", 2 = "fault" }
-      help   = "State of the drive."
+      memo   = "State of the drive."
 
    An enumeration is a presentation of a number and not a constraint:
    an integer that the map does not name is carried and reported as the
@@ -796,7 +834,7 @@ Table of Contents
    | fields      | array of     | REQUIRED.  At least one field,       |
    |             | table        | declared as [[codec.<name>.field]].  |
    +-------------+--------------+--------------------------------------+
-   | help        | string       | OPTIONAL.  A description meant for   |
+   | memo        | string       | OPTIONAL.  A description meant for   |
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
@@ -868,7 +906,7 @@ Table of Contents
    | default     | value        | OPTIONAL.  The value used when the   |
    |             |              | binding supplies none.               |
    +-------------+--------------+--------------------------------------+
-   | help        | string       | OPTIONAL.  A description meant for   |
+   | memo        | string       | OPTIONAL.  A description meant for   |
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
@@ -1049,7 +1087,7 @@ Table of Contents
    | args        | array of     | OPTIONAL.  The arguments, declared   |
    |             | table        | as [[instruction.<name>.arg]].       |
    +-------------+--------------+--------------------------------------+
-   | help        | string       | OPTIONAL.  A description meant for   |
+   | memo        | string       | OPTIONAL.  A description meant for   |
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
@@ -1080,7 +1118,7 @@ Table of Contents
    | default     | value        | OPTIONAL.  The value used when a     |
    |             |              | call supplies none.                  |
    +-------------+--------------+--------------------------------------+
-   | help        | string       | OPTIONAL.  A description meant for   |
+   | memo        | string       | OPTIONAL.  A description meant for   |
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
@@ -1118,7 +1156,7 @@ Table of Contents
       [instruction.drive]
       bus  = "main"
       req  = "drive"
-      help = "Spin a joint at a speed."
+      memo = "Spin a joint at a speed."
 
       [[instruction.drive.arg]]
       name  = "speed"
@@ -1150,7 +1188,7 @@ Table of Contents
    | args        | array of     | OPTIONAL.  The arguments, declared   |
    |             | table        | as [[actuator.<name>.arg]].          |
    +-------------+--------------+--------------------------------------+
-   | help        | string       | OPTIONAL.  A description meant for   |
+   | memo        | string       | OPTIONAL.  A description meant for   |
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
@@ -1165,7 +1203,7 @@ Table of Contents
       [actuator.gripper]
       bus  = "tool"
       req  = "grip"
-      help = "Close the gripper at a force."
+      memo = "Close the gripper at a force."
 
       [[actuator.gripper.arg]]
       name  = "force"
@@ -1208,7 +1246,7 @@ Table of Contents
    | read        | table        | OPTIONAL.  How a fresh reading is    |
    |             |              | asked for (Table 21).                |
    +-------------+--------------+--------------------------------------+
-   | help        | string       | OPTIONAL.  A description meant for   |
+   | memo        | string       | OPTIONAL.  A description meant for   |
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
@@ -1261,7 +1299,7 @@ Table of Contents
    | write       | table        | OPTIONAL.  How the value is written  |
    |             |              | (Table 21).                          |
    +-------------+--------------+--------------------------------------+
-   | help        | string       | OPTIONAL.  A description meant for   |
+   | memo        | string       | OPTIONAL.  A description meant for   |
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
@@ -1355,7 +1393,7 @@ Table of Contents
    |             |              | of the last frame reported is not    |
    |             |              | reported again.                      |
    +-------------+--------------+--------------------------------------+
-   | help        | string       | OPTIONAL.  A description meant for   |
+   | memo        | string       | OPTIONAL.  A description meant for   |
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
@@ -1392,8 +1430,8 @@ Table of Contents
        name is a valid name; no two objects of one kind share a name.
 
    3.  References.  Every name that a key names is declared and is of
-       the kind the key wants: a serve mode names a session, a relay
-       names a peer, a codec names a bus, an instruction and an
+       the kind the key wants: a serve mode names a session, a codec
+       names a bus, an instruction and an
        actuator name a codec, a signal names a codec, a field names an
        enumeration.
 
@@ -1453,7 +1491,7 @@ Table of Contents
       sensors of Section 14, its "params" member the parameters of
       Section 15 and its "events" member the signals of Section 16,
       each under the name that is declared for it and with the "unit",
-      "range", "default", "mode" and "help" that are declared for
+      "range", "default", "mode" and "memo" that are declared for
       it.  A serve
       mode that exposes a part of the translation reports that part and
       not the whole.
@@ -1568,7 +1606,8 @@ Table of Contents
       A deployment that needs one puts it where it cannot be turned off
       by editing a file.
 
-   *  A serve mode SHOULD bind the loopback address unless remote access
+   *  A serve mode SHOULD bind the loopback address (IPv4 127.0.0.1 or
+      IPv6 ::1) unless remote access
       is intended, and a serve mode that is reachable SHOULD be
       authenticated.  A session that is not authenticated and is not
       carried by a secure transport is cleartext, as [RFC0004], Section
@@ -1620,14 +1659,14 @@ Table of Contents
    [RFC0004]  Yang, S., "Octopus Control Protocol (OCP)", RFC 0004,
              September 2026.
 
-   [RFC0009]  Yang, S., "Primitive Security Extensions of OCP",
-             RFC 0009,
+   [RFC0009]  Yang, S., "OCP with Frame-Level Security", RFC 0009,
              September 2026.
 
    [RFC0010]  Yang, S., "OCP over Secure Transport", RFC 0010,
              September 2026.
 
-   [TOML]  "TOML: Tom's Obvious, Minimal Language", version 1.0.
+   [TOML]  Preston-Werner, T., "TOML: Tom's Obvious, Minimal Language",
+             <https://toml.io/en/v1.0.0>, version 1.0.0, January 2021.
 
    [IEEE754]  IEEE, "IEEE Standard for Floating-Point Arithmetic", IEEE
               Std 754-2019, July 2019.
@@ -1703,7 +1742,14 @@ Appendix A.  Diagnostics
    +--------------------------------+---------------------------------+
    | A transport is not implemented | unknown bus transport '<name>'  |
    +--------------------------------+---------------------------------+
-   | A peer has no host             | 'host' is required              |
+   | Whitelist and blacklist at one | the two are mutually exclusive   |
+   | level                          | at a level                      |
+   +--------------------------------+---------------------------------+
+   | An inner access kind differs   | a serve whitelist or blacklist   |
+   | from the outer kind            | MUST match the global kind      |
+   +--------------------------------+---------------------------------+
+   | An access entry has no addr     | 'addr' is required               |
+   +--------------------------------+---------------------------------+
    +--------------------------------+---------------------------------+
    | Two relays take everything     | at most one relay may omit      |
    |                                | 'prefix'                        |
@@ -1763,13 +1809,13 @@ Appendix B.  A Complete Descriptor
 
    The descriptor below is complete and valid.  It describes a device
    behind one CAN bus, offers it on two addresses in two variants of
-   [RFC0004], and relays one peer that speaks the protocol already.
+   [RFC0004], and relays one peer reached at a stated address.
 
-      [descriptor]
+      [meta]
       format = 1
       id     = "octo-arm-01"
       name   = "Left arm"
-      help   = "Six-axis arm on the port manipulator."
+      memo   = "Six-axis arm on the port manipulator."
 
       [serve.local]
       host    = "127.0.0.1"
@@ -1792,21 +1838,30 @@ Appendix B.  A Complete Descriptor
       port    = 16286
       session = "remote"
 
+      [[serve.remote.whitelist]]
+      addr = "192.168.0.50"
+      memo    = "The tool laptop."
+
       [session.remote.transport]
       kind = "tls"
       pin  = "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2"
-
-      [peer.tool]
-      host    = "10.0.0.9"
-      port    = 6286
-      session = "tool"
 
       [session.tool]
       comp = []
 
       [relay.tool]
-      peer   = "tool"
-      prefix = "tool."
+      host    = "2001:db8::9"
+      port    = 6286
+      session = "tool"
+      prefix  = "tool."
+
+      [[whitelist]]
+      addr = "192.168.0.0/24"
+      memo    = "Office subnet (IPv4)."
+
+      [[whitelist]]
+      addr = "2001:db8::/32"
+      memo    = "Lab subnet (IPv6)."
 
       [bus.main]
       transport = "socketcan"
@@ -1818,7 +1873,7 @@ Appendix B.  A Complete Descriptor
 
       [enum.mode]
       values = { 0 = "idle", 1 = "run", 2 = "fault" }
-      help   = "State of the drive."
+      memo   = "State of the drive."
 
       [codec.drive]
       bus  = "main"
@@ -1907,7 +1962,7 @@ Appendix B.  A Complete Descriptor
       [instruction.drive]
       bus  = "main"
       req  = "drive"
-      help = "Spin a joint at a speed."
+      memo = "Spin a joint at a speed."
 
       [[instruction.drive.arg]]
       name  = "speed"
@@ -1918,7 +1973,7 @@ Appendix B.  A Complete Descriptor
       [instruction.halt]
       bus  = "main"
       req  = "halt"
-      help = "Stop every joint."
+      memo = "Stop every joint."
 
       [sensor.angle]
       bus   = "main"
@@ -1926,7 +1981,7 @@ Appendix B.  A Complete Descriptor
       unit  = "rad"
       codec = "status"
       field = "angle"
-      help  = "Angle of the joint."
+      memo  = "Angle of the joint."
 
       [sensor.temp]
       bus   = "main"
@@ -1934,7 +1989,7 @@ Appendix B.  A Complete Descriptor
       unit  = "degC"
       codec = "status"
       field = "temp"
-      help  = "Temperature of the drive."
+      memo  = "Temperature of the drive."
 
       [param.stiffness]
       bus   = "main"
@@ -1944,19 +1999,22 @@ Appendix B.  A Complete Descriptor
       read  = { req = "p_read", res = "p_read_res",
                 field = "value" }
       write = { req = "p_write", field = "value" }
-      help  = "Stiffness of the joint."
+      memo  = "Stiffness of the joint."
 
       [signal.overtemp]
       codec = "status"
       fault = true
-      help  = "The drive is too hot."
+      memo  = "The drive is too hot."
 
    A caller on the local address is authenticated and sees the part of
    the translation that "expose" names; a caller on the remote address
    sees the whole device over TLS.  Both see the same translation, and
-   neither sees the bus.  A call to "tool.open" is relayed to the peer
-   as "open", and what that peer publishes is republished under
-   "tool.<topic>".
+   neither sees the bus.  The outer whitelist allows "192.168.0.0/24" at
+   every serve mode, and the remote mode adds an inner whitelist
+   that narrows it to "192.168.0.50/32"; with none declared, every
+   caller would be allowed.  A call to "tool.open" is relayed to the
+   peer at the relay's address as "open", and what that peer publishes
+   is republished under "tool.<topic>".
 
 Authors' Addresses
 

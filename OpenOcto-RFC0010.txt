@@ -299,6 +299,8 @@ Table of Contents
 
       ocps://host[:port]     secure; port defaults to 16286
 
+      The host is an IPv4 or IPv6 address, or a host name.
+
    The scheme of a cleartext session, "ocp", belongs to [RFC0004],
    Section 7.4, and is not repeated here.  A tool that is given "ocps"
    MUST use a secure transport and MUST NOT fall back to cleartext when
@@ -969,9 +971,10 @@ Table of Contents
       follows and not who may use it; authorisation is Section 4.4 and
       the application.
 
-   *  An endpoint SHOULD bind the loopback address unless remote access
-      is intended, and a device SHOULD accept a secure transport with  a
-      pinned certificate rather than a shared token.
+   *  An endpoint SHOULD bind the loopback address (IPv4 127.0.0.1 or
+      IPv6 ::1) unless remote access is intended, and a device SHOULD
+      accept a secure transport with a pinned certificate rather than a
+      shared token.
 
 10. IANA Considerations
 

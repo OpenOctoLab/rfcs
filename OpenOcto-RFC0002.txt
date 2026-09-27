@@ -484,8 +484,8 @@ Table of Contents
    *  Control traffic can move machinery.  A deployment that is
       reachable off-host SHOULD enable authentication and encryption
       [RFC0004].
-   *  A daemon SHOULD bind the loopback address unless remote access is
-      explicitly intended.
+   *  A daemon SHOULD bind the loopback address (IPv4 127.0.0.1 or
+      IPv6 ::1) unless remote access is explicitly intended.
    *  Credentials are configuration, not program data.  They MUST NOT be
       exposed to programs or written to logs.
    *  A descriptor received from a remote peer is never trusted: a
