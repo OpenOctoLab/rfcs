@@ -299,7 +299,7 @@ Table of Contents
    the path (Appendix A).  A descriptor is applied as a whole: a daemon
    MUST NOT start with a part of one.
 
-   A conforming implementation reads a descriptor of format 1, thez
+   A conforming implementation reads a descriptor of format 1, the
    version defined here.  A descriptor whose "format" is a value it does
    not implement MUST be rejected and MUST NOT be guessed at.
 
@@ -354,10 +354,10 @@ Table of Contents
    +=============+==============+======================================+
    | Key         | Type         | Meaning                              |
    +=============+==============+======================================+
-   | comp        | array, text  | Compression algorithms.  OFF by        |
-   |             |              | default unless at least one is         |
-   |             |              | offered; an empty array offers         |
-   |             |              | none.                                  |   +-------------+--------------+--------------------------------------+
+   | comp        | array, text  | Compression algorithms.  OFF by      |
+   |             |              | default unless at least one is       |
+   |             |              | offered; an empty array offers none. |
+   +-------------+--------------+--------------------------------------+
 
                 Table 4: Top-Level Offers (RFC0004 Defaults)
 
@@ -560,18 +560,18 @@ Table of Contents
    |             |              | separate key; "::" binds every IPv6  |
    |             |              | interface.  Default "127.0.0.1".     |
    +-------------+--------------+--------------------------------------+
-   | port        | integer      | Default 6286, the [RFC0004] port      |
-   |             |              | by [RFC0004], Section 7.4; 6357 with  |
-   |             |              | [RFC0009] (ocp-fls://) and 16286 with |
-   |             |              | [RFC0010] (ocps://), per the session  |
-   |             |              | named by this serve mode.             |
+   | port        | integer      | Default 6286, the [RFC0004] port by  |
+   |             |              | [RFC0004], Section 7.4; 6357 with    |
+   |             |              | [RFC0009] (ocp-fls://) and 16286 with|
+   |             |              | [RFC0010] (ocps://), per the session |
+   |             |              | named by this serve mode.            |
    +-------------+--------------+--------------------------------------+
-   | session     | string       | The variant of [RFC0004] spoken      |
-   |             |              | here.  Default "default".            |
+   | session     | string       | The variant of [RFC0004] spoken here.|
+   |             |              | Default "default".                   |
    +-------------+--------------+--------------------------------------+
    | expose      | array, text  | OPTIONAL.  The names this serve mode |
-   |             |              | offers; default all of them.  A      |
-   |             |              | name MUST be one that is declared    |
+   |             |              | offers; default all of them.  A name |
+   |             |              | MUST be one that is declared         |
    |             |              | (Sections 12 to 16).                 |
    +-------------+--------------+--------------------------------------+
    | caps        | array, text  | The capabilities of [RFC0004],       |

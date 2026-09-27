@@ -127,11 +127,11 @@ Table of Contents
        9.2.2.  Publishers
        9.2.3.  Assignment
        9.2.4.  Using the Topics
-   10. Service Primitives
-     10.1. Remote Procedure Call
-     10.2. Publish and Subscribe
-     10.3. The Blob Tunnel
-   11. Versioning and Extension Rules
+   10.  Service Primitives
+     10.1.  Remote Procedure Call
+     10.2.  Publish and Subscribe
+     10.3.  The Blob Tunnel
+   11.  Versioning and Extension Rules
    12. Security Considerations
    13. IANA Considerations
    14. References
@@ -318,10 +318,14 @@ Table of Contents
 
    Each endpoint maintains its own 32-bit sequence space.  Every frame
    sent, including responses, increments the counter by one, modulo
-   2^32.  A sender MUST NOT reuse a number within a window of 2^31 of
-   the numbers it has already sent, and an endpoint that is about to
-   send the 2^31st frame of a session MUST close that session with BYE
-   and open a new one rather than wrap around.
+   2^32.  Two numbers lie within one window of each other when the
+   distance between them is less than 2^31, taken with the serial number
+   arithmetic below.  A sender MUST NOT reuse a number while any number
+   it has already sent in that session still lies within one window of
+   it; an endpoint that is about to send the 2^31st frame of a session
+   MUST close that session with BYE and open a new one rather than wrap
+   around, since that is the point at which the numbers of the session
+   meet again.
 
    Sequence numbers are compared with the serial number arithmetic of
    [IETF-RFC1982], which is defined for exactly this space: a number is
@@ -520,7 +524,10 @@ Table of Contents
    other normalisation to a key, and MUST NOT treat two keys that
    differ only in case as the same member.  The single exception is the
    "args" member of CALL, whose keys MAY be unsigned integers (Section
-   5.3); those integers are positions and not names.
+   5.3); those integers are positions and not names, and the rule above
+   applies to the text keys of that map and not to its integer keys. The
+   two forms MAY stand in one map, and a key is never folded from one
+   form into the other.
 
    An integer used as an identifier, offset, length or code is unsigned
    unless the definition of the member says otherwise.
@@ -566,7 +573,7 @@ Table of Contents
        element of an array.
 
           {"topic": "device.event", "data": {"name": "frame",
-              "data": {"addr": 42, "octets": h'DEADBEEF'}}
+              "data": {"addr": 42, "octets": h'DEADBEEF'}}}
 
    3.  Answer: a map that carries either a value or an error, never
        both.
@@ -636,8 +643,8 @@ Table of Contents
    OCP defines no protocol-specific CBOR tags of its own.  Where a
    value's meaning is a kind that a standard CBOR tag names, a sender
    MAY wrap the value in that standard tag from the IANA CBOR Tags
-   registry [IETF-RFC8949]; the tag is OPTIONAL and supplementary and c
-   arries no data of its own.  The principal case in this document is a
+   registry [IETF-RFC8949]; the tag is OPTIONAL and supplementary and
+   carries no data of its own.  The principal case in this document is a
    timestamp: a float that denotes a point in time MAY be tagged 1
    (epoch-based date/time), or, if the time is expressed as an RFC 3339
    string, tagged 0 (standard date/time string).  A measurement that is
@@ -645,23 +652,23 @@ Table of Contents
 
    Every other field of this document has a fixed CBOR type and no
    applicable standard tag, so it is sent untagged; a sender SHOULD NOT
-   add a tag to such a field, and a receiver MUST ignore any tag it finds
-   on one.
+   add a tag to such a field, and a receiver MUST ignore any tag it
+   finds on one.
 
    The rules for a receiver are:
 
-   *  A receiver MUST accept a value whether or not it carries a standard
-      CBOR tag.
+   *  A receiver MUST accept a value whether or not it carries a
+      standard CBOR tag.
 
-   *  A receiver MUST ignore any tag it does not understand, in the manner
-      of [IETF-RFC8949]; the tag alone is never a reason to reject.  An
-      implementation that does not use tags, such as OCP Air [RFC0011],
-      simply strips and ignores any tag it meets and decodes the inner
-      value; this is always permitted and such an implementation remains
-      conformant.
+   *  A receiver MUST ignore any tag it does not understand, in the
+      manner of [IETF-RFC8949]; the tag alone is never a reason to
+      reject.  An implementation that does not use tags, such as OCP Air
+      [RFC0011], simply strips and ignores any tag it meets and decodes
+      the inner value; this is always permitted and such an
+      implementation remains conformant.
 
-   *  A receiver MUST NOT derive meaning from the presence or absence of a
-      tag and MUST NOT reject a frame for either reason.
+   *  A receiver MUST NOT derive meaning from the presence or absence of
+      a tag and MUST NOT reject a frame for either reason.
 
    *  A malformed inner value is still reported with E_BAD_PAYLOAD; the
       tag is never the cause of rejection.
@@ -696,7 +703,7 @@ Table of Contents
    +-----+------------+----------+-------------------------------------+
    |0x0A |BYE         |either    |Graceful close.                      |
    +-----+------------+----------+-------------------------------------+
-   |0x0B |ERROR       |either    |Protocol error (Section 5.12).       |
+   |0x0B |ERROR       |either    |Protocol error (Section 5.11).       |
    +-----+------------+----------+-------------------------------------+
    |0x0C |ACK         |either    |Acknowledges a sequence number       |
    |     |            |          |(datagrams).                         |
@@ -887,10 +894,12 @@ Table of Contents
       {"id": 8, "ok": false, "error": {"kind": "HardwareError",
                                         "message": "command rejected"}}
 
-   Exactly one RESULT is sent per CALL.  A response MAY arrive in any
-   order relative to other responses on the same session.  The "kind"
-   member is an application-level classification; its values are outside
-   the scope of this document.
+   Exactly one RESULT is sent per CALL; a RESULT is only ever sent to
+   answer one, and one whose identifier matches no outstanding call is
+   ignored rather than answered (Section 6.4.2).  A response MAY arrive
+   in any order relative to other responses on the same session.  The
+   "kind" member is an application-level classification; its values are
+   outside the scope of this document.
 
    The members of RESULT are listed in Table 9.
 
@@ -915,7 +924,7 @@ Table of Contents
 5.5.  EVENT
 
       {"topic": "device.event", "data": {"name": "frame",
-          "data": {"addr": 42, "octets": h'DEADBEEF'}}
+          "data": {"addr": 42, "octets": h'DEADBEEF'}}}
 
    An event is delivered only to sessions holding a filter that matches
    its topic (Section 6.5.2).  Events MAY interleave freely with
@@ -1093,6 +1102,18 @@ Table of Contents
    failures are delivered in RESULT instead; the distinction is that an
    application failure leaves the session usable, while a protocol error
    MAY require the session to be closed.
+
+   ERROR reports a malformation of this layer, detected before any
+   procedure is reached: octets that are not a frame, a version this
+   document does not serve, a message type the peer does not accept, a
+   payload beyond the limit of Section 3.3, a value that cannot be
+   decoded or decompressed, a member missing where one is REQUIRED, an
+   integrity check that does not verify, or a tunnel that is not there.
+   What a procedure does never arrives here: an unknown procedure, a
+   name it does not define, an argument form it does not accept, a wrong
+   number of arguments and a failure inside it are answered in RESULT
+   and MUST NOT be answered with ERROR (Section 6.4.2).  ERROR is never
+   the answer to a CALL, and it is not a way to refuse one.
 
    The members of ERROR are listed in Table 16.
 
@@ -1305,9 +1326,14 @@ Table of Contents
 
    An endpoint MUST enforce an abandonment timeout on every session.  A
    timer for the peer is started when the session is established and is
-   reset whenever any frame is received from the peer.  If no frame from
-   the peer is received for a continuous period of T, the endpoint MUST
-   forcibly and abnormally close the session's transport.
+   reset whenever any frame is received from the peer, whatever that
+   frame is: HELLO, WELCOME, CALL, RESULT, EVENT, SUBSCRIBE, TUNDATA,
+   TUNSTAT, ACK, BYE and ERROR all count, and a RESULT counts even when
+   it answers a call the caller has stopped waiting for.  A frame that
+   the endpoint sends does not reset the timer; only one received from
+   the peer does.  If no frame from the peer is received for a
+   continuous period of T, the endpoint MUST forcibly and abnormally
+   close the session's transport.
 
    The close is silent.  The endpoint MUST NOT send BYE, ERROR or any
    other frame to the peer, and MUST NOT wait for an acknowledgement; it
@@ -1316,14 +1342,14 @@ Table of Contents
    left by a peer that vanished without sending BYE (Section 5.10).
 
    T is an implementation parameter; a RECOMMENDED default of fifteen
-   seconds matches the heartbeat liveness timeout of Section 6.7 and
-   Table 18.  Applications that need longer idle periods MUST keep the
-   timer reset
-   by sending heartbeats (Section 6.7) or any other frame, and MUST in
-   any case receive a frame from the peer.  The timeout is independent
-   of, and complementary to, the graceful BYE close: a peer that leaves
-   cleanly sends BYE, and the timeout only applies once the peer has
-   gone silent.
+   seconds stands in Table 18 and matches the heartbeat liveness timeout
+   of Section 6.7.  An endpoint that needs longer idle periods MUST keep
+   the timer reset by sending heartbeats (Section 6.7) or any other
+   frame, and it is only ever a frame received from the peer -- the
+   answer to a heartbeat, or any other frame at all -- that resets it.
+   The timeout is independent of, and complementary to, the graceful BYE
+   close: a peer that leaves cleanly sends BYE, and the timeout only
+   applies once the peer has gone silent.
 
    The timeout is not cancelled by outstanding calls.  A session whose
    calls are all answered but which then hears nothing times out; a
@@ -1373,7 +1399,7 @@ Table of Contents
    *  An unknown procedure, a form of arguments the procedure does not
       accept, a name it does not define, a wrong number of arguments and
       a failure inside the procedure are all answered in RESULT and MUST
-      NOT be answered with ERROR (Section 5.12): what is in question is
+      NOT be answered with ERROR (Section 5.11): what is in question is
       the call, not the session.
 
    *  A procedure name is compared exactly, and so is the key of a named
@@ -1476,7 +1502,10 @@ Table of Contents
 
       -  A level that is neither "+" nor "#" is matched literally,
          character for character; a "+" or "#" inside a level is a
-         literal character, not a wildcard.
+         literal character, not a wildcard.  A filter has no way to
+         escape either one, so "device.f+oo" matches only the topic
+         "device.f+oo" and never "device.foo", and "device.a#b" matches
+         only itself.
 
       The namespaces are listed in Section 9.2; a wildcard filter is
       accepted even when it currently matches no assigned topic.
@@ -1583,7 +1612,12 @@ Table of Contents
    or, equivalently, it MUST NOT send a slice that lies beyond
    "ack + window".  The receiver derives "window" from its free buffer
    and advertises it as bytes are consumed; a zero window halts the
-   sender until it grows again.
+   sender until it grows again.  A receiver that has advertised a zero
+   window MUST send a TUNSTAT of its own as soon as the window grows,
+   since the sender that the zero stopped sends nothing and nothing else
+   would prompt the receiver to speak again: the two would otherwise
+   wait for each other.  At any other time updates MAY be coalesced into
+   one frame.
 
    Sending.  The sender slices the stream; the RECOMMENDED slice size is
    8192 octets (Table 18).  It transmits slices whose offset lies in the
@@ -1651,6 +1685,12 @@ Table of Contents
    |abandonment timeout    |15 s              |Session forced-close    |
    |                       |                  |bound (Section 6.3).    |
    +-----------------------+------------------+------------------------+
+   |heartbeat interval     |5 s               |Liveness probe period   |
+   |                       |                  |(Section 6.7).          |
+   +-----------------------+------------------+------------------------+
+   |heartbeat liveness     |15 s              |Bound on an unanswered  |
+   |                       |                  |probe (Section 6.7).    |
+   +-----------------------+------------------+------------------------+
 
                  Table 18: Recommended Defaults
 
@@ -1666,8 +1706,9 @@ Table of Contents
    The "t" member echoes the request and "time" is the responder's wall
    clock.  Either endpoint MAY originate a heartbeat, and a receiver
    MUST answer a ping call.  A RECOMMENDED interval is five seconds,
-   with a liveness timeout of fifteen seconds; both are application
-   policy.
+   with a liveness timeout of fifteen seconds (Table 18); both are
+   application policy.  An endpoint that detects liveness failure closes
+   the session as Section 6.3 directs.
 
    Metadata is one call to the core instruction "metadata" (Section
    9.1), which reports what the responder offers: its procedures, its
@@ -1689,8 +1730,10 @@ Table of Contents
    One datagram carries exactly one frame, and each frame is processed
    on its own.  A sender MAY request acknowledgement for important
    frames by setting F_ACK, and MAY retransmit with the same sequence
-   number on timeout; a receiver SHOULD deduplicate retransmits by
-   sequence number and type.  Frames whose loss is tolerable need not
+   number on timeout; a receiver SHOULD deduplicate retransmissions by
+   sequence number alone, which names one transmission and not one
+   frame: a retransmission repeats the octets of the frame it repeats,
+   and with them its type.  Frames whose loss is tolerable need not
    request acknowledgement.  A single frame, including header and
    trailer, SHOULD NOT exceed 1200 octets so as to avoid fragmentation.
    Bulk data SHOULD use a stream transport together with the tunnel
@@ -1748,8 +1791,7 @@ Table of Contents
    is a convenience and not a requirement.  A deployment MAY use any
    port, and an endpoint learns the port of its peer from configuration
    or from service discovery, never from the protocol itself.  The value
-   is not registered with IANA (Section 13).  [RFC0010] recommends
-   another port for a session that runs inside a secure transport.
+   is not registered with IANA.
 
    One URI scheme is used for a session of this document, by
    configuration files, by tools and by logs [RFC0007].  It is not part
@@ -1758,10 +1800,6 @@ Table of Contents
       ocp://host[:port]      cleartext; port defaults to 6286
 
       The host is an IPv4 or IPv6 address, or a host name.
-
-   A session inside a secure transport has a scheme of its own, which
-   [RFC0010] defines; a tool that is given that scheme MUST NOT treat it
-   as this one.
 
 8.  Capabilities
 
@@ -1800,7 +1838,7 @@ Table of Contents
    |status      |() -> {state, time,      |The state of the peer       |
    |            |uptime, fault, message}  |(Section 9.1.1).            |
    +------------+-------------------------+----------------------------+
-   |metadata    |() -> {instructions,     | What the peer offers       |
+   |metadata    |() -> {instructions,     |What the peer offers        |
    |            |sensors, actuators,      |(Section 9.1.2).            |
    |            |params, events}          |                            |
    +------------+-------------------------+----------------------------+
@@ -1843,9 +1881,14 @@ Table of Contents
    OPTIONAL, and a peer that offers none of a kind returns an empty
    array rather than omitting the member.
 
-   instructions  [{name, args, memo}]: the procedures of the peer other
-      than the ones of Table 20.  The peer MAY list one of Table 20 here
-      as well, and a caller MUST NOT rely on it doing so.
+   instructions  [{name, args, memo}]: the procedures this peer serves.
+      An instruction of Table 20 MAY be listed here and MAY be left out:
+      those of the core profile are served whichever way they are
+      listed, and nothing in this member changes what one of them does.
+      A caller therefore MUST NOT read the absence of a name, including
+      one of Table 20, as a claim that the procedure is not served, and
+      MUST NOT read its presence as a claim that anything more is
+      offered.
 
    sensors  [{name, type, unit, memo}]: what "sense" reads.
 
@@ -2003,7 +2046,7 @@ Table of Contents
    is a PubSub topic published by the peer, but when it reports a direct
    device link or the daemon's own connection state it is a pseudo-topic
    raised by the runtime or tunnel.  device.descriptor applies only to
-    virtual devices.
+   virtual devices.
 
    To the application layer the two are indistinguishable: an OctoScript
    script or any client handles a pseudo-topic exactly as it handles a
@@ -2093,7 +2136,7 @@ Table of Contents
    *  A subscription belongs to one session and is stated again after
       every reconnect (Section 6.5.2).
 
-10. Service Primitives
+10.  Service Primitives
 
    Three primitives are built from the messages of Section 5.  A
    primitive is available only when both endpoints have declared its
@@ -2112,7 +2155,7 @@ Table of Contents
    the roles of initiator and responder established by Section 6 grant
    neither side a privilege in any of them.
 
-10.1. Remote Procedure Call
+10.1.  Remote Procedure Call
 
    A call asks the peer to execute one named instruction and to report
    the outcome.  The caller sends CALL with an identifier, a procedure
@@ -2163,17 +2206,18 @@ Table of Contents
 
    *  keep both arguments and results small, and move anything large
       into a tunnel, since one frame carries one payload;
-   *  Delivery is best effort (Section 6.5.3).  A consumer that cannot
-      afford to miss an event recovers by asking for the present state
-      with a call, which is what the core profile of Section 9.1 is for.
+
+   *  decide for itself how long to wait, since no timeout, no retry and
+      no cancellation are defined here and a caller that stops waiting
+      ignores the RESULT when it arrives (Section 6.4.4);
 
    *  serialise explicitly when order matters, rather than relying on
       the order in which procedures are executed;
 
-   *  obtain names from metadata and re-read it when the peer  announces
+   *  obtain names from metadata and re-read it when the peer announces
       a change.
 
-10.2. Publish and Subscribe
+10.2.  Publish and Subscribe
 
    A publisher sends EVENT on a topic; a subscriber receives the events
    of the topics it has subscribed to.  There is no broker, the two
@@ -2227,7 +2271,7 @@ Table of Contents
    *  not publish faster than the slowest consumer can absorb, since
       this primitive offers no flow control, unlike Section 6.6.
 
-10.3. The Blob Tunnel
+10.3.  The Blob Tunnel
 
    The blob tunnel carries raw byte streams: firmware images, media
    streams, log uploads and vendor extensions.  Several tunnels MAY
@@ -2280,7 +2324,7 @@ Table of Contents
    *  destroy the tunnel when it is finished, so that its name and its
       buffers can be reused.
 
-11. Versioning and Extension Rules
+11.  Versioning and Extension Rules
 
    1.  A version mismatch MUST be reported with E_BAD_VERSION.  Minor
        evolution is carried by the capability set and by the rule that
