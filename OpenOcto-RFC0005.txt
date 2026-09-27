@@ -68,6 +68,11 @@ Table of Contents
    7.  Peer Tables
    8.  Relay Tables
    9.  Bus Tables
+     9.1.  Transports
+     9.2.  Keys of a Bus
+     9.3.  Framing of a Stream
+     9.4.  Sending and Receiving
+     9.5.  Transport Options
    10. Enumeration Tables
    11. Codec Tables
      11.1.  Fields
@@ -119,7 +124,11 @@ Table of Contents
    A bus is hardware.  It carries frames between the daemon and a
    device, this descriptor encodes and decodes them, and nothing outside
    Sections 9 to 11 knows that the bus exists.  A bus never appears in
-   what the daemon publishes.
+   what the daemon publishes.  Two buses are not alike, and which one a
+   bus is, is not left to an implementation to name: Section 9 names
+   every transport this document knows, from a controller-area network
+   to a general-purpose input-output line, and says what a frame is on
+   each of them.
 
    A peer that speaks [RFC0004] is relayed and not translated.  There is
    nothing to translate: the peer already answers for itself, so the
@@ -352,33 +361,33 @@ Table of Contents
    below and the "ocps" sub-table of Section 5.3.
 
    +=============+==============+======================================+
-   | Key         | Type         | Meaning                              |
+   |Key          |Type          |Meaning                               |
    +=============+==============+======================================+
-   | comp        | array, text  | Compression algorithms.  OFF by      |
-   |             |              | default unless at least one is       |
-   |             |              | offered; an empty array offers none. |
+   |comp         |array, text   |Compression algorithms.  OFF by       |
+   |             |              |default unless at least one is        |
+   |             |              |offered; an empty array offers none.  |
    +-------------+--------------+--------------------------------------+
 
-                Table 4: Top-Level Offers (RFC0004 Defaults)
+                       Table 4: Top-Level Offers
 
    The [session.<name>.ocpfls] sub-table holds the [RFC0009] frame-level
    security offers.  Its keys are listed in Table 5.
 
    +=============+==============+======================================+
-   | Key         | Type         | Meaning                              |
+   |Key          |Type          |Meaning                               |
    +=============+==============+======================================+
-   | ocpfls.enc  | array, text  | Encryption algorithms of [RFC0009].  |
-   |             |              | Default empty: encryption is not     |
-   |             |              | offered.                             |
+   |ocpfls.enc   |array, text   |Encryption algorithms of [RFC0009].   |
+   |             |              |Default empty: encryption is not      |
+   |             |              |offered.                              |
    +-------------+--------------+--------------------------------------+
-   | ocpfls.itg  | array, text  | Integrity algorithms of [RFC0009].   |
-   |             |              | Default empty.                       |
+   |ocpfls.itg   |array, text   |Integrity algorithms of [RFC0009].    |
+   |             |              |Default empty.                        |
    +-------------+--------------+--------------------------------------+
-   | ocpfls.ztr  | array, text  | Zero-trust algorithms of [RFC0009].  |
-   |             |              | Default empty.                       |
+   |ocpfls.ztr   |array, text   |Zero-trust algorithms of [RFC0009].   |
+   |             |              |Default empty.                        |
    +-------------+--------------+--------------------------------------+
 
-              Table 5: Keys of the [session.*.ocpfls] Sub-table
+           Table 5: Keys of the [session.*.ocpfls] Sub-table
 
    The rules of the exchange are those of [RFC0004], Section 6.1, and
    of [RFC0009], Section 9.  Three of them are restated here because a
@@ -413,22 +422,20 @@ Table of Contents
    opaque to [RFC0004], Section 6.2.
 
    +=============+==============+======================================+
-   | Key         | Type         | Meaning                              |
+   |Key          |Type          |Meaning                               |
    +=============+==============+======================================+
-   | method      | string       | REQUIRED.  The authentication        |
-   |             |              | method, named as [RFC0004], Section  |
-   |             |              | 6.2, names one.  Compared exactly.   |
+   |method       |string        |REQUIRED.  The authentication method, |
+   |             |              |named as [RFC0004], Section 6.2, names|
+   |             |              |one.  Compared exactly.               |
    +-------------+--------------+--------------------------------------+
-   | secret      | string       | OPTIONAL.  The secret, written in    |
-   |             |              | the descriptor.  Discouraged         |
-   |             |              | (Section 19).                        |
+   |secret       |string        |OPTIONAL.  The secret, written in the |
+   |             |              |descriptor.  Discouraged (Section 19).|
    +-------------+--------------+--------------------------------------+
-   | secret_env  | string       | OPTIONAL.  The name of an            |
-   |             |              | environment variable that holds      |
-   |             |              | the secret.                          |
+   | secret_env  | string       |OPTIONAL.  The name of an environment |
+   |             |              |variable that holds the secret.       |
    +-------------+--------------+--------------------------------------+
 
-                 Table 6: Keys of the Authentication Table
+               Table 6: Keys of the Authentication Table
 
    At most one of "secret" and "secret_env" MAY be given.  A method
    that needs no secret is given neither.  When a session is
@@ -438,8 +445,7 @@ Table of Contents
    The choice of method belongs to the initiator and is not negotiated.
    A descriptor therefore states what this endpoint accepts when it is
    the responder and what it offers when it is the initiator; a method
-   this implementation does not implement is an error of the
-   descriptor.
+   this implementation does not implement is an error of the descriptor.
 
 5.3.  Secure Transport
 
@@ -448,43 +454,29 @@ Table of Contents
    Table 7.
 
    +=============+==============+======================================+
-   | Key         | Type         | Meaning                              |
+   |Key          |Type          |Meaning                               |
    +=============+==============+======================================+
-   | kind        | string       | "none", "tls", "dtls" or "quic".     |
-   |             |              | Default "none": the session is       |
-   |             |              | carried by the transport of          |
-   |             |              | [RFC0004].                           |
+   |kind         |string        |"none", "tls", "dtls" or "quic".      |
+   |             |              |Default "none": the session is carried|
+   |             |              |by the transport of [RFC0004].        |
    +-------------+--------------+--------------------------------------+
-   | alpn        | string       | The ALPN identifier of [RFC0010],    |
-   |             |              | Section 4.2.  Default "ocp/1".       |
+   |alpn         |string        |The ALPN identifier of [RFC0010],     |
+   |             |              |Section 4.2.  Default "ocp/1".        |
    +-------------+--------------+--------------------------------------+
-   | ca          | string       | OPTIONAL.  Path to the trust         |
-   |             |              | anchors the peer is validated        |
-   |             |              | against.                             |
+   |cert         |string        | OPTIONAL.  Path to the certificate   |
+   |             |              | this endpoint presents.              |
    +-------------+--------------+--------------------------------------+
-   | pin         | string       | OPTIONAL.  The pin of the peer:      |
-   |             |              | "sha256:" followed by the hex        |
-   |             |              | digits of the hash of its public     |
-   |             |              | key or of its certificate.           |
-   +-------------+--------------+--------------------------------------+
-   | cert        | string       | OPTIONAL.  Path to the certificate   |
-   |             |              | this endpoint presents as a client.  |
-   +-------------+--------------+--------------------------------------+
-   | key         | string       | OPTIONAL.  Path to the private key   |
+   |key          |string        | OPTIONAL.  Path to the private key   |
    |             |              | of "cert".                           |
    +-------------+--------------+--------------------------------------+
-   | sni         | string       | OPTIONAL.  The name sent in the      |
-   |             |              | Server Name Indication.  Default     |
-   |             |              | "host".                              |
-   +-------------+--------------+--------------------------------------+
-   | min_version | string       | The lowest version of the transport  |
+   |min_version  |string        | The lowest version of the transport  |
    |             |              | that is accepted: "1.2" or "1.3".    |
    |             |              | Default "1.2".                       |
    +-------------+--------------+--------------------------------------+
 
                   Table 7: Keys of the [session.*.ocps] Sub-table
 
-   The peer is always validated, as [RFC0010], Section 4.4, requires;
+   The caller is always validated, as [RFC0010], Section 4.4, requires;
    this document defines no key that turns validation off.  A value of
    "min_version" below "1.2" MUST be rejected, and so must a value that
    names a version this implementation does not implement.
@@ -747,53 +739,690 @@ Table of Contents
 
    [bus.<name>] declares one hardware bus: a carrier of frames between
    the daemon and a device, whose octets this descriptor encodes and
-   decodes.  A bus is never visible to a caller.  The keys are listed in
-   Table 12.
+   decodes.  A bus is never visible to a caller.
 
-   +=============+==============+======================================+
-   | Key         | Type         | Meaning                              |
-   +=============+==============+======================================+
-   | transport   | string       | REQUIRED.  The name of a bus         |
-   |             |              | transport.                           |
-   +-------------+--------------+--------------------------------------+
-   | mtu         | integer      | The largest number of data octets    |
-   |             |              | one frame carries.  Default 8.       |
-   +-------------+--------------+--------------------------------------+
-   | timeout     | float        | Seconds to wait for a frame that     |
-   |             |              | answers one that was sent. Default   |
-   |             |              | 3.0.                                 |
-   +-------------+--------------+--------------------------------------+
-   | enabled     | boolean      | Default true.  When false the bus    |
-   |             |              | is declared but not opened.          |
-   +-------------+--------------+--------------------------------------+
-
-                       Table 12: Keys of a Bus Table
-
-   The [bus.<name>.options] table is OPTIONAL.  Its keys are defined by
-   the transport named by "transport" and are passed to it unchanged,
-   so that a transport gains settings without a change to this
-   document; a transport that is given a key it does not define rejects
-   the descriptor.
-
-   The transport name "loopback" MUST be implemented by every
-   conforming implementation.  It retains every frame that is sent so
-   that it can be received again, touches no hardware, and is the means
-   of exercising a descriptor without a device.  Every other name is
-   implementation-defined and is discoverable from the command line
-   [RFC0007]; a name this implementation does not implement is an error
-   of the descriptor.
+   Two buses are not alike.  A controller-area network carries frames of
+   at most eight octets, each with an identifier, and a device answers
+   one when it likes; a UART carries octets with no boundary between
+   them; an inter-integrated circuit addresses a register and reads what
+   is there, and nothing arrives that was not asked for.  Three
+   transports that differ that much are not told apart by an
+   implementation-defined string.  What this format translates is one
+   thing, a frame, which is an address and a sequence of octets
+   (Section 11).  Section 9.1 names every transport this document
+   knows, says what a frame is on each of them and fixes its
+   parameters; Section 9.3 cuts a stream into frames; Section 9.4 says
+   how a frame is sent and received on each class; and Section 9.5
+   lists the options a transport takes.  Nothing outside this section
+   knows which transport a bus uses: a codec, an instruction, a sensor
+   and a signal are written the same way on all of them.
 
    A bus exists so that a device that cannot speak [RFC0004] can still
    be served: hardware that predates the protocol, a machine that will
    never be updated, a link that is a link and not a computer.  A device
    that does speak it is a peer and is relayed (Section 8), and no bus
-   is declared for it.
+   is declared for it.  A carrier of [RFC0004] is not a bus here either:
+   a network is what a serve mode (Section 6) and a relay (Section 8)
+   are for, and no transport of Table 12 carries one.
+
+9.1.  Transports
+
+   The "transport" of a bus names one of the transports of Table 12.
+   The name is compared as exact octets.  A name that Table 12 does not
+   list is an error of the descriptor, and an implementation MUST NOT
+   accept one under a name of its own: what a transport is, is answered
+   here and not by the implementation that happens to provide it.
+
+   +==============+============+========================+=============+
+   | Transport    | Class      | Address of a frame     | MTU / max   |
+   +==============+============+========================+=============+
+   | can          | frame      | CAN identifier         | 8 / 8       |
+   +--------------+------------+------------------------+-------------+
+   | canfd        | frame      | CAN identifier         | 64 / 64     |
+   +--------------+------------+------------------------+-------------+
+   | lin          | frame      | LIN frame ID           | 8 / 8       |
+   +--------------+------------+------------------------+-------------+
+   | uart         | stream     | from the framing       | 64 / 4096   |
+   +--------------+------------+------------------------+-------------+
+   | rs485        | stream     | from the framing       | 64 / 4096   |
+   +--------------+------------+------------------------+-------------+
+   | modbus-rtu   | stream     | slave address          | 253 / 253   |
+   +--------------+------------+------------------------+-------------+
+   | modbus-ascii | stream     | slave address          | 252 / 252   |
+   +--------------+------------+------------------------+-------------+
+   | usb-cdc      | stream     | from the framing       | 64 / 4096   |
+   +--------------+------------+------------------------+-------------+
+   | usb-bulk     | stream     | from the framing       | 64 / 65535  |
+   +--------------+------------+------------------------+-------------+
+   | usb-hid      | report     | report ID              | 64 / 4096   |
+   +--------------+------------+------------------------+-------------+
+   | spi          | transaction| register               | 32 / 4096   |
+   +--------------+------------+------------------------+-------------+
+   | i2c          | transaction| register               | 32 / 4096   |
+   +--------------+------------+------------------------+-------------+
+   | onewire      | transaction| register or page       | 32 / 4096   |
+   +--------------+------------+------------------------+-------------+
+   | ble          | attribute  | characteristic         | 20 / 512    |
+   +--------------+------------+------------------------+-------------+
+   | gpio         | pin        | line                   | 1 / 1       |
+   +--------------+------------+------------------------+-------------+
+   | loopback     | memory     | as declared            | 64 / 65535  |
+   +--------------+------------+------------------------+-------------+
+                     Table 12: Registered Transports
+
+   What a transport is, is what the document that defines the bus says
+   it is.  "can" and "canfd" are the controller-area network of
+   [ISO11898-1] and [ISO11898-2], "lin" is the local interconnect
+   network of [ISO17987], "uart" is the asynchronous serial interface
+   of [TIA232], "rs485" is the same octets on the balanced line of
+   [TIA485], "i2c" is the inter-integrated circuit of [UM10204], "spi"
+   is the serial peripheral interface of a controller and of the
+   device's own document, "usb-cdc", "usb-bulk" and "usb-hid" are the
+   universal serial bus of [USB20] with the device classes it defines
+   and with [USBHID], "ble" is the generic attribute profile of
+   [BLUETOOTH], and "modbus-rtu" and "modbus-ascii" are the Modbus
+   serial line of [MODBUS].  Where one of them and this document name
+   one thing differently, the name of this document is the one a
+   descriptor writes.
+
+   The class of a transport is not a key: it follows from the name.  It
+   says what a frame is on that transport, and Section 9.4 says how one
+   is sent and received on it.
+
+   The third column is what the "addr" of a codec (Section 11) is on
+   that transport; "from the framing" is Section 9.3.  The fourth is
+   the default "mtu" of the bus followed by the largest "mtu" the
+   transport accepts; a larger one is an error of the descriptor, and so
+   is a data field that runs past either (Section 11.1).
+
+   A name that begins with "x." is private use: it is never assigned by
+   this series, two implementations need not agree about what it means
+   and a descriptor that uses one is not portable.  Every other name is
+   added to Table 12 only by a document of this series (Section 20).
+
+   Only "loopback" MUST be implemented.  It retains every frame that is
+   sent so that it can be received again, touches no hardware and is
+   the means of exercising a descriptor without a device.  Every other
+   transport is OPTIONAL; an implementation SHOULD state which of them
+   it implements, and the tools of [RFC0007] report them.  A bus whose
+   transport this implementation does not implement is an error of the
+   descriptor.
+
+   What Table 12 leaves out is a decision and not an oversight.  A bus
+   here is a link the daemon is wired to, whose octets it translates;
+   a link that already carries [RFC0004] is a serve mode or a relay
+   (Sections 6 and 8), and so is a network, be it Ethernet, IP or a
+   wireless mesh such as Thread or Zigbee.  A link that carries a
+   continuous stream and no frames, as I2S carries audio, one that is
+   mapped into memory, as a peripheral of a backplane is, and one that
+   is for testing rather than for use, as JTAG is, are out of the reach
+   of a format that translates frames: what stands in front of such a
+   device is a program that speaks for it, and that program is a peer.
+   A profile that rides on a bus, as CANopen and J1939 ride on CAN, is
+   not a transport either: it is codecs and instructions (Sections 11
+   and 12).
+
+9.2.  Keys of a Bus
+
+   The keys are listed in Table 13.
+
+   +=============+==============+======================================+
+   | Key         | Type         | Meaning                              |
+   +=============+==============+======================================+
+   | transport   | string       | REQUIRED.  One of the transports of  |
+   |             |              | Table 12.                            |
+   +-------------+--------------+--------------------------------------+
+   | mtu         | integer      | The largest number of data octets one|
+   |             |              | frame carries.  Default the default  |
+   |             |              | of the transport (Table 12); MUST NOT|
+   |             |              | exceed its maximum.                  |
+   +-------------+--------------+--------------------------------------+
+   | timeout     | float        | Seconds to wait for a frame that     |
+   |             |              | answers one that was sent.  Default  |
+   |             |              | 3.0.                                 |
+   +-------------+--------------+--------------------------------------+
+   | enabled     | boolean      | Default true.  When false the bus is |
+   |             |              | declared but not opened.             |
+   +-------------+--------------+--------------------------------------+
+                       Table 13: Keys of a Bus Table
+
+   The [bus.<name>.options] table is OPTIONAL.  Its keys are the ones
+   the transport of this bus defines in Section 9.5 and are passed to
+   it unchanged; a key the transport does not define is an error of the
+   descriptor, and so is an option that belongs to another transport.
+   The [bus.<name>.framing] table is OPTIONAL and is Section 9.3: it is
+   REQUIRED on a bus of class "stream" whose transport has no framing
+   of its own and MUST NOT be given on any other bus.
+
+9.3.  Framing of a Stream
+
+   A bus of class "stream" carries octets and carries no boundary
+   between two frames.  The [bus.<name>.framing] table says where a
+   frame begins and ends in that stream.  The modes are listed in
+   Table 14 and the keys in Table 15.
+
+   +============+====================+===============================+
+   | Mode       | A frame is         | Keys it takes                 |
+   +============+====================+===============================+
+   | fixed      | exactly "size"     | size                          |
+   |            | octets             |                               |
+   +------------+--------------------+-------------------------------+
+   | delim      | bounded by "delim" | delim                         |
+   +------------+--------------------+-------------------------------+
+   | length     | as long as its     | length                        |
+   |            | length field says  |                               |
+   +------------+--------------------+-------------------------------+
+   | cobs       | delimited by 0x00, | (none)                        |
+   |            | unstuffed on       |                               |
+   |            | receipt            |                               |
+   +------------+--------------------+-------------------------------+
+   | slip       | delimited by 0xC0, | (none)                        |
+   |            | as [IETF-RFC1055]  |                               |
+   |            | states             |                               |
+   +------------+--------------------+-------------------------------+
+                         Table 14: Framing Modes
+
+   +=============+===============+=====================================+
+   | Key         | Type          | Meaning                             |
+   +=============+===============+=====================================+
+   | mode        | string        | REQUIRED.  One of the modes of Table|
+   |             |               | 14.                                 |
+   +-------------+---------------+-------------------------------------+
+   | size        | integer       | For "fixed": the number of octets of|
+   |             |               | one frame.  REQUIRED for that mode  |
+   |             |               | and MUST NOT be given otherwise;    |
+   |             |               | MUST NOT exceed the "mtu".          |
+   +-------------+---------------+-------------------------------------+
+   | delim       | string, array | For "delim": the octets that        |
+   |             |               | separate two frames, as a string of |
+   |             |               | hex digits or as an array of        |
+   |             |               | integers.  REQUIRED for that mode,  |
+   |             |               | MUST NOT be given otherwise.        |
+   +-------------+---------------+-------------------------------------+
+   | length      | table         | For "length": where the length is   |
+   |             |               | read and what it counts (below).    |
+   |             |               | REQUIRED for that mode, MUST NOT be |
+   |             |               | given otherwise.                    |
+   +-------------+---------------+-------------------------------------+
+   | addr        | table         | OPTIONAL.  Where the address of a   |
+   |             |               | frame is read (below).  Default: the|
+   |             |               | address of every frame is 0.        |
+   +-------------+---------------+-------------------------------------+
+   | checksum    | table         | OPTIONAL.  How the octets of a frame|
+   |             |               | are checked (below).  Default: no   |
+   |             |               | check.                              |
+   +-------------+---------------+-------------------------------------+
+                     Table 15: Keys of a Framing Table
+
+   The "length" key is a table with the keys "at", the offset of the
+   length field, default 0; "type", one of the types of Table 20,
+   default "u8"; "endian", "be" or "le", default "be"; "counts",
+   "data" or "frame", whether the length counts the data octets alone
+   or the whole frame, default "data"; and "add", an integer added to
+   the value that is read, default 0.
+
+   The "addr" key is a table with the keys "at", default 0; "type",
+   default "u8"; and "endian", default "be".  The octets it names are
+   the address of the frame and are not part of its data.  When it is
+   not given, the address of every frame is 0 and a codec on that bus
+   MUST NOT declare another.
+
+   The "checksum" key is a table with the keys "algo", REQUIRED and one
+   of "sum8", "xor8", "sum16", "crc8", "crc16-ccitt", "crc16-modbus"
+   and "crc32"; "at", "tail" or an offset, default "tail"; and
+   "endian", default "be".  The value is computed over the octets of
+   the frame that the checksum does not occupy, is written when a frame
+   is sent and is checked when one arrives; a frame whose checksum does
+   not match is discarded.  The octets of the checksum are not part of
+   the data of the frame.
+
+   Octets that begin a frame that is never completed are held until the
+   "timeout" of the bus passes and are then discarded.
+
+      [bus.link]
+      transport = "uart"
+      mtu       = 32
+
+      [bus.link.options]
+      device = "/dev/ttyUSB0"
+      baud   = 115200
+
+      [bus.link.framing]
+      mode = "length"
+
+      [bus.link.framing.length]
+      at   = 0
+      type = "u16"
+
+      [bus.link.framing.addr]
+      at   = 2
+      type = "u8"
+
+      [bus.link.framing.checksum]
+      algo = "crc16-modbus"
+
+   The bus above frames with a two-octet length at the head of a frame,
+   an address of one octet at offset two and a CRC-16 at the tail; the
+   data a codec sees begins at offset three and ends where the length
+   says it does.
+
+9.4.  Sending and Receiving
+
+   A frame is sent when an instruction or an actuator writes one
+   (Sections 12 and 13), when a parameter is written or read
+   (Section 15) or when a sensor asks for a reading (Section 14).  What
+   a transport does with it depends on its class.
+
+   frame.  The transport broadcasts the frame with its address as the
+   identifier and its data as the payload.  A frame that a device sends
+   arrives whether or not anything was asked for and is offered to the
+   codecs of that bus (Section 11.3).  On "lin" a frame is sent by the
+   master: an implementation whose "role" is "master" writes the frame
+   when a call writes one, and one whose "role" is "slave" answers the
+   header of that identifier with the frame it holds.
+
+   stream.  Sending wraps the frame as Section 9.3 states and writes
+   the octets; receiving cuts the stream into frames and offers each of
+   them.  A frame arrives whether or not anything was asked for.
+
+   report.  The address is the report ID.  Sending writes a report of
+   that ID whose contents are the data; receiving takes the reports the
+   device sends and offers each of them under the ID it carries.  An
+   address of 0 means that the transfer carries no report ID, as
+   [USBHID] allows.
+
+   transaction.  The daemon is the controller, and nothing arrives that
+   was not asked for.  Sending performs a write transaction: the
+   address, written in as many octets as "reg" states, followed by the
+   data.  Receiving performs a read transaction: the address, with the
+   "read_flag" of the transport where it has one, followed by as many
+   octets as are expected, which is the width of the codec a call is
+   waiting for, or the "size" option of the bus when it is not; what
+   comes back is one frame.  A sensor that names a bus of this class
+   MUST declare "read" (Section 14), and so must a parameter that is
+   read (Section 15), because with no read nothing is ever received;
+   "block" has nothing to wait for and is ignored on such a bus.
+
+   attribute.  The address names one of the characteristics of the
+   "chr" option.  Sending writes that characteristic and a read reads
+   it.  A characteristic whose "notify" is true also produces a frame
+   when the device sends a notification or an indication, and such a
+   frame arrives whether or not anything was asked for.
+
+   pin.  The address names one of the "lines" of the bus.  The data of
+   a frame is one octet: 0 or 1, after the "active" of the line is
+   applied.  Sending sets a line whose "dir" is "out"; a read reads
+   one; a line whose "edge" is not "none" produces a frame when the
+   line changes, which is delivery and not a decision.
+
+   memory.  "loopback" retains what is sent, as Section 9.1 states, and
+   yields the frames it holds, oldest first, when a frame is received.
+
+   A bus is opened when the daemon starts and stays open while it runs;
+   a bus that cannot be opened is a failure of the daemon and is
+   reported by "status" (Section 18.2) and on the topic
+   "device.connection".
+
+9.5.  Transport Options
+
+   The keys of [bus.<name>.options] are listed in Table 16.  A row
+   whose transport is written as a list applies to every transport the
+   list names; "modbus-*" is "modbus-rtu" and "modbus-ascii", and
+   "usb-*" is "usb-cdc", "usb-bulk" and "usb-hid".  A key of a
+   transport that is listed for another one is an error of the
+   descriptor, and a required key that is absent is one likewise.
+
+   +=============+===============+===========+=========================+
+   | Transport   | Key           | Type      | Meaning                 |
+   +=============+===============+===========+=========================+
+   | uart, rs485 | device        | string    | REQUIRED.  The device of|
+   |             |               |           | the host: a path such as|
+   |             |               |           | "/dev/ttyUSB0" or       |
+   |             |               |           | "COM3", or a name the   |
+   |             |               |           | host gives it.          |
+   +-------------+---------------+-----------+-------------------------+
+   | uart, rs485 | baud          | integer   | Bits per second.        |
+   |             |               |           | Default 115200.         |
+   +-------------+---------------+-----------+-------------------------+
+   | uart, rs485 | databits      | integer   | 5 to 9.  Default 8.     |
+   +-------------+---------------+-----------+-------------------------+
+   | uart, rs485 | parity        | string    | "none", "even", "odd",  |
+   |             |               |           | "mark" or "space".      |
+   |             |               |           | Default "none".         |
+   +-------------+---------------+-----------+-------------------------+
+   | uart, rs485 | stopbits      | float     | 1, 1.5 or 2.  Default 1.|
+   +-------------+---------------+-----------+-------------------------+
+   | uart, rs485 | flow          | string    | "none", "rtscts" or     |
+   |             |               |           | "xonxoff".  Default     |
+   |             |               |           | "none".                 |
+   +-------------+---------------+-----------+-------------------------+
+   | rs485       | de            | string    | How the driver is       |
+   |             |               |           | enabled: "none", "rts"  |
+   |             |               |           | or "gpio".  Default     |
+   |             |               |           | "none".                 |
+   +-------------+---------------+-----------+-------------------------+
+   | rs485       | de_before     | float     | Seconds the driver is   |
+   |             |               |           | asserted before the     |
+   |             |               |           | first octet.  Default   |
+   |             |               |           | 0.0.                    |
+   +-------------+---------------+-----------+-------------------------+
+   | rs485       | de_after      | float     | Seconds the driver is   |
+   |             |               |           | held after the last     |
+   |             |               |           | octet.  Default 0.001.  |
+   +-------------+---------------+-----------+-------------------------+
+   | modbus-*    | device        | string    | REQUIRED.  The serial   |
+   |             |               |           | device, named as "uart" |
+   |             |               |           | names one.              |
+   +-------------+---------------+-----------+-------------------------+
+   | modbus-*    | baud          | integer   | Bits per second.        |
+   |             |               |           | Default 19200.          |
+   +-------------+---------------+-----------+-------------------------+
+   | modbus-*    | parity        | string    | "none", "even" or "odd".|
+   |             |               |           | Default "even".         |
+   +-------------+---------------+-----------+-------------------------+
+   | modbus-*    | stopbits      | integer   | 1 or 2.  Default 1.     |
+   +-------------+---------------+-----------+-------------------------+
+   | modbus-*    | de            | string    | As "rs485", when the    |
+   |             |               |           | line is an RS-485.      |
+   |             |               |           | Default "none".         |
+   +-------------+---------------+-----------+-------------------------+
+   | modbus-*    | de_before     | float     | As "rs485".  Default    |
+   |             |               |           | 0.0.                    |
+   +-------------+---------------+-----------+-------------------------+
+   | modbus-*    | de_after      | float     | As "rs485".  Default    |
+   |             |               |           | 0.001.                  |
+   +-------------+---------------+-----------+-------------------------+
+   | modbus-*    | t35           | float     | Seconds of silence that |
+   |             |               |           | end a frame.  Default   |
+   |             |               |           | 3.5 octets at "baud".   |
+   +-------------+---------------+-----------+-------------------------+
+   | modbus-*    | broadcast     | boolean   | Default false.  When    |
+   |             |               |           | true a codec MAY address|
+   |             |               |           | 0.                      |
+   +-------------+---------------+-----------+-------------------------+
+   | can, canfd  | device        | string    | REQUIRED.  The          |
+   |             |               |           | interface, such as      |
+   |             |               |           | "can0".                 |
+   +-------------+---------------+-----------+-------------------------+
+   | can, canfd  | id_mode       | string    | "std", "ext" or "any".  |
+   |             |               |           | Default "std".          |
+   +-------------+---------------+-----------+-------------------------+
+   | can, canfd  | listen_only   | boolean   | Default false.  When    |
+   |             |               |           | true the bus receives   |
+   |             |               |           | and does not send.      |
+   +-------------+---------------+-----------+-------------------------+
+   | can, canfd  | restart       | float     | Seconds after a bus-off |
+   |             |               |           | before the interface is |
+   |             |               |           | restarted; 0 disables.  |
+   |             |               |           | Default 1.0.            |
+   +-------------+---------------+-----------+-------------------------+
+   | can, canfd  | filter        | array     | OPTIONAL.  Acceptance   |
+   |             |               |           | filters: tables of "id" |
+   |             |               |           | and "mask".  Default:   |
+   |             |               |           | every frame is received.|
+   +-------------+---------------+-----------+-------------------------+
+   | can         | bitrate       | integer   | Bits per second.        |
+   |             |               |           | Default 500000.         |
+   +-------------+---------------+-----------+-------------------------+
+   | canfd       | bitrate       | integer   | Arbitration bits per    |
+   |             |               |           | second.  Default 500000.|
+   +-------------+---------------+-----------+-------------------------+
+   | canfd       | data_bitrate  | integer   | Data bits per second.   |
+   |             |               |           | Default 2000000.        |
+   +-------------+---------------+-----------+-------------------------+
+   | canfd       | brs           | boolean   | Default true.  Bit-rate |
+   |             |               |           | switching within a      |
+   |             |               |           | frame.                  |
+   +-------------+---------------+-----------+-------------------------+
+   | lin         | device        | string    | REQUIRED.  The          |
+   |             |               |           | interface.              |
+   +-------------+---------------+-----------+-------------------------+
+   | lin         | bitrate       | integer   | Bits per second, 1000 to|
+   |             |               |           | 20000.  Default 19200.  |
+   +-------------+---------------+-----------+-------------------------+
+   | lin         | role          | string    | "master" or "slave".    |
+   |             |               |           | Default "master".       |
+   +-------------+---------------+-----------+-------------------------+
+   | lin         | checksum      | string    | "classic" or "enhanced".|
+   |             |               |           | Default "enhanced".     |
+   +-------------+---------------+-----------+-------------------------+
+   | lin         | nad           | integer   | For "slave": the node   |
+   |             |               |           | address, 1 to 255.      |
+   +-------------+---------------+-----------+-------------------------+
+   | usb-*       | vid           | string    | OPTIONAL.  The vendor   |
+   |             |               |           | ID, as hex digits.      |
+   +-------------+---------------+-----------+-------------------------+
+   | usb-*       | pid           | string    | OPTIONAL.  The product  |
+   |             |               |           | ID, as hex digits.      |
+   +-------------+---------------+-----------+-------------------------+
+   | usb-*       | serial        | string    | OPTIONAL.  The serial   |
+   |             |               |           | number of the device.   |
+   +-------------+---------------+-----------+-------------------------+
+   | usb-*       | path          | string    | OPTIONAL.  The device of|
+   |             |               |           | the host, when the host |
+   |             |               |           | names it by a path.     |
+   +-------------+---------------+-----------+-------------------------+
+   | usb-*       | interface     | integer   | Default 0.              |
+   +-------------+---------------+-----------+-------------------------+
+   | usb-bulk    | ep_in         | string    | The input endpoint.     |
+   |             |               |           | Default "0x81".         |
+   +-------------+---------------+-----------+-------------------------+
+   | usb-bulk    | ep_out        | string    | The output endpoint.    |
+   |             |               |           | Default "0x01".         |
+   +-------------+---------------+-----------+-------------------------+
+   | usb-bulk    | timeout       | float     | Seconds to wait for a   |
+   |             |               |           | transfer.  Default the  |
+   |             |               |           | "timeout" of the bus.   |
+   +-------------+---------------+-----------+-------------------------+
+   | usb-hid     | usage_page    | integer   | OPTIONAL.  Narrows which|
+   |             |               |           | device is opened.       |
+   +-------------+---------------+-----------+-------------------------+
+   | usb-hid     | usage         | integer   | OPTIONAL.  As           |
+   |             |               |           | "usage_page".           |
+   +-------------+---------------+-----------+-------------------------+
+   | usb-hid     | out           | string    | "report" or "feature":  |
+   |             |               |           | what a frame is written |
+   |             |               |           | as.  Default "report".  |
+   +-------------+---------------+-----------+-------------------------+
+   | spi         | device        | string    | REQUIRED.  The          |
+   |             |               |           | controller and the chip |
+   |             |               |           | select, such as         |
+   |             |               |           | "/dev/spidev0.0".       |
+   +-------------+---------------+-----------+-------------------------+
+   | spi         | mode          | integer   | 0 to 3: CPOL and CPHA.  |
+   |             |               |           | Default 0.              |
+   +-------------+---------------+-----------+-------------------------+
+   | spi         | speed         | integer   | Bits per second.        |
+   |             |               |           | Default 1000000.        |
+   +-------------+---------------+-----------+-------------------------+
+   | spi         | bits          | integer   | Bits of one word.       |
+   |             |               |           | Default 8.              |
+   +-------------+---------------+-----------+-------------------------+
+   | spi         | cs            | integer   | The chip select, when   |
+   |             |               |           | the controller drives   |
+   |             |               |           | several.  Default 0.    |
+   +-------------+---------------+-----------+-------------------------+
+   | spi         | cs_active     | string    | "low" or "high".        |
+   |             |               |           | Default "low".          |
+   +-------------+---------------+-----------+-------------------------+
+   | spi         | reg           | integer   | Octets of the register  |
+   |             |               |           | address, 0 to 4.        |
+   |             |               |           | Default 1.              |
+   +-------------+---------------+-----------+-------------------------+
+   | spi         | reg_endian    | string    | "be" or "le".  Default  |
+   |             |               |           | "be".                   |
+   +-------------+---------------+-----------+-------------------------+
+   | spi         | read_flag     | integer   | Added to the register   |
+   |             |               |           | address on a read.      |
+   |             |               |           | Default 128.            |
+   +-------------+---------------+-----------+-------------------------+
+   | spi         | dummy         | integer   | Octets of dummy between |
+   |             |               |           | the address and the data|
+   |             |               |           | on a read.  Default 0.  |
+   +-------------+---------------+-----------+-------------------------+
+   | spi         | delay         | integer   | Microseconds after the  |
+   |             |               |           | chip select is asserted.|
+   |             |               |           | Default 0.              |
+   +-------------+---------------+-----------+-------------------------+
+   | spi         | size          | integer   | Octets read when no     |
+   |             |               |           | codec width is known.   |
+   |             |               |           | Default the "mtu".      |
+   +-------------+---------------+-----------+-------------------------+
+   | i2c         | device        | string    | REQUIRED.  The          |
+   |             |               |           | controller, such as     |
+   |             |               |           | "/dev/i2c-1".           |
+   +-------------+---------------+-----------+-------------------------+
+   | i2c         | slave         | integer   | REQUIRED.  The address  |
+   |             |               |           | of the device, 7 bits.  |
+   +-------------+---------------+-----------+-------------------------+
+   | i2c         | tenbit        | boolean   | Default false.  10-bit  |
+   |             |               |           | addressing.             |
+   +-------------+---------------+-----------+-------------------------+
+   | i2c         | speed         | integer   | Bits per second.        |
+   |             |               |           | Default 100000.         |
+   +-------------+---------------+-----------+-------------------------+
+   | i2c         | reg           | integer   | Octets of the register  |
+   |             |               |           | address, 0 to 4.        |
+   |             |               |           | Default 1.              |
+   +-------------+---------------+-----------+-------------------------+
+   | i2c         | reg_endian    | string    | "be" or "le".  Default  |
+   |             |               |           | "be".                   |
+   +-------------+---------------+-----------+-------------------------+
+   | i2c         | pec           | boolean   | Default false.  Check a |
+   |             |               |           | transfer as SMBus does. |
+   +-------------+---------------+-----------+-------------------------+
+   | i2c         | size          | integer   | Octets read when no     |
+   |             |               |           | codec width is known.   |
+   |             |               |           | Default the "mtu".      |
+   +-------------+---------------+-----------+-------------------------+
+   | onewire     | device        | string    | REQUIRED.  The bus      |
+   |             |               |           | master.                 |
+   +-------------+---------------+-----------+-------------------------+
+   | onewire     | rom           | string    | OPTIONAL.  The 64-bit   |
+   |             |               |           | ROM of the device, as   |
+   |             |               |           | hex digits; with none   |
+   |             |               |           | the first device found  |
+   |             |               |           | is used.                |
+   +-------------+---------------+-----------+-------------------------+
+   | onewire     | power         | string    | "external" or           |
+   |             |               |           | "parasite".  Default    |
+   |             |               |           | "external".             |
+   +-------------+---------------+-----------+-------------------------+
+   | onewire     | reg           | integer   | Octets of the address   |
+   |             |               |           | within the device.      |
+   |             |               |           | Default 1.              |
+   +-------------+---------------+-----------+-------------------------+
+   | onewire     | size          | integer   | Octets read when no     |
+   |             |               |           | codec width is known.   |
+   |             |               |           | Default the "mtu".      |
+   +-------------+---------------+-----------+-------------------------+
+   | ble         | adapter       | string    | OPTIONAL.  The          |
+   |             |               |           | controller; default the |
+   |             |               |           | first.                  |
+   +-------------+---------------+-----------+-------------------------+
+   | ble         | address       | string    | REQUIRED.  The address  |
+   |             |               |           | of the peer,            |
+   |             |               |           | "AA:BB:CC:DD:EE:FF".    |
+   +-------------+---------------+-----------+-------------------------+
+   | ble         | address_type  | string    | "public" or "random".   |
+   |             |               |           | Default "public".       |
+   +-------------+---------------+-----------+-------------------------+
+   | ble         | service       | string    | OPTIONAL.  The UUID of  |
+   |             |               |           | the service.            |
+   +-------------+---------------+-----------+-------------------------+
+   | ble         | chr           | array     | REQUIRED.  The          |
+   |             |               |           | characteristics: tables |
+   |             |               |           | of "addr", "uuid" and   |
+   |             |               |           | "notify" (below).       |
+   +-------------+---------------+-----------+-------------------------+
+   | ble         | write         | string    | "write" or "command":   |
+   |             |               |           | with or without an      |
+   |             |               |           | answer.  Default        |
+   |             |               |           | "write".                |
+   +-------------+---------------+-----------+-------------------------+
+   | ble         | secure        | boolean   | Default false.  Pair    |
+   |             |               |           | with the peer before    |
+   |             |               |           | use.                    |
+   +-------------+---------------+-----------+-------------------------+
+   | gpio        | device        | string    | REQUIRED.  The chip,    |
+   |             |               |           | such as                 |
+   |             |               |           | "/dev/gpiochip0".       |
+   +-------------+---------------+-----------+-------------------------+
+   | gpio        | consumer      | string    | Default "octo".  The    |
+   |             |               |           | name the holder of a    |
+   |             |               |           | line gives.             |
+   +-------------+---------------+-----------+-------------------------+
+   | gpio        | lines         | array     | REQUIRED.  The lines:   |
+   |             |               |           | tables of "addr",       |
+   |             |               |           | "line", "dir", "active",|
+   |             |               |           | "bias", "drive" and     |
+   |             |               |           | "edge" (below).         |
+   +-------------+---------------+-----------+-------------------------+
+   | loopback    | keep          | integer   | Frames retained.        |
+   |             |               |           | Default 64; the oldest  |
+   |             |               |           | is dropped.             |
+   +-------------+---------------+-----------+-------------------------+
+                       Table 16: Transport Options
+
+   The "device" of a transport names what the host calls it: a path
+   such as "/dev/ttyUSB0", "COM3" or "/dev/i2c-1", or a name such as
+   "can0", as the host spells it.  An implementation MAY accept another
+   spelling of the same thing and MUST NOT add a second key for it.
+
+   What a transport fixes, a descriptor MUST NOT change: a Modbus
+   frame carries eight data octets, so "databits" is 8 on "modbus-*"
+   and is accepted only when it is written as 8.  Where a key is
+   absent, the transport uses what the device or the host already has.
+
+   The "chr" option of "ble" is an array of tables declared as
+   [[bus.<name>.options.chr]], each with the keys "addr", REQUIRED and
+   the address the characteristic is known by; "uuid", REQUIRED, the
+   UUID of the characteristic; and "notify", default false, whether a
+   notification on it produces a frame.  The "mtu" of the bus MUST NOT
+   exceed what the peer negotiates, and an implementation SHOULD ask
+   for the largest the peer accepts.
+
+   The "filter" option of "can" and "canfd" is an array of tables
+   declared as [[bus.<name>.options.filter]], each with the keys "id"
+   and "mask", REQUIRED: a frame is received when its identifier and
+   the mask give the id.
+
+   The "lines" option of "gpio" is an array of tables declared as
+   [[bus.<name>.options.lines]], each with the keys "addr", REQUIRED,
+   the address the line is known by; "line", REQUIRED, the number the
+   host gives the line; "dir", REQUIRED, "in" or "out"; "active",
+   "high" or "low", default "high"; "bias", "none", "pull-up" or
+   "pull-down", default "none"; "drive", "push-pull", "open-drain" or
+   "open-source", default "push-pull"; and "edge", "none", "rising",
+   "falling" or "both", default "none".
+
+   On "modbus-rtu" the address of a frame is the slave address, 1 to
+   247, or 0 for a broadcast when "broadcast" is true, and the data is
+   the protocol data unit: the function code and what follows it.  The
+   CRC-16 of [MODBUS] is written and checked by the transport and is
+   not part of the data, so no "checksum" is declared for such a bus.
+   On "modbus-ascii" the same is true of the longitudinal redundancy
+   check and of the ":" and the CR LF that bound a frame.
+
+      [bus.sense]
+      transport = "i2c"
+      mtu       = 4
+
+      [bus.sense.options]
+      device = "/dev/i2c-1"
+      slave  = 0x40
+      reg    = 1
+      speed  = 400000
+
+   The bus above reads and writes the registers of one device at
+   address 0x40: a codec whose address is 0x10 names register 0x10 of
+   it, and a frame of four data octets is the largest it carries.
 
 10.  Enumeration Tables
 
    [enum.<name>] maps integers onto names so that a value can be given
    as a name by a program and carried as an integer by a bus.  The keys
-   are listed in Table 13.
+   are listed in Table 17.
 
    +=============+==============+======================================+
    | Key         | Type         | Meaning                              |
@@ -807,7 +1436,7 @@ Table of Contents
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
-                   Table 13: Keys of an Enumeration
+                   Table 17: Keys of an Enumeration
 
       [enum.mode]
       values = { 0 = "idle", 1 = "run", 2 = "fault" }
@@ -821,7 +1450,8 @@ Table of Contents
 11.  Codec Tables
 
    A frame on a bus is an address and a sequence of octets, as shown in
-   Figure 1.  The address is opaque and its meaning belongs to the bus.
+   Figure 1.  The address is opaque to everything but Section 9, which
+   says what it means on the transport of the bus (Section 9.1).
 
    +-----------+-----------------------------------------+
    | addr      | data                                    |
@@ -831,7 +1461,7 @@ Table of Contents
                        Figure 1: A Frame on a Bus
 
    [codec.<name>] declares one layout of those octets.  The keys are
-   listed in Table 14, and its fields in Section 11.1.
+   listed in Table 18, and its fields in Section 11.1.
 
    +=============+==============+======================================+
    | Key         | Type         | Meaning                              |
@@ -840,7 +1470,8 @@ Table of Contents
    |             |              | Default the first bus declared.      |
    +-------------+--------------+--------------------------------------+
    | addr        | integer,     | REQUIRED.  The address a frame       |
-   |             | text         | carries.                             |
+   |             | text         | carries (Section 9.1).  Default 0 on |
+   |             |              | a bus whose transport carries none.  |
    +-------------+--------------+--------------------------------------+
    | len         | integer      | OPTIONAL.  The exact number of data  |
    |             |              | octets.  Default the width of the    |
@@ -853,7 +1484,7 @@ Table of Contents
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
-                       Table 14: Keys of a Codec
+                       Table 18: Keys of a Codec
 
    One codec is used in both directions.  Encoding takes a value per
    named field and produces the octets (Section 11.2); decoding takes
@@ -864,7 +1495,7 @@ Table of Contents
 11.1.  Fields
 
    A field is declared as [[codec.<name>.field]].  Its keys are listed
-   in Table 15.
+   in Table 19.
 
    +=============+==============+======================================+
    | Key         | Type         | Meaning                              |
@@ -879,7 +1510,7 @@ Table of Contents
    |             |              | zero for the first.                  |
    +-------------+--------------+--------------------------------------+
    | type        | string       | REQUIRED.  One of the types of       |
-   |             |              | Table 16.                            |
+   |             |              | Table 20.                            |
    +-------------+--------------+--------------------------------------+
    | endian      | string       | "be" or "le".  Default "be".         |
    |             |              | Ignored for a type of one octet and  |
@@ -925,9 +1556,9 @@ Table of Contents
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
-                       Table 15: Keys of a Field
+                       Table 19: Keys of a Field
 
-   The types of a field are listed in Table 16.  The width of a field is
+   The types of a field are listed in Table 20.  The width of a field is
    fixed by its type, and the width of a codec is the end of its last
    field.
 
@@ -957,7 +1588,7 @@ Table of Contents
    | bytes       | count        | Opaque octets.                       |
    +-------------+--------------+--------------------------------------+
 
-                        Table 16: Field Types
+                        Table 20: Field Types
 
    A field carries a value of one of three kinds, and which one is
    decided by its type and by its "scale" and "bias".  A field of an
@@ -1080,8 +1711,8 @@ Table of Contents
 12.  Instruction Tables
 
    [instruction.<name>] declares one procedure a program may call by
-   its name.  Its keys are listed in Table 17, and its arguments in
-   Table 18.
+   its name.  Its keys are listed in Table 21, and its arguments in
+   Table 22.
 
    +=============+==============+======================================+
    | Key         | Type         | Meaning                              |
@@ -1106,7 +1737,7 @@ Table of Contents
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
-                   Table 17: Keys of an Instruction
+                   Table 21: Keys of an Instruction
 
    +=============+==============+======================================+
    | Key         | Type         | Meaning                              |
@@ -1137,7 +1768,7 @@ Table of Contents
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
-                     Table 18: Keys of an Argument
+                     Table 22: Keys of an Argument
 
    The name of an instruction is the name a program passes in the "name"
    member of CALL ([RFC0004], Section 5.3), and it MUST NOT be one of
@@ -1183,7 +1814,7 @@ Table of Contents
 
    [actuator.<name>] declares one thing a program operates with the
    core instruction "actuate" (Section 18.2).  Its keys are listed in
-   Table 19, and its arguments are those of Table 18.
+   Table 23, and its arguments are those of Table 22.
 
    +=============+==============+======================================+
    | Key         | Type         | Meaning                              |
@@ -1207,7 +1838,7 @@ Table of Contents
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
-                     Table 19: Keys of an Actuator
+                     Table 23: Keys of an Actuator
 
    An actuator is reached through "actuate" and has no name of its own
    in the protocol: a call that names one directly is unknown, as
@@ -1229,7 +1860,7 @@ Table of Contents
 
    [sensor.<name>] declares one measurement of the device, which a
    program reads with the core instruction "sense" (Section 18.2).  Its
-   keys are listed in Table 20.
+   keys are listed in Table 24.
 
    +=============+==============+======================================+
    | Key         | Type         | Meaning                              |
@@ -1259,17 +1890,19 @@ Table of Contents
    |             |              | reading.                             |
    +-------------+--------------+--------------------------------------+
    | read        | table        | OPTIONAL.  How a fresh reading is    |
-   |             |              | asked for (Table 22).                |
+   |             |              | asked for (Table 26).                |
    +-------------+--------------+--------------------------------------+
    | memo        | string       | OPTIONAL.  A description meant for   |
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
-                       Table 20: Keys of a Sensor
+                       Table 24: Keys of a Sensor
 
-   At least one of "codec" and "read" MUST be given.  The "field" of a
-   codec MUST name a field of it whose value type (Section 11.1) is the
-   type of the sensor.
+   At least one of "codec" and "read" MUST be given, and both MUST be
+   given on a bus of class "transaction", where nothing arrives that
+   was not asked for (Section 9.4).  The "field" of a codec MUST name a
+   field of it whose value type (Section 11.1) is the type of the
+   sensor.
 
    A sensor is a measurement and not a setting: it is read-only, and no
    instruction of [RFC0004], Section 9.1, writes one.  "sense" returns
@@ -1286,7 +1919,7 @@ Table of Contents
 
    [param.<name>] declares one setting of the device, which a program
    reads and writes with the core instructions "get_param" and
-   "set_param" (Section 18.2).  Its keys are listed in Table 22.
+   "set_param" (Section 18.2).  Its keys are listed in Table 25.
 
    +=============+==============+======================================+
    | Key         | Type         | Meaning                              |
@@ -1309,16 +1942,16 @@ Table of Contents
    |             |              | anything is read.  Default zero.     |
    +-------------+--------------+--------------------------------------+
    | read        | table        | OPTIONAL.  How the value is read     |
-   |             |              | (Table 22).                          |
+   |             |              | (Table 26).                          |
    +-------------+--------------+--------------------------------------+
    | write       | table        | OPTIONAL.  How the value is written  |
-   |             |              | (Table 22).                          |
+   |             |              | (Table 26).                          |
    +-------------+--------------+--------------------------------------+
    | memo        | string       | OPTIONAL.  A description meant for   |
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
-                    Table 21: Keys of a Parameter
+                    Table 25: Keys of a Parameter
 
    At least one of "read" and "write" MUST be given; a parameter that
    can be neither is a name and not a value.  Giving "read" alone makes
@@ -1352,7 +1985,7 @@ Table of Contents
    |             |              | "timeout" of the bus.                |
    +-------------+--------------+--------------------------------------+
 
-                Table 22: Keys of a Read or a Write
+                Table 26: Keys of a Read or a Write
 
    The "field" of a read or a write MUST name a field of the codec it
    names, and the value type of that field (Section 11.1) MUST be the
@@ -1366,6 +1999,9 @@ Table of Contents
    was asked for or not.  A write sends "req" with the value bound to
    "field" and sets the value the daemon holds to what was written;
    when "res" is given it waits for the answer and fails on timeout.
+   On a bus of class "transaction" (Section 9.4) nothing arrives that
+   was not asked for, so a read performs the transaction and "block" is
+   ignored.
 
    A parameter is a cache and not a promise: what a read returns is the
    most recent value this daemon has seen, and a program that needs a
@@ -1384,7 +2020,7 @@ Table of Contents
 16.  Signal Tables
 
    [signal.<name>] declares one thing the device reports: the frame that
-   carries it and what it means.  Its keys are listed in Table 23.
+   carries it and what it means.  Its keys are listed in Table 27.
 
    +=============+==============+======================================+
    | Key         | Type         | Meaning                              |
@@ -1412,7 +2048,7 @@ Table of Contents
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
-                       Table 23: Keys of a Signal
+                       Table 27: Keys of a Signal
 
    A frame is decoded once, by the first codec that matches it
    (Section 11.3).  When a signal names that codec, the values are
@@ -1450,7 +2086,14 @@ Table of Contents
        actuator name a codec, a signal names a codec, a field names an
        enumeration.
 
-   4.  Meaning.  The rules of the tables themselves: a field fits the
+   4.  Meaning.  The rules of the tables themselves: a bus names a
+       transport of Table 12 and takes no option that transport does
+       not define (Section 9.5); a bus of class "stream" declares a
+       framing and no other bus declares one (Section 9.3); the "mtu"
+       of a bus is no larger than its transport accepts and the
+       address of a codec is one that transport can carry
+       (Section 9.1); a sensor or a parameter on a bus of class
+       "transaction" declares a "read" (Section 9.4); a field fits the
        "mtu" and shares no octet; an argument binds to a field of its
        own value type (Section 11.1); a session offers what it
        requires and does not offer [RFC0009] together with [RFC0010];
@@ -1543,7 +2186,7 @@ Table of Contents
 18.3.  Topics
 
    What the device reports is published on the topics of [RFC0004],
-   Section 9.2, listed in Table 24 with the shape of the "data" member
+   Section 9.2, listed in Table 28 with the shape of the "data" member
    of the EVENT.  No topic carries a bus, an address or a frame: a
    caller sees a device and not the hardware behind it.
 
@@ -1582,7 +2225,7 @@ Table of Contents
    | x.<name>          | private use; never assigned by this series.   |
    +-------------------+-----------------------------------------------+
 
-                     Table 24: Topics Published
+                     Table 28: Topics Published
 
    Publishing is best effort and an event is a fact and not a state, as
    [RFC0004], Section 10.2, states: a consumer that has missed one asks
@@ -1621,6 +2264,15 @@ Table of Contents
       A deployment that needs one puts it where it cannot be turned off
       by editing a file.
 
+   *  A bus is a way to reach hardware and not a way to limit what
+      reaches it.  A shared medium -- a CAN bus, an RS-485 line -- lets
+      anything else on it write the frames this daemon writes, and a
+      descriptor cannot tell the difference; nothing in this document
+      protects a device from a second writer on its own bus.  An option
+      that names a device of the host is trusted input like the rest of
+      the descriptor, and a bus of class "transaction" or "pin" is a
+      direct path to a register or to a line.
+
    *  A serve mode SHOULD bind the loopback address (IPv4 127.0.0.1 or
       IPv6 ::1) unless remote access
       is intended, and a serve mode that is reachable SHOULD be
@@ -1652,14 +2304,18 @@ Table of Contents
 
    *  The keys of every table of the format.
 
-   *  The field types of Table 16.
+   *  The field types of Table 20.
 
    *  The reserved names of Section 18.1.
 
-   One namespace is not maintained at all.  A bus transport name other
-   than "loopback" is chosen by the implementation that provides it,
-   carries no meaning beyond that implementation and is never
-   registered.
+   *  The bus transports of Table 12 and, for each of them, the options
+      of Table 16.
+
+   *  The framing modes of Table 14 and the checksum algorithms of
+      Section 9.3.
+
+   A name that begins with "x." is private use in every one of them and
+   is never assigned (Section 9.1).
 
 21.  References
 
@@ -1685,6 +2341,44 @@ Table of Contents
 
    [IEEE754]  IEEE, "IEEE Standard for Floating-Point Arithmetic", IEEE
               Std 754-2019, July 2019.
+
+   [ISO11898-1]  ISO, "Road vehicles -- Controller area network (CAN) --
+              Part 1: Data link layer and physical signalling", ISO
+              11898-1:2024, February 2024.
+
+   [ISO11898-2]  ISO, "Road vehicles -- Controller area network (CAN) --
+              Part 2: High-speed medium access unit", ISO 11898-2:2024,
+              February 2024.
+
+   [ISO17987]  ISO, "Road vehicles -- Local Interconnect Network (LIN)",
+              ISO 17987 (all parts), 2016.
+
+   [TIA232]  TIA, "Interface Between Data Terminal Equipment and Data
+              Circuit-Terminating Equipment Employing Serial Binary Data
+              Interchange", TIA-232-F, October 1997.
+
+   [TIA485]  TIA, "Electrical Characteristics of Generators and
+              Receivers for Use in Balanced Digital Multipoint Systems",
+              TIA-485-A, March 1998.
+
+   [UM10204]  NXP Semiconductors, "I2C-bus specification and user
+              manual", UM10204, Rev. 7.0, October 2021.
+
+   [USB20]  USB Implementers Forum, "Universal Serial Bus Specification,
+              Revision 2.0", April 2000.
+
+   [USBHID]  USB Implementers Forum, "Device Class Definition for Human
+              Interface Devices (HID)", Version 1.11, May 2001.
+
+   [BLUETOOTH]  Bluetooth SIG, "Bluetooth Core Specification", Version
+              5.4, February 2023.
+
+   [MODBUS]  Modbus Organization, "MODBUS over Serial Line Specification
+              and Implementation Guide", V1.02, December 2006.
+
+   [IETF-RFC1055]  Romkey, J., "A Nonstandard for Transmission of IP
+              Datagrams over Serial Lines: SLIP", IETF STD 47, IETF RFC
+              1055, June 1988.
 
    [IETF-RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
               Requirement Levels", IETF BCP 14, IETF RFC 2119, March
@@ -1715,7 +2409,7 @@ Table of Contents
 
 Appendix A.  Diagnostics
 
-   The diagnostics of this document are listed in Table 25.  Each is
+   The diagnostics of this document are listed in Table 29.  Each is
    written after the key path of what is at fault, as Section 17
    states, so only the message is given here.  The list is not
    exhaustive: a message that no row covers is written in the same
@@ -1757,14 +2451,42 @@ Appendix A.  Diagnostics
    +--------------------------------+---------------------------------+
    | A transport is not implemented | unknown bus transport '<name>'  |
    +--------------------------------+---------------------------------+
+   | A transport is not registered  | '<name>' is not a bus transport |
+   |                                | of Table 12                     |
+   +--------------------------------+---------------------------------+
+   | An option is not defined by    | unknown option '<key>' for      |
+   | the transport                  | transport '<name>'              |
+   +--------------------------------+---------------------------------+
+   | A framing table is absent      | 'framing' is required by        |
+   |                                | transport '<name>'              |
+   +--------------------------------+---------------------------------+
+   | A framing table is given where | 'framing' is not allowed on     |
+   | it is not allowed              | transport '<name>'              |
+   +--------------------------------+---------------------------------+
+   | A framing mode is unknown      | unknown framing mode '<name>'   |
+   +--------------------------------+---------------------------------+
+   | A checksum is unknown          | unknown checksum '<name>'       |
+   +--------------------------------+---------------------------------+
+   | An mtu passes the transport    | mtu <n> exceeds the maximum of  |
+   |                                | transport '<name>' (<max>)      |
+   +--------------------------------+---------------------------------+
+   | An address the transport       | addr <n> is out of range for    |
+   | cannot carry                   | transport '<name>'              |
+   +--------------------------------+---------------------------------+
+   | An address names nothing       | addr <n> names no line or       |
+   |                                | characteristic of bus '<bus>'   |
+   +--------------------------------+---------------------------------+
+   | A transaction bus feeds one    | 'read' is required on bus       |
+   | that never reads               | '<bus>', which receives nothing |
+   |                                | that was not asked for          |
+   +--------------------------------+---------------------------------+
    | Whitelist and blacklist at one | the two are mutually exclusive   |
    | level                          | at a level                      |
    +--------------------------------+---------------------------------+
    | An inner access kind differs   | a serve whitelist or blacklist   |
    | from the outer kind            | MUST match the global kind      |
    +--------------------------------+---------------------------------+
-   | An access entry has no addr     | 'addr' is required               |
-   +--------------------------------+---------------------------------+
+   | An access entry has no addr    | 'addr' is required               |
    +--------------------------------+---------------------------------+
    | Two relays take everything     | at most one relay may omit      |
    |                                | 'prefix'                        |
@@ -1818,7 +2540,7 @@ Appendix A.  Diagnostics
    |                                | 'secret_env' is allowed         |
    +--------------------------------+---------------------------------+
 
-                        Table 25: Diagnostics
+                        Table 29: Diagnostics
 
 Appendix B.  A Complete Descriptor
 
@@ -1859,7 +2581,6 @@ Appendix B.  A Complete Descriptor
 
       [session.remote.ocps]
       kind = "tls"
-      pin  = "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2"
 
       [session.tool]
       comp = []
@@ -1879,12 +2600,12 @@ Appendix B.  A Complete Descriptor
       memo    = "Lab subnet (IPv6)."
 
       [bus.main]
-      transport = "socketcan"
+      transport = "can"
       mtu       = 8
 
       [bus.main.options]
-      interface = "can0"
-      bitrate   = 1000000
+      device  = "can0"
+      bitrate = 1000000
 
       [enum.mode]
       values = { 0 = "idle", 1 = "run", 2 = "fault" }
