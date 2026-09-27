@@ -338,69 +338,77 @@ Table of Contents
 
    [session.<name>] declares one variant of [RFC0004]: what it offers,
    what it requires and what carries it.  Every serve mode names one,
-   and a session named "default" is assumed when a
-   key names a session that is not declared: it offers the defaults of
-   Section 5.1, has no authentication, no secure transport and no
-   requirement.
+   and a session named "default" is assumed when a key names a session
+   that is not declared: it offers the defaults of Section 5.1, has no
+   authentication, no secure transport and no requirement.
 
 5.1.  Offers
 
-   The keys of Table 4 are offers: what this endpoint is willing to
-   use.  Each is an array of algorithm names, most preferred first, as
-   [RFC0004], Section 3.6, requires of an offer.
+   The top-level offers of [RFC0004] are the keys of Table 4: what this
+   endpoint is willing to use.  Each array-valued key is an array of
+   algorithm names, most preferred first, as [RFC0004], Section 3.6,
+   requires of an offer.  [RFC0009] and [RFC0010] are not part of the
+   default configuration; their offers live in the "ocpfls" sub-table
+   below and the "ocps" sub-table of Section 5.3.
 
    +=============+==============+======================================+
    | Key         | Type         | Meaning                              |
    +=============+==============+======================================+
-   | comp        | array, text  | Compression algorithms.  Default     |
-   |             |              | ["zstd"], which is the default of    |
-   |             |              | [RFC0004], Section 3.6.  An empty    |
-   |             |              | array offers none.                   |
-   +-------------+--------------+--------------------------------------+
-   | enc         | array, text  | Encryption algorithms of [RFC0009].  |
+   | comp        | array, text  | Compression algorithms.  OFF by        |
+   |             |              | default unless at least one is         |
+   |             |              | offered; an empty array offers         |
+   |             |              | none.                                  |   +-------------+--------------+--------------------------------------+
+
+                Table 4: Top-Level Offers (RFC0004 Defaults)
+
+   The [session.<name>.ocpfls] sub-table holds the [RFC0009] frame-level
+   security offers.  Its keys are listed in Table 5.
+
+   +=============+==============+======================================+
+   | Key         | Type         | Meaning                              |
+   +=============+==============+======================================+
+   | ocpfls.enc  | array, text  | Encryption algorithms of [RFC0009].  |
    |             |              | Default empty: encryption is not     |
    |             |              | offered.                             |
    +-------------+--------------+--------------------------------------+
-   | itg         | array, text  | Integrity algorithms of [RFC0009].   |
+   | ocpfls.itg  | array, text  | Integrity algorithms of [RFC0009].   |
    |             |              | Default empty.                       |
    +-------------+--------------+--------------------------------------+
-   | ztr         | array, text  | Zero-trust algorithms of [RFC0009].  |
+   | ocpfls.ztr  | array, text  | Zero-trust algorithms of [RFC0009].  |
    |             |              | Default empty.                       |
-   +-------------+--------------+--------------------------------------+
-   | hdr         | array, text  | Header forms of [RFC0009], Section   |
-   |             |              | 3.3: "ext", and "core" for the form  |
-   |             |              | of [RFC0004].  Default empty, which  |
-   |             |              | is the core form.                    |
    +-------------+--------------+--------------------------------------+
 
-                      Table 4: Keys of an Offer
+              Table 5: Keys of the [session.*.ocpfls] Sub-table
 
    The rules of the exchange are those of [RFC0004], Section 6.1, and
    of [RFC0009], Section 9.  Three of them are restated here because a
    descriptor is where they are decided.
 
    *  A primitive is never switched on by silence.  An absent or empty
-      "enc", "itg", "ztr" or "hdr" offers nothing, unlike "comp", whose
-      absence offers the default algorithm.
+      comp, ocpfls.enc, ocpfls.itg or ocpfls.ztr offers nothing.
 
-   *  "hdr" MUST contain "ext" when "enc", "itg" or "ztr" is not empty,
-      and MUST be empty when all three are: the two fields the longer
-      header adds exist only to feed a primitive.  A session that
-      offers one without the other is an error of the descriptor.
-
-   *  A session that offers "enc" or "ztr" MUST declare authentication
-      with a secret (Section 5.2), or a method that yields one, because
-      a primitive that has no key produces a session that fails on its
-      first protected frame.
+   *  A session that offers ocpfls.enc or ocpfls.ztr MUST declare
+      authentication with a secret (Section 5.2), or a method that
+      yields one, because a primitive that has no key produces a
+      session that fails on its first protected frame.
 
    The names are compared as exact strings and are not registered; a
    name an endpoint does not implement MUST be ignored in an offer and
    MUST NOT be confirmed, as [RFC0004], Section 3.6, requires.
 
+   The transport protocol of a session is fixed by which offer sub-table
+   it sets; ocpfls and ocps are mutually exclusive, and a descriptor
+   that sets both is an error.  With neither, the session speaks the
+   cleartext OCP of [RFC0004], Section 7.4 (ocp://, port 6286).  With
+   ocpfls it speaks the frame-level secure transport of [RFC0009]
+   (ocp-fls://, port 6357).  With ocps it speaks the secure transport
+   of [RFC0010] (ocps://, port 16286, ALPN "ocp/1").  Setting either
+   one therefore changes the wire protocol, not merely a parameter.
+
 5.2.  Authentication
 
    The [session.<name>.auth] table is OPTIONAL.  Its keys are listed in
-   Table 5; every other key of the table is defined by the method and is
+   Table 6; every other key of the table is defined by the method and is
    opaque to this document, exactly as the "auth" member of HELLO is
    opaque to [RFC0004], Section 6.2.
 
@@ -420,7 +428,7 @@ Table of Contents
    |             |              | the secret.                          |
    +-------------+--------------+--------------------------------------+
 
-                 Table 5: Keys of the Authentication Table
+                 Table 6: Keys of the Authentication Table
 
    At most one of "secret" and "secret_env" MAY be given.  A method
    that needs no secret is given neither.  When a session is
@@ -435,8 +443,9 @@ Table of Contents
 
 5.3.  Secure Transport
 
-   The [session.<name>.transport] table is OPTIONAL and selects the
-   binding of [RFC0010].  The keys are listed in Table 6.
+   The [session.<name>.ocps] table (the secure-transport sub-table) is
+   OPTIONAL and selects the binding of [RFC0010]; the keys are in
+   Table 7.
 
    +=============+==============+======================================+
    | Key         | Type         | Meaning                              |
@@ -473,7 +482,7 @@ Table of Contents
    |             |              | Default "1.2".                       |
    +-------------+--------------+--------------------------------------+
 
-                  Table 6: Keys of the Transport Table
+                  Table 7: Keys of the [session.*.ocps] Sub-table
 
    The peer is always validated, as [RFC0010], Section 4.4, requires;
    this document defines no key that turns validation off.  A value of
@@ -481,7 +490,7 @@ Table of Contents
    names a version this implementation does not implement.
 
    A session that uses a secure transport does not use [RFC0009]:
-   "enc", "itg", "ztr" and "hdr" MUST be empty when "kind" is not
+   ocpfls.enc, ocpfls.itg, ocpfls.ztr MUST be empty when "kind" is not
    "none", and a descriptor that offers both is an error.  The two are
    alternatives, as [RFC0010], Section 1.1, states, and a descriptor
    that asks for both has not answered the question of which one
@@ -490,7 +499,7 @@ Table of Contents
 5.4.  Requirements
 
    The [session.<name>.require] table is OPTIONAL.  Its keys are listed
-   in Table 7; each is a boolean and each is false by default.  A
+   in Table 8; each is a boolean and each is false by default.  A
    requirement says what a session that does not meet it does.
 
    +=============+==============+======================================+
@@ -502,17 +511,21 @@ Table of Contents
    | comp        | boolean      | Refuse a session on which no         |
    |             |              | compression algorithm was agreed.    |
    +-------------+--------------+--------------------------------------+
-   | enc         | boolean      | Refuse a session on which            |
+   | ocpfls.enc  | boolean      | Refuse a session on which            |
    |             |              | encryption was not agreed.           |
    +-------------+--------------+--------------------------------------+
-   | itg         | boolean      | Refuse a session on which no         |
+   | ocpfls.itg  | boolean      | Refuse a session on which no         |
    |             |              | integrity algorithm was agreed.      |
    +-------------+--------------+--------------------------------------+
-   | ztr         | boolean      | Refuse a session on which no zero-   |
+   | ocpfls.ztr  | boolean      | Refuse a session on which no zero-   |
    |             |              | trust algorithm was agreed.          |
    +-------------+--------------+--------------------------------------+
 
-                 Table 7: Keys of the Requirement Table
+                 Table 8: Keys of the Requirement Table
+
+   The [RFC0009] primitives are reached through the ocpfls sub-table,
+   so a requirement for one is written ocpfls.enc, ocpfls.itg or
+   ocpfls.ztr.
 
    A session that does not meet a requirement is refused, and is
    refused rather than served without what was required: an
@@ -523,8 +536,8 @@ Table of Contents
 
    A requirement MUST be satisfiable by what the same session offers:
    requiring a primitive that is not offered, requiring "auth" without
-   an "auth" table, or requiring "enc" or "ztr" without a secret, is an
-   error of the descriptor.
+   an "auth" table, or requiring ocpfls.enc or ocpfls.ztr without a
+   secret, is an error of the descriptor.
 
 6.  Serve Tables
 
@@ -535,7 +548,7 @@ Table of Contents
    several MAY be declared, and the daemon opens them all in
    parallel, each serving the same device
    from
-   the same translation.  The keys are listed in Table 8.
+   the same translation.  The keys are listed in Table 9.
 
    +=============+==============+======================================+
    | Key         | Type         | Meaning                              |
@@ -547,10 +560,11 @@ Table of Contents
    |             |              | separate key; "::" binds every IPv6  |
    |             |              | interface.  Default "127.0.0.1".     |
    +-------------+--------------+--------------------------------------+
-   | port        | integer      | Default 6286, the port recommended   |
-   |             |              | by [RFC0004], Section 7.4, or 16286  |
-   |             |              | when the session of this serve mode  |
-   |             |              | uses a secure transport [RFC0010].   |
+   | port        | integer      | Default 6286, the [RFC0004] port      |
+   |             |              | by [RFC0004], Section 7.4; 6357 with  |
+   |             |              | [RFC0009] (ocp-fls://) and 16286 with |
+   |             |              | [RFC0010] (ocps://), per the session  |
+   |             |              | named by this serve mode.             |
    +-------------+--------------+--------------------------------------+
    | session     | string       | The variant of [RFC0004] spoken      |
    |             |              | here.  Default "default".            |
@@ -587,9 +601,9 @@ Table of Contents
    |             |              | mode is declared but not opened.     |
    +-------------+--------------+--------------------------------------+
 
-                    Table 8: Keys of a Serve Table
+                    Table 9: Keys of a Serve Table
 
-   The numbers of Table 8 are the recommendations of [RFC0004],
+   The numbers of Table 9 are the recommendations of [RFC0004],
    Sections 3.3, 6.6.7 and 6.7, restated as defaults; a deployment MAY
    change any of them and none of them is negotiated by this document.
 
@@ -606,7 +620,7 @@ Table of Contents
 
    Access is controlled by whitelist and blacklist entries.  A whitelist
    entry names an address that is allowed; a blacklist entry names an
-   address that is denied.  Both kinds share the keys of Table 9.
+   address that is denied.  Both kinds share the keys of Table 10.
 
    An entry is declared at one of two levels.  At the top level,
    [[whitelist]] or [[blacklist]] is an array of entries that applies
@@ -647,14 +661,14 @@ Table of Contents
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
-                      Table 9: Keys of an Access Entry
+                      Table 10: Keys of an Access Entry
 
 8.  Relay Tables
 
    [relay.<name>] declares one relay: calls it takes are passed on
    unchanged to a peer at the address it names.  A relay translates
    nothing: it is the case where there is nothing to translate, because
-   the peer already speaks [RFC0004].  The keys are listed in Table 10.
+   the peer already speaks [RFC0004].  The keys are listed in Table 11.
 
    +=============+==============+======================================+
    | Key         | Type         | Meaning                              |
@@ -663,9 +677,10 @@ Table of Contents
    |             |              | the relay reaches: an IPv4 or IPv6   |
    |             |              | address, or a host name.             |
    +-------------+--------------+--------------------------------------+
-   | port        | integer      | Default 6286, or 16286 when the      |
-   |             |              | session of this relay uses a secure  |
-   |             |              | transport [RFC0010].                 |
+   | port        | integer      | Default 6286, or 6357 with           |
+   |             |              | [RFC0009] (ocp-fls://) and 16286     |
+   |             |              | with [RFC0010] (ocps://), per the    |
+   |             |              | session of this relay.               |
    +-------------+--------------+--------------------------------------+
    | session     | string       | The variant of [RFC0004] spoken to   |
    |             |              | the peer.  Default "default".        |
@@ -691,7 +706,7 @@ Table of Contents
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
-                      Table 10: Keys of a Relay Table
+                      Table 11: Keys of a Relay Table
 
    At most one relay MAY omit "prefix".  That relay takes every name
    that this descriptor does not translate; a relay with a prefix takes
@@ -733,7 +748,7 @@ Table of Contents
    [bus.<name>] declares one hardware bus: a carrier of frames between
    the daemon and a device, whose octets this descriptor encodes and
    decodes.  A bus is never visible to a caller.  The keys are listed in
-   Table 11.
+   Table 12.
 
    +=============+==============+======================================+
    | Key         | Type         | Meaning                              |
@@ -752,7 +767,7 @@ Table of Contents
    |             |              | is declared but not opened.          |
    +-------------+--------------+--------------------------------------+
 
-                       Table 11: Keys of a Bus Table
+                       Table 12: Keys of a Bus Table
 
    The [bus.<name>.options] table is OPTIONAL.  Its keys are defined by
    the transport named by "transport" and are passed to it unchanged,
@@ -778,7 +793,7 @@ Table of Contents
 
    [enum.<name>] maps integers onto names so that a value can be given
    as a name by a program and carried as an integer by a bus.  The keys
-   are listed in Table 12.
+   are listed in Table 13.
 
    +=============+==============+======================================+
    | Key         | Type         | Meaning                              |
@@ -792,7 +807,7 @@ Table of Contents
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
-                   Table 12: Keys of an Enumeration
+                   Table 13: Keys of an Enumeration
 
       [enum.mode]
       values = { 0 = "idle", 1 = "run", 2 = "fault" }
@@ -816,7 +831,7 @@ Table of Contents
                        Figure 1: A Frame on a Bus
 
    [codec.<name>] declares one layout of those octets.  The keys are
-   listed in Table 13, and its fields in Section 11.1.
+   listed in Table 14, and its fields in Section 11.1.
 
    +=============+==============+======================================+
    | Key         | Type         | Meaning                              |
@@ -838,7 +853,7 @@ Table of Contents
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
-                       Table 13: Keys of a Codec
+                       Table 14: Keys of a Codec
 
    One codec is used in both directions.  Encoding takes a value per
    named field and produces the octets (Section 11.2); decoding takes
@@ -849,7 +864,7 @@ Table of Contents
 11.1.  Fields
 
    A field is declared as [[codec.<name>.field]].  Its keys are listed
-   in Table 14.
+   in Table 15.
 
    +=============+==============+======================================+
    | Key         | Type         | Meaning                              |
@@ -864,7 +879,7 @@ Table of Contents
    |             |              | zero for the first.                  |
    +-------------+--------------+--------------------------------------+
    | type        | string       | REQUIRED.  One of the types of       |
-   |             |              | Table 15.                            |
+   |             |              | Table 16.                            |
    +-------------+--------------+--------------------------------------+
    | endian      | string       | "be" or "le".  Default "be".         |
    |             |              | Ignored for a type of one octet and  |
@@ -910,9 +925,9 @@ Table of Contents
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
-                       Table 14: Keys of a Field
+                       Table 15: Keys of a Field
 
-   The types of a field are listed in Table 15.  The width of a field is
+   The types of a field are listed in Table 16.  The width of a field is
    fixed by its type, and the width of a codec is the end of its last
    field.
 
@@ -942,7 +957,7 @@ Table of Contents
    | bytes       | count        | Opaque octets.                       |
    +-------------+--------------+--------------------------------------+
 
-                        Table 15: Field Types
+                        Table 16: Field Types
 
    A field carries a value of one of three kinds, and which one is
    decided by its type and by its "scale" and "bias".  A field of an
@@ -1065,8 +1080,8 @@ Table of Contents
 12.  Instruction Tables
 
    [instruction.<name>] declares one procedure a program may call by
-   its name.  Its keys are listed in Table 16, and its arguments in
-   Table 17.
+   its name.  Its keys are listed in Table 17, and its arguments in
+   Table 18.
 
    +=============+==============+======================================+
    | Key         | Type         | Meaning                              |
@@ -1091,7 +1106,7 @@ Table of Contents
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
-                   Table 16: Keys of an Instruction
+                   Table 17: Keys of an Instruction
 
    +=============+==============+======================================+
    | Key         | Type         | Meaning                              |
@@ -1122,7 +1137,7 @@ Table of Contents
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
-                     Table 17: Keys of an Argument
+                     Table 18: Keys of an Argument
 
    The name of an instruction is the name a program passes in the "name"
    member of CALL ([RFC0004], Section 5.3), and it MUST NOT be one of
@@ -1168,7 +1183,7 @@ Table of Contents
 
    [actuator.<name>] declares one thing a program operates with the
    core instruction "actuate" (Section 18.2).  Its keys are listed in
-   Table 18, and its arguments are those of Table 17.
+   Table 19, and its arguments are those of Table 18.
 
    +=============+==============+======================================+
    | Key         | Type         | Meaning                              |
@@ -1192,7 +1207,7 @@ Table of Contents
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
-                     Table 18: Keys of an Actuator
+                     Table 19: Keys of an Actuator
 
    An actuator is reached through "actuate" and has no name of its own
    in the protocol: a call that names one directly is unknown, as
@@ -1214,7 +1229,7 @@ Table of Contents
 
    [sensor.<name>] declares one measurement of the device, which a
    program reads with the core instruction "sense" (Section 18.2).  Its
-   keys are listed in Table 19.
+   keys are listed in Table 20.
 
    +=============+==============+======================================+
    | Key         | Type         | Meaning                              |
@@ -1244,13 +1259,13 @@ Table of Contents
    |             |              | reading.                             |
    +-------------+--------------+--------------------------------------+
    | read        | table        | OPTIONAL.  How a fresh reading is    |
-   |             |              | asked for (Table 21).                |
+   |             |              | asked for (Table 22).                |
    +-------------+--------------+--------------------------------------+
    | memo        | string       | OPTIONAL.  A description meant for   |
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
-                       Table 19: Keys of a Sensor
+                       Table 20: Keys of a Sensor
 
    At least one of "codec" and "read" MUST be given.  The "field" of a
    codec MUST name a field of it whose value type (Section 11.1) is the
@@ -1271,7 +1286,7 @@ Table of Contents
 
    [param.<name>] declares one setting of the device, which a program
    reads and writes with the core instructions "get_param" and
-   "set_param" (Section 18.2).  Its keys are listed in Table 21.
+   "set_param" (Section 18.2).  Its keys are listed in Table 22.
 
    +=============+==============+======================================+
    | Key         | Type         | Meaning                              |
@@ -1294,16 +1309,16 @@ Table of Contents
    |             |              | anything is read.  Default zero.     |
    +-------------+--------------+--------------------------------------+
    | read        | table        | OPTIONAL.  How the value is read     |
-   |             |              | (Table 21).                          |
+   |             |              | (Table 22).                          |
    +-------------+--------------+--------------------------------------+
    | write       | table        | OPTIONAL.  How the value is written  |
-   |             |              | (Table 21).                          |
+   |             |              | (Table 22).                          |
    +-------------+--------------+--------------------------------------+
    | memo        | string       | OPTIONAL.  A description meant for   |
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
-                    Table 20: Keys of a Parameter
+                    Table 21: Keys of a Parameter
 
    At least one of "read" and "write" MUST be given; a parameter that
    can be neither is a name and not a value.  Giving "read" alone makes
@@ -1337,7 +1352,7 @@ Table of Contents
    |             |              | "timeout" of the bus.                |
    +-------------+--------------+--------------------------------------+
 
-                Table 21: Keys of a Read or a Write
+                Table 22: Keys of a Read or a Write
 
    The "field" of a read or a write MUST name a field of the codec it
    names, and the value type of that field (Section 11.1) MUST be the
@@ -1369,7 +1384,7 @@ Table of Contents
 16.  Signal Tables
 
    [signal.<name>] declares one thing the device reports: the frame that
-   carries it and what it means.  Its keys are listed in Table 22.
+   carries it and what it means.  Its keys are listed in Table 23.
 
    +=============+==============+======================================+
    | Key         | Type         | Meaning                              |
@@ -1397,7 +1412,7 @@ Table of Contents
    |             |              | a human.                             |
    +-------------+--------------+--------------------------------------+
 
-                       Table 22: Keys of a Signal
+                       Table 23: Keys of a Signal
 
    A frame is decoded once, by the first codec that matches it
    (Section 11.3).  When a signal names that codec, the values are
@@ -1528,7 +1543,7 @@ Table of Contents
 18.3.  Topics
 
    What the device reports is published on the topics of [RFC0004],
-   Section 9.2, listed in Table 23 with the shape of the "data" member
+   Section 9.2, listed in Table 24 with the shape of the "data" member
    of the EVENT.  No topic carries a bus, an address or a frame: a
    caller sees a device and not the hardware behind it.
 
@@ -1567,7 +1582,7 @@ Table of Contents
    | x.<name>          | private use; never assigned by this series.   |
    +-------------------+-----------------------------------------------+
 
-                     Table 23: Topics Published
+                     Table 24: Topics Published
 
    Publishing is best effort and an event is a fact and not a state, as
    [RFC0004], Section 10.2, states: a consumer that has missed one asks
@@ -1637,7 +1652,7 @@ Table of Contents
 
    *  The keys of every table of the format.
 
-   *  The field types of Table 15.
+   *  The field types of Table 16.
 
    *  The reserved names of Section 18.1.
 
@@ -1700,7 +1715,7 @@ Table of Contents
 
 Appendix A.  Diagnostics
 
-   The diagnostics of this document are listed in Table 24.  Each is
+   The diagnostics of this document are listed in Table 25.  Each is
    written after the key path of what is at fault, as Section 17
    states, so only the message is given here.  The list is not
    exhaustive: a message that no row covers is written in the same
@@ -1803,7 +1818,7 @@ Appendix A.  Diagnostics
    |                                | 'secret_env' is allowed         |
    +--------------------------------+---------------------------------+
 
-                        Table 24: Diagnostics
+                        Table 25: Diagnostics
 
 Appendix B.  A Complete Descriptor
 
@@ -1842,7 +1857,7 @@ Appendix B.  A Complete Descriptor
       addr = "192.168.0.50"
       memo    = "The tool laptop."
 
-      [session.remote.transport]
+      [session.remote.ocps]
       kind = "tls"
       pin  = "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2"
 

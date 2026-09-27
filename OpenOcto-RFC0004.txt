@@ -349,14 +349,16 @@ Table of Contents
    endpoints agree when the session is established (Section 6.1).  This
    document specifies the negotiation, not a set of algorithms: any name
    MAY be agreed by two endpoints that implement it, and the list below
-   is an example.  The name listed is the one used by default.
+   is an example; zstd is a common choice.  Compression is OFF by
+   default and OPTIONAL: an endpoint that wants it lists at least one
+   algorithm in HELLO.
 
    Some typical compression algorithms are shown in Table 3.
 
    +============+======================================================+
    |Name        |Method                                                |
    +============+======================================================+
-   |zstd        |Zstandard [IETF-RFC8878]; default                     |
+   |zstd        |Zstandard [IETF-RFC8878]; a common choice             |
    +------------+------------------------------------------------------+
    |brotli      |Brotli [IETF-RFC7932]                                 |
    +------------+------------------------------------------------------+
@@ -391,10 +393,10 @@ Table of Contents
 
       "algs": {"comp": "zstd"}
 
-   The member and its key are OPTIONAL.  An absent "comp" key means that
-   the endpoint offers only the default, that is, "zstd"; an empty array
-   means that it offers none.  A name an endpoint does not recognise
-   MUST be ignored in an offer and MUST NOT be confirmed.
+   The member and its key are OPTIONAL.  Compression is OFF by default:
+   an absent "comp" key and an empty array both mean that the endpoint
+   offers no compression.  A name an endpoint does not recognise MUST be
+   ignored in an offer and MUST NOT be confirmed.
 
    When the responder implements none of the algorithms offered, the
    F_COMP flag is not agreed and compression is not used.
@@ -1140,7 +1142,8 @@ Table of Contents
    2.  The responder answers with the intersection of the proposed bits
        and the bits it supports, in WELCOME, and with one compression
        algorithm: the first entry of the initiator's list that it also
-       implements, or the default when the member or its key is absent.
+       implements.  When the member or its key is absent, no algorithm
+       is agreed and the F_COMP flag is cleared.
 
    3.  The agreed set is the WELCOME value.  Each frame thereafter marks
        the bits it actually applies.  Compression MAY vary per frame;
