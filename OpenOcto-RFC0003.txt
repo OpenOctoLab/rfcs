@@ -1,21 +1,31 @@
 
 
+
 OpenOcto Standards Group (OOSG)                                  S. Yang
 Request for Comments: 0003                                          HFUT
 Category: Standards Track                                 September 2026
 
-                        The OctoScript Language
+
+                     The OctoScript Language
 
 Abstract
 
-   This document specifies the OctoScript programming language.  It
-   defines the lexical structure, the complete syntax, the value and
-   object model, evaluation semantics including scoping and argument
-   passing, the standard library entry points visible to programs, the
-   host interface used to embed the language, the meta object of an
-   interpreter instance, and the diagnostics a conforming
-   implementation produces.  Every construct of the language is
-   specified, including those that are rarely used.
+   This document specifies OctoScript, a dynamically typed programming
+   language for controlling robots and the devices attached to them.  It
+   is designed to drive the Octopus Control Protocol [RFC0004] and its
+   extensions [RFC0009], [RFC0010] and [RFC0011] from a small,
+   C-family surface.  The language is built around asynchronous remote
+   procedure calls and asynchronous events: every call to a device is a
+   future, and every event from a device is a message a program waits
+   for.  To that end the language provides first-class constructs for
+   concurrency (spawn), awaiting (await), racing several outcomes
+   (race), and waiting on events, topics, channels and time (select, on,
+   wait, sleep).  It defines the lexical structure, the syntax, the
+   value and object model, the concurrency and cancellation model, the
+   host interface that binds the language to an OCP session, the
+   standard library entry points visible to programs, the meta object
+   of an interpreter instance, and the diagnostics a conforming
+   implementation produces.
 
 Status of This Memo
 
@@ -45,68 +55,65 @@ Copyright Notice
 
 Table of Contents
 
-   1. Introduction
-   2. Lexical Structure
+   1.  Introduction
+   2.  Lexical Structure
      2.1.  Input Encoding and Whitespace
      2.2.  Comments
      2.3.  Line Continuation
      2.4.  Identifiers and Keywords
      2.5.  Operators and Punctuation
      2.6.  Literals
-       2.6.1.  Numeric Literals
-       2.6.2.  String Literals
-       2.6.3.  Interpolated Strings
      2.7.  Newline Sensitivity
-   3. Types and Literals
+     2.8.  Optional Type Annotations
+   3.  Types and Values
      3.1.  Value Model
      3.2.  List, Tuple, Set
      3.3.  Dictionary
-     3.4.  Range Shorthand
-     3.5.  Spread
-   4. Operators and Precedence
-     4.1.  Operator Table
-     4.2.  Precedence
-     4.3.  Evaluation Details
-     4.4.  Chained Comparison
-     4.5.  Membership
-   5. Expressions
+     3.4.  Range
+     3.5.  Future
+     3.6.  Channel
+     3.7.  Spread
+   4.  Operators and Precedence
+   5.  Expressions
      5.1.  Member Access, Indexing, Calling
      5.2.  Optional Chaining
-     5.3.  Ternary Operators
+     5.3.  Ternary Operator
      5.4.  Comprehensions
      5.5.  Arrow Functions
      5.6.  Walrus Operator
-     5.8.  Scope Views: globals and locals
-   6. Statements and Control Flow
+     5.7.  Scope Views: globals and locals
+   6.  Statements, Control Flow and Concurrency
      6.1.  Separation and Blocks
-     6.10. Failure Statement: panic
-   7. Functions, Scope and Arguments
+     6.2.  Tasks, spawn and await
+     6.3.  race: Racing Outcomes
+     6.4.  select: Waiting on Events, Channels and Time
+     6.5.  on: Persistent Event Subscriptions
+     6.6.  Timing: sleep and wait
+     6.7.  Cancellation
+     6.8.  Failure: panic, try and except
+     6.9.  until: Event-Gated Loop Exit
+   7.  Functions, Scope and Arguments
      7.1.  Definition and Call
      7.2.  Closures
      7.3.  Scope and Declaration
      7.4.  Argument Passing by Alias
-     7.5.  Promoting a Local Function
-     7.6.  Defaults, Named Arguments and the Parameter Sink
-   8. Destructuring Assignment
-   9. Host Interface, Hooks and Hardware Binding
+     7.5.  Defaults, Named Arguments and the Parameter Sink
+   8.  Destructuring Assignment
+   9.  Host Interface, OCP Binding and Hardware
      9.1.  Native Functions
-     9.2.  Standard Library Entry Points
-     9.3.  Hook Semantics
-     9.4.  Watcher Semantics
-     9.5.  Hardware Instructions
-     9.6.  Instance Meta Object
-     9.7.  Latched Hardware Faults
-     9.8.  Name Resolution Order
+     9.2.  Sessions and connect()
+     9.3.  Core Profile Bindings
+     9.4.  Publish/Subscribe Bindings
+     9.5.  Error Model and OCP Error Codes
+     9.6.  Security Modes: [RFC0009] and [RFC0010]
+     9.7.  The Air Subset: [RFC0011]
+     9.8.  Instance Meta Object
+     9.9.  Name Resolution Order
    10. Library and External Objects
      10.1. Operations on Values
      10.2. Standard Library Functions
      10.3. Modules
-     10.4. String Formatting
-     10.5. Interactive Input
-     10.6. Formatting Tool
    11. Error Model and Diagnostics
-     11.1. Taxonomy
-     11.2. Diagnostics
    12. Complete Example
    13. Security Considerations
    14. IANA Considerations
@@ -120,16 +127,31 @@ Table of Contents
 1.  Introduction
 
    OctoScript is a dynamically typed, Turing-complete language intended
-   for controlling machines.  It combines a compact, C-family
-   expression syntax with brace-delimited, indentation-independent
-   blocks, and it is designed to be embedded in a host environment that
-   supplies the machine-facing operations.  The value model, the
-   operator set and the library are defined by this document; they do
-   not depend on the language in which an implementation is written.
+   for controlling machines over a network.  It combines a compact,
+   C-family expression syntax with brace-delimited, indentation
+   independent blocks, and it is designed to be embedded in a host
+   environment that supplies the machine-facing operations by speaking
+   [RFC0004] on its behalf.  The value model, the operator set, the
+   concurrency model and the library are defined by this document; they
+   do not depend on the language in which an implementation is written.
 
-   A program is a sequence of statements.  Execution is top-down; the
-   last statement of a program need not be terminated.  Statements are
-   separated by newlines or by a single semicolon.
+   A program is a sequence of statements executed as a single top-level
+   task.  Execution is top-down; the last statement of a program need
+   not be terminated.  Statements are separated by newlines or by a
+   single semicolon.
+
+   The defining property of the language is that it is asynchronous by
+   default at the boundary with hardware.  A call to a device -- sense,
+   actuate, get_param, set_param, ping, status or metadata -- is not a
+   synchronous function returning a value; it is a request that returns
+   a future (Section 3.5).  The future resolves when the device answers
+   with a RESULT frame [RFC0004], Section 5.4.  A program reads the
+   answer with await (Section 6.2), races several answers with race
+   (Section 6.3), or selects among an answer, an event and a timeout
+   with select (Section 6.4).  An event from a device -- an EVENT
+   frame [RFC0004], Section 5.5 -- is something a program waits for
+   with on (Section 6.5) or wait (Section 6.6), never something it
+   polls.
 
    A conforming implementation MUST support everything specified in
    this document.  Behaviour that is not specified here is
@@ -137,13 +159,19 @@ Table of Contents
    silently ignore a construct it does not support; it MUST reject it
    during parsing or evaluation.
 
+   This document is a complete revision.  It does not preserve
+   compatibility with any earlier text: the hardware-binding model is
+   rebuilt around [RFC0004] and its listed extensions, and all
+   constructs that did not map cleanly onto a robotics control loop
+   have been removed.
+
 2.  Lexical Structure
 
 2.1.  Input Encoding and Whitespace
 
-   Source text is a sequence of characters.  Space, horizontal tab,
-   carriage return and newline are whitespace.  Indentation carries no
-   meaning: blocks are delimited by braces.
+   Source text is a sequence of Unicode characters encoded in UTF-8.
+   Space, horizontal tab, carriage return and newline are whitespace.
+   Indentation carries no meaning: blocks are delimited by braces.
 
    A newline is a statement separator; it is also significant in two
    other ways that are covered in Section 2.7.
@@ -156,8 +184,7 @@ Table of Contents
    A block comment begins with /* and ends with */ and MAY span lines.
    An unterminated block comment is a lexical error.
 
-   Comments are whitespace for the purposes of the grammar, but a
-   formatter preserves them (Section 10.6).
+   Comments are whitespace for the purposes of the grammar.
 
 2.3.  Line Continuation
 
@@ -174,14 +201,16 @@ Table of Contents
    with letters, digits and underscores.  Identifiers are case
    sensitive.
 
-   The following thirty-five words are keywords and MUST NOT be used as
-   identifiers, function names or loop targets:
+   The following words are keywords and MUST NOT be used as identifiers,
+   function names or binding targets:
 
-      and     as      break   case    const   continue do      elif
-      else    except  false   finally fn      for      from    globals
-      if      import  in      let     locals  loop     match   not
-      null    octo    or      panic   pass    return   this    true
-      try     var     while
+      and     as      await   break   case    chan    const
+      continue  default  do    elif    else    except  false
+      finally  fn      for     from    globals if      import
+      in      let     locals  loop    match   not     null
+      on      or      panic   pass    race    return  select
+      sleep   spawn   this    true    try     var     wait
+      when    while   within  until
 
    Keywords are read-only: using any keyword as an assignment target,
    including compound assignment and the walrus operator, is a syntax
@@ -189,7 +218,7 @@ Table of Contents
    permitted and is not an assignment to the keyword.
 
    The symbolic logical operators &&, || and ! are lexically equivalent
-   to and, or and not; the pair !=" is the single operator not equal.
+   to and, or and not; the pair != is the single operator not equal.
    true and false denote the two boolean values; null denotes the
    absence of a value.
 
@@ -199,12 +228,14 @@ Table of Contents
 
       <<=  >>=                                       (three characters)
       ==  !=  <=  >=  ->  **  //  ..  ?.  :=  +=  -=
-      *=  /=  &=  |=  ^=  <<  >>  =>                   (two characters)
+      *=  /=  &=  |=  ^=  <<  >>  =>  <-               (two characters)
       ~ + - * / % & | ^ = < > ? :                       (one character)
 
    The characters (, ), {, }, [, ], ,, ; and . are punctuation tokens
    and are not operators.  The token => introduces an arrow function
-   and is not the comparison >=.
+   and is not the comparison >=.  The token <- is the channel operator:
+   as a prefix it receives from a channel, as an infix it sends to one
+   (Section 3.6).
 
    An at sign (@) is not a valid character; decorator syntax does not
    exist.  There is no identity operator: is is an ordinary identifier
@@ -215,680 +246,382 @@ Table of Contents
 
 2.6.  Literals
 
-2.6.1.  Numeric Literals
-
    Numeric literals cover the integer, floating-point and complex
-   forms:
+   domains.  An integer literal is a run of digits, optionally signed,
+   with an optional base prefix 0x, 0o or 0b.  A floating-point literal
+   contains a decimal point or an exponent.  A complex literal is a
+   real and an imaginary part joined by + or - with an i suffix.
 
-      Form               Examples
-      +===================+====================+
-      | Form              | Examples           |
-      +===================+====================+
-      | Decimal integer   | 42, 1_000_000      |
-      +-------------------+--------------------+
-      | Leading-dot float | .5                 |
-      +-------------------+--------------------+
-      | Floating point    | 3.14, 1_000.5, 1.0 |
-      +-------------------+--------------------+
-      | Scientific        | 1e3, 1.5E-3, 1_0e2 |
-      +-------------------+--------------------+
-      | Hexadecimal       | 0xFF, 0Xff         |
-      +-------------------+--------------------+
-      | Octal             | 0o17               |
-      +-------------------+--------------------+
-      | Binary            | 0b1010             |
-      +-------------------+--------------------+
-      | Imaginary part    | 1.5j, 2J           |
-      +-------------------+--------------------+
+      let a = 42
+      let b = 0x2A
+      let c = 3.14
+      let d = 1.5e3
+      let z = 3 + 4i
 
-   Underscores MAY be used as digit separators.  In 1..10 the number
-   scanner does not consume the dots: the result is the range shorthand
-   1..10.
+   A textual literal is a run of characters between double quotes.  It
+   MAY contain the escapes \" \\ \n \t \r \0 and \xHH.  No single
+   character is a literal: a one-character string is a one-element text
+   value.
 
-2.6.2.  String Literals
+   An interpolated string is enclosed in double quotes and embeds
+   expressions between ${ and }; each embedded expression is evaluated
+   in the enclosing scope and is converted to text by the formatting
+   rules of Section 10.4.
 
-   Single-quoted and double-quoted strings are equivalent.
-   Triple-quoted strings ('''...''' and """...""") MAY span lines.  A
-   single-line string that reaches a line break before its closing
-   quote is a lexical error.
-
-   A string literal MAY carry one or more prefix letters, in any
-   combination except those forbidden below:
-
-      Prefix  Meaning
-      +========+====================================================+
-      | Prefix | Meaning                                            |
-      +========+====================================================+
-      | r      | Raw: backslashes are literal.                      |
-      +--------+----------------------------------------------------+
-      | f      | Interpolated: {expr} is evaluated and substituted. |
-      +--------+----------------------------------------------------+
-      | b      | Byte string: the text is encoded as bytes.         |
-      +--------+----------------------------------------------------+
-      | u      | Plain string; no additional effect.                |
-      +--------+----------------------------------------------------+
-
-   Letters MAY be combined (rf, fr, rb).  b and f MUST NOT be combined,
-   and a letter MUST NOT be repeated; either violation is a lexical
-   error.  Prefix letters are case-insensitive.
-
-   In a non-raw literal the following escapes are recognised: "\n",
-   "\t", "\r", "\b", "\f", "\v", "\a", "\\", "\'", "\"", "\xHH",
-   "\uXXXX", "\UXXXXXXXX", "\N{NAME}" and octal "\ooo".  An
-   unrecognised escape MUST be preserved verbatim, that is, both the
-   backslash and the following characters are kept.
-
-   A sequence of letters immediately followed by a quote is interpreted
-   as a prefixed string literal, even if the letters form an
-   identifier; if the prefix is invalid the program is rejected
-   lexically rather than being read as an identifier followed by a
-   string.
-
-2.6.3.  Interpolated Strings
-
-   A string literal carrying the f prefix is an interpolated string.
-   Its contents are scanned for replacement fields; text outside a
-   field is copied to the result after escape processing (Section
-   2.6.2).  A raw interpolated string skips escape processing but still
-   performs field substitution.
-
-   A replacement field consists of an expression with an OPTIONAL
-   format specification, enclosed in braces:
-
-      { expression [: specification] }
-
-   The expression is an ordinary expression evaluated in the enclosing
-   scope; the fields of one string are evaluated from left to right,
-   and each field is replaced by the formatted value of its expression.
-   The expression MUST be any single-line expression of the language
-   that contains no block: calls, member and index access, compound
-   literals and nested interpolated strings are all permitted.  The
-   closing brace of a field is the first unmatched } after its opening
-   brace, so a brace belonging to the expression itself, as in
-   f"{ d['key'] }", does not terminate the field.  An empty expression,
-   an unterminated field, and a } that neither closes a field nor forms
-   }} are format errors (Section 11).  There are no positional fields;
-   every value MUST be written inline.
-
-   The sequence {{ produces one literal brace and }} the other; neither
-   begins nor ends a field, so f"{{x}}" yields "{x}".
-
-   A format specification follows the colon and is composed of the
-   parts below, each OPTIONAL:
-
-      [[fill]align][sign][#][0][width][. precision][type]
-
-      Part        Meaning
-      +===========+====================================================+
-      | Part      | Meaning                                            |
-      +===========+====================================================+
-      | fill      | Any single character; requires an alignment.       |
-      +-----------+----------------------------------------------------+
-      | align     | <, ^ or >: left, centre or right alignment.        |
-      +-----------+----------------------------------------------------+
-      | sign      | + prints a sign for non-negative numbers.          |
-      +-----------+----------------------------------------------------+
-      | #         | Alternate form: 0b, 0o or 0x prefix.               |
-      +-----------+----------------------------------------------------+
-      | 0         | Zero-pads to the width, ignoring fill.             |
-      +-----------+----------------------------------------------------+
-      | width     | Minimum field width, a decimal integer.            |
-      +-----------+----------------------------------------------------+
-      | precision | Digits after the point for floats; maximum number  |
-      +-----------+----------------------------------------------------+
-      | type      | Presentation type, listed below.                   |
-      +-----------+----------------------------------------------------+
-
-   The type is one of:
-
-      b     Binary integer.
-      o     Octal integer.
-      x     Lowercase hexadecimal integer.
-      X     Uppercase hexadecimal integer.
-      e     Exponential form, lowercase exponent mark.
-      E     Exponential form, uppercase exponent mark.
-      ?     Diagnostic form of the value.
-
-   Without a type the value takes its plain textual form, the same form
-   str() produces.  The diagnostic form, requested by ?, is intended
-   for debugging: a string is shown quoted and escaped, and a container
-   is shown with delimiters and its elements in diagnostic form.
-   no alignment is given, numbers are right-aligned and all other
-   values are left-aligned.
-
-   Examples:
-
-      var x = 42
-      f"{x}"        # => "42"
-      f"{x:>6}"     # => "    42"
-      f"{x:06}"     # => "000042"
-      f"{x:+}"      # => "+42"
-      f"{x:b}"      # => "101010"
-      f"{x:#x}"     # => "0x2a"
-      f"{{x}}"      # => "{x}"
-      f"{s:?}"      # => "\"hi\""   (s = "hi")
+      let name = "left"
+      let s = "actuator ${name} = ${speed}"
 
 2.7.  Newline Sensitivity
 
-   Two constructs require an opening bracket to appear on the same
-   logical line as the token it belongs to.
+   A newline ends a statement unless one of the following holds: the
+   line ends inside a brace, bracket or parenthesis group; the line
+   ends with an operator that begins a continuation (., ->, =>, <-, **,
+   //, .., the assignment operators, the comparison operators, +, -, *,
+   /, %, &, |, ^, <<, >>, <<=, >>=); or a backslash line continuation
+   applies (Section 2.3).
 
-   *  A ( begins a call only when it is on the same logical line as the
-      preceding expression.  Otherwise it starts a new statement (a
-      parenthesised expression).
-   *  A [ begins an index only when it is on the same logical line as
-      the preceding expression.  Otherwise it starts a new statement (a
-      list literal).
+2.8.  Optional Type Annotations
 
-   A conforming implementation MUST apply these rules so that "f\n(x)"
-   is two statements and "a\n[1]" is an expression statement followed
-   by a list literal.
+   A name or a parameter MAY carry a type annotation written after it
+   with a colon.  Annotations are optional: a program with no
+   annotations is complete, and an implementation MUST NOT reject a
+   program for the absence of an annotation or for one it cannot
+   verify.  An annotation is advisory only; a conforming implementation
+   MAY check it and report a mismatch as a diagnostic, but it never
+   changes runtime behaviour, and a value is never converted to fit it.
 
-3.  Types and Literals
+      let count: Int = 0
+      var name: Text = "arm"
+      let maybe: Int? = null           # nullable: may be null
+      let items: List<Int> = []
+
+      fn scale(x: Float, by: Int = 2): Float {
+         return x * by
+      }
+
+   A type is a name, optionally parameterised and optionally marked
+   nullable with a trailing ?:
+
+      type = name [ "<" type *( "," type ) ">" ] [ "?" ]
+
+   The built-in names are Int, Float, Text, Bool, Null, List, Tuple,
+   Set, Dict, Range, Future, Channel and Any; an identifier names a
+   user or host type and, if unrecognised, is treated as Any.  List,
+   Dict and Channel carry element types (Channel<Int> is the advisory
+   element type of chan Int, Section 3.6).  An implementation that
+   enforces annotations SHOULD accept a value of the named kind; the
+   language defines no subtyping beyond its built-in kinds.
+
+3.  Types and Values
 
 3.1.  Value Model
 
-   Values are the objects of the language.  The table below names the
-   kinds a program can construct directly; the operators defined on
-   them are specified in Section 4 and the operations available on them
-   in Section 10.  An implementation MAY represent them internally in
-   any way, provided the observable behaviour is unchanged.
+   Values are dynamically typed.  A value belongs to exactly one of the
+   following kinds: null, boolean, integer, float, complex, text,
+   list, tuple, set, dictionary, function, future or channel.  There is
+   no implicit conversion between numeric kinds except where an
+   operator states one; text is never silently coerced to a number and
+   a number is never silently coerced to text.
 
-      Kind          Construction
-      +==============+=================================================+
-      | Kind         | Construction                                    |
-      +==============+=================================================+
-      | Integer      | Numeric literal, arithmetic                     |
-      +--------------+-------------------------------------------------+
-      | Float        | Numeric literal, division                       |
-      +--------------+-------------------------------------------------+
-      | Complex      | Numeric literal with j                          |
-      +--------------+-------------------------------------------------+
-      | Boolean      | true, false, comparisons                        |
-      +--------------+-------------------------------------------------+
-      | Empty        | null                                            |
-      +--------------+-------------------------------------------------+
-      | String       | String literal, concatenation                   |
-      +--------------+-------------------------------------------------+
-      | Bytes        | b prefix, encoding functions                    |
-      +--------------+-------------------------------------------------+
-      | List         | [ ... ]                                         |
-      +--------------+-------------------------------------------------+
-      | Tuple        | ( ... ), (x,)                                   |
-      +--------------+-------------------------------------------------+
-      | Set          | { ... } without colons                          |
-      +--------------+-------------------------------------------------+
-      | Dictionary   | { k: v, ... }                                   |
-      +--------------+-------------------------------------------------+
-      | Range        | Range shorthand, range function                 |
-      +--------------+-------------------------------------------------+
-      | Function     | fn definition, arrow function, native           |
-      +--------------+-------------------------------------------------+
-      | Module       | import                                          |
-      +--------------+-------------------------------------------------+
-      | Opaque value | Any value produced by a native function or by   |
-      +--------------+-------------------------------------------------+
-
-   Assignment binds an object reference.  Mutating a mutable object
-   through one binding is therefore visible through every other binding
-   of the same object.
+   Assignment, argument passing by alias (Section 7.4) and container
+   membership bind a name or a slot to a value; they do not copy it.
+   Mutation of a shared value is visible through every binding to it.
 
 3.2.  List, Tuple, Set
 
-      var xs  = [1, 2, 3]     # common list
-      var t   = (1, 2, 3)     # common tuple
-      var one = (1,)          # trailing comma: one-element tuple
-      var grp = (1 + 2)       # no comma: grouping, value 3
-      var mt  = ()            # empty tuple
-      var s   = {1, 2, 2, 3}  # set: duplicates removed
-
-   In expression position {} is the empty dictionary; the empty set is
-   produced by the set constructor.
+   A list is an ordered, mutable sequence written [a, b, c].  A tuple is
+   an ordered, immutable sequence written (a, b, c); a tuple of one
+   element is written (a,).  A set is an unordered, mutable collection
+   of distinct values written {a, b, c}.  When a set literal would be
+   mistaken for an empty block or an empty dictionary, the empty set is
+   written set().
 
 3.3.  Dictionary
 
-   Keys MAY be of any hashable type.  A key that is a valid identifier
-   MAY be written without quotes and is then a string key.
+   A dictionary is an unordered, mutable mapping written {key: value,
+   ...}.  Keys are compared by value; text and integer keys are
+   distinct.  A member is read with expr[key] and written with
+   expr[key] = value.  The empty dictionary is written {}.
 
-      var d = {"a": 1, 3: "three", (1, 2): "tuple-key"}
-      var o = {name: "octo", age: 3}   # string keys "name" and "age"
+3.4.  Range
 
-   Unquoted keys are reachable with dotted access (o.name); any key is
-   reachable with index access (o["name"], d[3]).
+   A range a..b is a half-open interval from a up to but not including
+   b, stepped by one; a..b:step carries an explicit step.  A range is
+   an immutable value that is consumed by iteration and by slicing.  A
+   trailing .. denotes an open upper bound and is meaningful only as a
+   slice index.
 
-3.4.  Range Shorthand
+3.5.  Future
 
-   The form start..end with an OPTIONAL step (start..end..step)
-   produces a range that excludes its upper bound.  Omitted parts take
-   defaults: start is 0 and step is 1.  The end is REQUIRED; omitting it
-   is an error.
+   A future is a placeholder for a value that is not yet known.  It is
+   created by spawn (Section 6.2) and by every device call (Section
+   9.3).  A future is one of three states: pending, resolved or failed.
 
-      1..5        # 1, 2, 3, 4
-      1..10..2    # 1, 3, 5, 7, 9
-      ..4         # 0, 1, 2, 3
-      ..6..3      # 0, 3
+   *  pending: the work it stands for has not produced a result.
 
-   Parentheses MAY be omitted where no ambiguity arises.  Inside a
-   comprehension's iterable position the shorthand MUST be
-   parenthesised.
+   *  resolved: the work produced a value; await yields that value.
 
-3.5.  Spread
+   *  failed: the work raised a panic; await re-raises it (Section
+      6.8) so the failure propagates to the awaiter.
 
-   Inside a list, set or dictionary literal, "..expr" spreads an object
-   by one level.
+   A future carries no method that reads its value without waiting; the
+   only ways to observe it are await, race, select and cancel.
 
-      var xs = [2, 3]
-      [1, ..xs, 4]              # => [1, 2, 3, 4]
-      {0, ..[1, 2]}             # => {0, 1, 2}
-      {..{a: 1}, b: 2}          # => {a: 1, b: 2}
-      {..{a: 1}, ..{b: 2}}      # => {a: 1, b: 2}
-      {..[1, 2]}                # => {1, 2}
+3.6.  Channel
 
-   Only one level is spread: [..[[1, 2]]] produces [[1, 2]].  A
-   non-iterable operand, or a non-mapping operand in a dictionary
-   context, is an error.  Spread is only valid in an element position
-   of a literal.
+   A channel is a typed conduit for passing values between tasks.  It is
+   created with chan T for an unbuffered channel, or chan T(n) for a
+   channel buffered with room for n values.  The element type T is
+   advisory: an implementation MAY enforce it, but a conforming
+   implementation MAY accept any value and treat T as documentation.
+
+   *  Send: ch <- value appends value to the channel.  On an unbuffered
+      channel the sender suspends until a receiver is ready; on a full
+      buffered channel it suspends until room appears.
+
+   *  Receive: <-ch removes and yields the oldest value, suspending the
+      receiver until a value is present.  Receiving from a closed
+      channel yields null once it is drained and then fails closed.
+
+   *  close(ch) marks a channel closed; further sends fail and further
+      receives drain the buffer then yield null.
+
+   A channel is first-class and may be stored, passed as an argument
+   and selected upon (Section 6.4).
+
+3.7.  Spread
+
+   The prefix ... expands a list, tuple or set into the position where
+   it stands: into a list literal, into a call's positional arguments,
+   or into a binding target for destructuring (Section 8).  Spread MAY
+   appear more than once in one position and MAY be mixed with single
+   values.
+
+      let tail = [3, 4]
+      let all = [1, 2, ...tail]          # [1, 2, 3, 4]
+      fn add(a, b, c, d) { a + b + c + d }
+      add(1, ...all)                     # 1 + 2 + 3 + 4
 
 4.  Operators and Precedence
 
-4.1.  Operator Table
+   Operators associate as listed.  Higher precedence binds tighter.
 
-      Category              Operators              Notes
-      +====================+=====================+=====================+
-      | Category           | Operators           | Notes               |
-      +====================+=====================+=====================+
-      | Assignment         | =                   | Variable, destruct, |
-      +--------------------+---------------------+---------------------+
-      | Compound assign    | += -= *= /= &= |=   | Rebinding, not      |
-      +--------------------+---------------------+---------------------+
-      | Walrus             | :=                  | Assign and yield;   |
-      +--------------------+---------------------+---------------------+
-      | Ternary            | ? :                 | Right-associative   |
-      +--------------------+---------------------+---------------------+
-      | Ternary (keyword)  | if else             | Position-restricted |
-      +--------------------+---------------------+---------------------+
-      | Range              | ..                  | Shorthand           |
-      +--------------------+---------------------+---------------------+
-      | Spread             | ..                  | Prefix; literals    |
-      +--------------------+---------------------+---------------------+
-      | Logical or         | or, ||              | Short-circuit;      |
-      +--------------------+---------------------+---------------------+
-      | Logical and        | and, &&             | Short-circuit;      |
-      +--------------------+---------------------+---------------------+
-      | Logical not        | not, !              | Unary               |
-      +--------------------+---------------------+---------------------+
-      | Comparison         | == != < > <= >=     | Chainable           |
-      +--------------------+---------------------+---------------------+
-      | Membership         | in, not in          | Chainable with      |
-      +--------------------+---------------------+---------------------+
-      | Bitwise or         | |                   |                     |
-      +--------------------+---------------------+---------------------+
-      | Bitwise xor        | ^                   |                     |
-      +--------------------+---------------------+---------------------+
-      | Bitwise and        | &                   |                     |
-      +--------------------+---------------------+---------------------+
-      | Shift              | << >>               |                     |
-      +--------------------+---------------------+---------------------+
-      | Additive           | + -                 |                     |
-      +--------------------+---------------------+---------------------+
-      | Multiplicative     | * / % //            |                     |
-      +--------------------+---------------------+---------------------+
-      | Unary              | + - ~               |                     |
-      +--------------------+---------------------+---------------------+
-      | Power              | **                  | Right-associative,  |
-      +--------------------+---------------------+---------------------+
-      | Postfix            | . [] () ?. ?.[ ?.(  |                     |
-      +--------------------+---------------------+---------------------+
-      | Arrow function     | =>                  | Atom level          |
-      +--------------------+---------------------+---------------------+
-      | Keyword argument   | name = value        | In call argument    |
-      +--------------------+---------------------+---------------------+
-      | Parameter sink     | ..name              | Last parameter only |
-      +--------------------+---------------------+---------------------+
+      +----------+--------------------------------+--------------------+
+      |Precedence| Operators                      | Associativity      |
+      +----------+--------------------------------+--------------------+
+      |1 (highest| !  ~  - (unary)  await  spawn  | right             |
+      |          | <- (receive)                   |                    |
+      +----------+--------------------------------+--------------------+
+      |2         | **                             | right             |
+      +----------+--------------------------------+--------------------+
+      |3         | *  /  //  %  &  <<  >>         | left              |
+      +----------+--------------------------------+--------------------+
+      |4         | +  -  |  ^                     | left              |
+      +----------+--------------------------------+--------------------+
+      |5         | ..  ..:                       | left              |
+      +----------+--------------------------------+--------------------+
+      |6         | ==  !=  <  >  <=  >=  in  as   | left (chained)    |
+      +----------+--------------------------------+--------------------+
+      |7         | not                            | right             |
+      +----------+--------------------------------+--------------------+
+      |8         | and                            | left              |
+      +----------+--------------------------------+--------------------+
+      |9         | or                             | left              |
+      +----------+--------------------------------+--------------------+
+      |10        | ?  :  (ternary)                | right             |
+      +----------+--------------------------------+--------------------+
+      |10.5      | within (timeout)               | left              |
+      +----------+--------------------------------+--------------------+
+      |11        | =  +=  -=  *=  /=  &=  |=  ^=  | right (chained)   |
+      |          |   <<=  >>=  :=                 |                    |
+      +----------+--------------------------------+--------------------+
+      |12 (lowest| <- (send)                      | left              |
+      +----------+--------------------------------+--------------------+
 
-4.2.  Precedence
+                         Table 1: Precedence
 
-   Precedence, from lowest to highest, is:
-
-   1.  assignment (including member and index assignment)
-   2.  walrus
-   3.  ternary
-   4.  range
-   5.  logical or
-   6.  logical and
-   7.  logical not
-   8.  comparison and membership
-   9.  bitwise or
-   10. bitwise xor
-   11. bitwise and
-   12. shift
-   13. additive
-   14. multiplicative
-   15. unary minus and bitwise complement
-   16. power
-   17. postfix (member, index, call, OPTIONAL chain)
-   18. atoms
-
-   Consequences that MUST hold: 2 ** 3 ** 2 is 512; -2 ** 2 is -4;
-   2 << 3 + 1 is 32; 1 | 2 & 3 is 3; not a == b is not (a == b);
-   x := a if c else b is x := (a if c else b).
-
-4.3.  Evaluation Details
-
-   *  Arithmetic is defined on the value kinds: "+" concatenates strings
-      and lists, and "*" repeats a string or a list by an integer.
-   *  "/" by zero on numbers yields infinity instead of failing; "//"
-      and "%" by zero fail.
-   *  "//" rounds towards negative infinity: "7 // 2" is 3 and
-      "-7 // 2" is -4.
-   *  Compound assignment rebinds: "A op= B" is equivalent to
-      "A = A op B".  For sets, "|=" therefore produces a new set rather
-      than modifying in place.
-   *  Logical operators short-circuit and yield one of their operands,
-      not a boolean.
-   *  Complements satisfy "~x == -x - 1".  Shift counts MUST be
-      non-negative.
-   *  "null" participates in arithmetic and ordering only by failing;
-      "==" and "!=" accept it.
-   *  A user-defined name takes precedence over a standard library
-      function of the same name.
-
-4.4.  Chained Comparison
-
-   Comparisons chain: "a op1 b op2 c" means "a op1 b and b op2 c".  Each
-   operand is evaluated exactly once, the chain short-circuits on the
-   first false comparison and yields that result, and a fully true chain
-   yields the last comparison's result.  Membership tests participate in
-   chains.
-
-      1 < 2 < 3         # => true
-      1 < 2 < 0         # => false
-      1 < 2 in [2, 3]   # => true
-
-4.5.  Membership
-
-   "x in xs" uses the containment semantics of the container: elements
-   for lists, tuples, sets and ranges; keys for dictionaries; substrings
-   for strings.  "not in" negates it.  A non-iterable right operand is a
-   type error.  The left operand is a full expression, so "flags & 1 in
-   [1]" tests the masked value.
+   Chained comparison (a < b < c) and chained assignment (a = b = c)
+   are evaluated left to right with the natural meaning.  Member access,
+   indexing and calling (Section 5.1) bind tighter than precedence 1.
 
 5.  Expressions
 
 5.1.  Member Access, Indexing, Calling
 
-      mod.f(16)      # member function
-      xs.append(4)   # mutating method
-      d.get("x", 0)  # dictionary method
-      o.name         # dotted key access on a dictionary (equivalent to
-                     o["name"])
-      o.pos.x        # chained
+   expr.name reads a member.  expr[index] indexes a list, tuple, text
+   or dictionary; negative indices count from the end.  expr(args) calls
+   a function or invokes a native procedure.  The three may be chained:
+   device.status().state.
 
-   For a dictionary receiver, ".name" without a call yields the value of
-   key "name" if it exists; otherwise it falls back to attribute access.
-   With a call, a member that resolves to a language function is invoked
-   with the receiver bound to "this" (Section 5.8).
-
-   Member assignment "obj.name = v" writes key "name" when the receiver
-   is a dictionary and sets an attribute otherwise; compound member and
-   index assignment are equivalent forms of rebinding.
+   A call argument is bound by position (a value) or by name (name:
+   value).  A position and a name MAY appear in one call; positions
+   count from zero among themselves, exactly as [RFC0004], Section 5.3
+   binds CALL arguments, because a device call is encoded as a CALL.
 
 5.2.  Optional Chaining
 
-   Optional chaining short-circuits to "null" when the value being
-   navigated is "null" or when the member or index cannot be resolved;
-   the remainder of the chain is then skipped.
+   expr?.name, expr?[index] and expr?(args) evaluate the chain only
+   when the left operand is not null; otherwise the whole chain is null
+   and no further step is taken.  Optional chaining short-circuits.
 
-      Form       Result
-      +===========+====================================================+
-      | Form      | Result                                             |
-      +===========+====================================================+
-      | a?.b      | null if a is null or has no member b; else the     |
-      +-----------+----------------------------------------------------+
-      | a?.[i]    | null if a is null or the index is not present;     |
-      +-----------+----------------------------------------------------+
-      | a?.(args) | null if a is null; else the call result            |
-      +-----------+----------------------------------------------------+
+5.3.  Ternary Operator
 
-      var resp = {data: {value: 42}}
-      resp?.data?.value        # => 42
-      resp?.missing?.value     # => null
-      null?.a.b                # => null
-      arr?.xs?.[9]             # => null
-
-   Non-OPTIONAL navigation MUST fail on a missing key or an out-of-range
-   index; tolerance MUST be written explicitly.
-
-5.3.  Ternary Operators
-
-   Two spellings exist, both lazily evaluating only the selected branch.
-
-      var a = n > 0 ? "pos" : "neg"       # punctuated form
-      var b = "pos" if n > 0 else "neg"   # keyword form
-
-   The punctuated form is right-associative and is valid in any
-   expression position.  The keyword form is valid only where it cannot
-   be confused with an "if" statement; the permitted positions are:
-
-      Position                                       Punctuated  Keyword
-      +=====================================+============+=========+
-      | Position                            | Punctuated | Keyword |
-      +=====================================+============+=========+
-      | Right-hand side of a declaration or | yes        | yes     |
-      +-------------------------------------+------------+---------+
-      | assignment                          |            |         |
-      +-------------------------------------+------------+---------+
-      | return operand                      | yes        | yes     |
-      +-------------------------------------+------------+---------+
-      | Condition of if / while             | yes        | yes     |
-      +-------------------------------------+------------+---------+
-      | Argument of a method call           | yes        | yes     |
-      +-------------------------------------+------------+---------+
-      | Argument of a plain call            | yes        | yes     |
-      +-------------------------------------+------------+---------+
-      | Inside a punctuated-form branch     | yes        | yes     |
-      +-------------------------------------+------------+---------+
-      | Bare statement                      | yes        | no      |
-      +-------------------------------------+------------+---------+
-      | Inside parentheses                  | yes        | no      |
-      +-------------------------------------+------------+---------+
-      | Index expression a[...]             | yes        | no      |
-      +-------------------------------------+------------+---------+
-      | List, set and dictionary elements   | yes        | no      |
-      +-------------------------------------+------------+---------+
-      | Comprehension element or filter     | yes        | no      |
-      +-------------------------------------+------------+---------+
+   cond ? a : b evaluates cond; if true it evaluates and yields a,
+   otherwise b.  Only one branch is evaluated.
 
 5.4.  Comprehensions
 
-   List, set and dictionary comprehensions use the following forms, with
-   multiple "for" clauses and "if" filters.
+   A comprehension builds a list, set or dictionary by iterating:
 
-      [x * x for x in range(4)]                 # => [0, 1, 4, 9]
-      [x for x in range(10) if x % 2 == 0]      # => [0, 2, 4, 6, 8]
-      {x for x in [1, 1, 2, 3]}                 # => {1, 2, 3}
-      {k: k * k for k in range(3)}              # => {0: 0, 1: 1, 2: 4}
-      [(x, y) for x in [1, 2] for y in [3, 4]]  # multiple clauses
-      [a + b for (a, b) in [[1, 2], (3, 4)]]    # destructuring target
+      [f(x) for x in items if p(x)]
+      {f(x) for x in items if p(x)}
+      {k(x): v(x) for x in items if p(x)}
 
-   In a comprehension, "if" is a filter and the iterable position and
-   the element position accept an expression that does not extend into a
-   ternary; a ternary needs parentheses there.  The "for" target MAY
-   destructure.
+   The for clause introduces the iteration variable; one or more if
+   clauses filter.  At most one for clause is permitted; nesting is
+   expressed by iterating over a nested structure.
 
 5.5.  Arrow Functions
 
-      var inc = x => x + 1
-      var add = (a, b) => a + b
-      var zero = () => 42
-      var g = (x) => {
-          var y = x + 1
-          y * 2
-      }
+   An arrow function |args| body is an anonymous function.  With one
+   parameter the bars MAY be omitted: |x| x * 2 or x => x * 2.  The
+   body is an expression; arrow functions close over their lexical
+   scope (Section 7.2).
 
-   Arrow functions are first-class values, accept default values and a
-   parameter sink exactly like named functions, capture their defining
-   lexical scope, and MAY be called immediately: "((x) => x * 2)(21)"
-   yields 42.  "this" is bound at the call site for arrow functions as
-   well (Section 7.4).
+      let sq = |x| x * x
+      let apply = |f, xs| [f(x) for x in xs]
 
 5.6.  Walrus Operator
 
-   "name := expr" performs an assignment and yields the assigned value,
-   so it MAY appear inside expressions.
+   (name := expr) evaluates expr, binds it to name in the current scope
+   and yields the value.  It is permitted anywhere an expression is
+   permitted, including inside a comprehension filter.
 
-      if (n := len(xs)) > 2 { print("length", n) }
-      while (v := next_value()) != null { use(v) }
-      a := b := 9          # right-associative: both bind to 9
+5.7.  Scope Views: globals and locals
 
-   The left-hand side MUST be a single variable name.  Precedence places
-   the walrus below the ternary and above assignment.  Scoping follows
-   ordinary assignment: an undeclared name is created in the current
-   scope, a declared name is updated, and updating a constant fails.
-   The right-hand side is evaluated once.
+   The identifier globals refers to the top-level scope and locals to
+   the immediately enclosing function scope.  Reading globals.name or
+   locals.name inspects a binding; assignment to them is not permitted
+   through the view.  They exist so a debugger or a host hook (Section
+   9.1) can inspect state without a special API.
 
-5.7. this
-
-   "this" denotes the current receiver.  It is bound to the receiver
-   when a language function is called as a member ("obj.m(...)"); it is
-   "null" in an ordinary call; and at top level, outside any function
-   call, it denotes the root scope view.
-
-      fn inc() { this.n = this.n + 1; this.n }
-      var counter = {n: 0, inc: inc}
-      counter.inc()      # => 1 (this is counter)
-      counter.inc()      # => 2
-
-   "this" MUST NOT be assigned.  Arrow functions do not create their own
-   receiver: the binding is decided per call, not per definition.
-
-5.8.  Scope Views: globals and locals
-
-   Two reserved members of "this", each with a keyword synonym, expose
-   the binding dictionaries of the current scope:
-
-      Form          Synonym  Meaning
-      +==============+=========+=======================================+
-      | Form         | Synonym | Meaning                               |
-      +==============+=========+=======================================+
-      | this.globals | globals | The root scope's live binding         |
-      +--------------+---------+---------------------------------------+
-      | this.locals  | locals  | The innermost scope's live binding    |
-      +--------------+---------+---------------------------------------+
-
-      var g = 1
-      locals                    # => {} at top level
-      globals.g                 # => 1
-      this.g                    # => 1 at top level (this is the root
-                                view)
-          fn f(p) {
-          let loc = 2
-          var v = 3             # var always writes to the root scope
-          [locals, globals.v]   # => [{'p': ..., 'loc': 2}, 3]
-      }
-
-   The dictionaries are live: reading yields the current binding and
-   writing an entry ("globals[\"k\"] = v") creates or updates it.
-   Replacing the view itself ("globals = x") is a syntax error.  The two
-   names take precedence over same-named keys of the receiver; the
-   receiver's key is reachable as "this[\"globals\"]".
-
-6.  Statements and Control Flow
+6.  Statements, Control Flow and Concurrency
 
 6.1.  Separation and Blocks
 
    A statement is terminated by a newline or by one semicolon.  An empty
-   statement is a syntax error.  A block is "{ ... }" and introduces a
-   scope.  At statement position, "{" always begins a block, even though
-   "{" at expression position begins a literal.
+   statement is a syntax error.  A block is a sequence of statements
+   enclosed in braces; it introduces a new lexical scope nested in the
+   scope that encloses it.  At statement position "{" always begins a
+   block, even though "{" at expression position begins a literal.
 
    Parentheses around a statement header MAY be omitted without changing
-   meaning, with one exception: the C-style "for" header REQUIRES
-   parentheses.
+   meaning, with one exception: the C-style "for" header (Section 6.1.5)
+   REQUIRES parentheses.
 
-6.2. if / elif / else
+   The compound statements if, elif, else, for, while, loop, do, try,
+   except, finally, match, race, select and on open a block; so do fn
+   and the arrow body when it is a block.
+
+   Control flow leaves the current function with return or panic, or at
+   top level ends the program.  Any loop head -- while, loop, do-while
+   and both forms of for -- MAY carry an until clause (Section 6.9)
+   that gates loop exit on an event.
+
+6.1.1.  if / elif / else
 
       if x > 0 {
-          print("pos")
+         log("pos")
       } elif x < 0 {
-          print("neg")
+         log("neg")
       } else {
-          print("zero")
+         log("zero")
       }
 
-6.3. while
+   Exactly one branch runs: the first whose condition is true, or the
+   else branch when no condition holds.  elif and else are optional; an
+   if with no else that matches nothing simply does nothing.  The
+   condition is any expression; a non-boolean condition is true when it
+   is not null and not the number 0.
+
+6.1.2.  while
 
       while n > 0 { n -= 1 }
       while (n > 0) { n -= 1 }
 
-6.4. loop
+   The condition is evaluated before each iteration; the body runs
+   while it is true.  A while whose condition is false on entry runs
+   zero times.  The loop exits with break, return or a failure, or by
+   an until clause (Section 6.9).
 
-   "loop { ... }" repeats unconditionally and exits only through
-   "break", a "return" or a failure.  It takes no condition.
+6.1.3.  loop
 
-6.5. do...while
+   "loop { ... }" repeats unconditionally and exits only through break,
+   return or a failure.  It takes no condition and runs at least once.
+
+      loop {
+         if done() { break }
+         step()
+      }
+
+6.1.4.  do...while
 
       do { n -= 1 } while (n > 0)
 
-   The body executes at least once.  "continue" jumps to the condition;
-   "break" leaves the loop.
+   The body executes at least once, then the condition is tested; the
+   loop repeats while it is true.  continue jumps to the condition;
+   break leaves the loop.  A do-while MAY carry an until clause, which
+   is written after the condition:
 
-6.6. for over an Iterable
+      do { sample() } while running() until "stop" { break }
 
-      for i in [1, 2, 3] { print(i) }
-      for i in 1..5 { print(i) }
-      for k, v in table.items() { print(k, v) }
-      for (k, v) in pairs { print(k) }
-      for k, (a, b) in nested { print(a, b) }
-      for (i in range(3)) { print(i) }
+6.1.5.  for: Iterable and C-Style
 
-   The target MAY destructure, with or without parentheses; a
-   single-variable target MAY be wrapped in a redundant pair of
-   parentheses.  The target's bindings are local to the loop.
+   Iterable form.  "for t in coll { ... }" binds t to each element of
+   coll in turn; coll MAY be a list, tuple, set, dictionary, range or
+   any iterable.  For a dictionary the loop variable is the key, or a
+   k, v pair may be bound:
 
-6.7. for in C Style
+      for i in [1, 2, 3] { log(i) }
+      for k, v in table.items() { log(k, v) }
+      for (k, v) in pairs { log(a, b) }
 
-      for (let i = 0; i < n; i += 1) { print(i) }
-      for (;;) { if done { break } }
+   The target MAY destructure, with or without parentheses; a single
+   variable MAY be wrapped in a redundant pair of parentheses.  The
+   target's bindings are local to the loop.
 
-   All three clauses MAY be omitted; the parentheses are mandatory.  The
-   initialiser MAY be a declaration or an assignment.  "let" is
-   RECOMMENDED: "var" writes to the root scope, where a repeated
-   declaration in the same scope is an error.  "continue" still executes
-   the update clause.
+   C-style form.  "for (init; cond; update) { ... }" mirrors C; the
+   parentheses are mandatory and all three clauses MAY be omitted
+   (for (;;) { } is an infinite loop):
 
-6.8. break, continue, pass
+      for (let i = 0; i < n; i += 1) { log(i) }
+      for (;;) { if done() { break } }
 
-   "break" leaves the innermost loop, "continue" starts its next
-   iteration, and "pass" is a no-op placeholder statement.
+   The initialiser MAY be a declaration or an assignment; "let" is
+   RECOMMENDED because "var" writes to the root scope, where a repeated
+   declaration in the same scope is an error.  continue still executes
+   the update clause before the next iteration; break leaves the loop.
+   Both forms MAY carry an until clause (Section 6.9).
 
-6.9. return
+6.1.6.  break, continue and pass
+
+   "break" leaves the innermost enclosing loop (or, inside a match, the
+   match), "continue" starts its next iteration, and "pass" is a no-op
+   placeholder statement that does nothing.  In a loop with an until
+   clause, break and continue also apply inside the until body with the
+   meaning given in Section 6.9.
+
+6.1.7.  return
 
    "return" with a value returns it; "return" without a value yields
-   "null".  A return propagates out of any nesting of blocks, loops and
-   "try" statements (an "except" clause does not intercept it, while a
-   "finally" clause still runs).  If a function body finishes without an
-   explicit return, the value of its last statement is returned.
+   null.  A return propagates out of any nesting of blocks, loops and
+   try statements -- an except clause does not intercept it, while a
+   finally clause still runs.  If a function body finishes without an
+   explicit return, the value of its last statement is returned; if it
+   finishes with no value, the function returns null.  An uncaught
+   return at the top level of a program terminates the program.
 
-   An uncaught "return" at the top level of a program terminates the
-   program.
-
-6.10.  Failure Statement: panic
-
-   "panic" has the same shape as "return": "panic" or "panic expr".  It
-   raises a runtime failure whose message is "panic" or the string form
-   of the value.  The value MAY be of any type, so structured
-   information can be attached.  The failure is catchable by "except"
-   and propagates through any nesting.
-
-      fn sqrt_pos(x) {
-          if x < 0 { panic "sqrt of negative: " + str(x) }
-          x ** 0.5
-      }
-      try { sqrt_pos(-1) } except (e) { print(e) } finally {
-          print("cleanup") }
-
-6.11. match / case
+6.1.8.  match / case
 
       match (status) {
       case 0 { "idle" }
@@ -898,32 +631,615 @@ Table of Contents
       case _ { "unknown" }
       }
 
-   Patterns are: literals (numbers, strings, booleans, "null"),
-   sequences "[p1, p2]" (lists and tuples), a capture name, and the
-   wildcard "_" which binds nothing.  A case MAY carry a guard: "case
-   PATTERN if guard { }".  A case's body is a block written without a
-   colon; a colon is a syntax error.  Capture names are local to the
-   case and do not shadow outer bindings.  The value of a match is the
-   selected case's value, or "null" if no case matches.  At least one
-   case is REQUIRED.
+   The value of a match is the selected case's value, or null if no
+   case matches.  At least one case is REQUIRED.  Patterns are:
 
-6.12. try / except / finally
+   *  a literal: a number, text, boolean or null, matched by value;
 
-      try {
-          risky()
-      } except (e) {
-          print("error:", e)
-      } finally {
-          cleanup()
+   *  a sequence [p1, p2]: matched against a list or tuple of the same
+      length, binding the elements;
+
+   *  a capture name: bound to the whole value; and
+
+   *  the wildcard _: matches anything and binds nothing.
+
+   A case MAY carry a guard: "case PATTERN if guard { }"; the case is
+   taken only when the pattern matches and the guard is true.  A case
+   body is a block written without a colon; a colon is a syntax error.
+   Capture names are local to the case and do not shadow outer
+   bindings.
+
+6.2.  Tasks, spawn and await
+
+   A task is a unit of concurrent execution.  The program itself runs
+   as one task.  New tasks are started with spawn:
+
+      let f = spawn expensive_computation(a, b)
+
+   spawn evaluates its operand in a new task and returns a future
+   (Section 3.5) immediately; the caller's task is not suspended.  The
+   future resolves with the task's result or fails with its panic.
+
+   await suspends the current task until a future resolves, then yields
+   its value or re-raises its panic:
+
+      let result = await f
+      let temp = await sense("temp")      # a device call is a future
+
+   await may appear in any task, including the top-level one.  A task
+   that awaits several futures does so one at a time; to await them
+   together, spawn each and race or select over the futures.
+
+   within bounds an await.  await f within d suspends until f resolves
+   or until d seconds pass, whichever is first; if the timeout wins the
+   await yields null and f is cancelled.  Without await, expr within d
+   is sugar for race { expr; sleep d }: it races the value-producing
+   expression against a timeout and yields the expression's value, or
+   null if the timeout wins.
+
+   A task that finishes is joined automatically; its result is held by
+   its future for as long as the future is reachable.  A top-level
+   program does not end until every task it started, directly or
+   transitively, has resolved, failed or been cancelled.
+
+6.3.  race: Racing Outcomes
+
+   race runs several branches concurrently and keeps the value of the
+   first branch that resolves; every other branch is cancelled.
+
+      let winner = race {
+         sense("left")
+         sense("right")
+         status()
       }
 
-   The exception binding MAY be written with or without parentheses, or
-   omitted entirely.  At least one "except" or "finally" clause is
-   REQUIRED.  The binding is scoped to its clause.  Several "except"
-   clauses MAY be written; only the first is used.  The "finally" clause
-   always runs.
+   The block contains one or more expressions or statements; each is
+   started as a task.  race returns the value of the first branch that
+   resolves.  Branches that are still pending when a winner resolves are
+   cancelled (Section 6.7).  If every branch fails, race re-raises the
+   panic of the first branch to fail, in textual order.  A branch that
+   is a statement with no value resolves with null.
 
-6.13. import
+   race is the construct for the common robotic question "which of
+   these reaches a result first": the faster sensor, the first
+   actuator to confirm, or a status reply before a timeout.
+
+6.4.  select: Waiting on Events, Channels and Time
+
+   select waits for the first of several independent outcomes and runs
+   the arm that won.  Each arm is one of:
+
+      on <topic>:     wait for the next EVENT on the topic
+      case <-ch:      wait to receive one value from channel ch
+      case ch <- v:   wait until ch can accept a send of v
+      after <dur>:    wait for dur seconds (a timeout arm)
+      default:        run immediately if no other arm is ready
+
+   The arms are written as a block; each arm is a label followed by a
+   block:
+
+      select {
+         on "device.fault" {
+            fault = it
+            stop_all()
+         }
+         case cmd := <-cmd_chan {
+            handle(cmd)
+         }
+         after 2.0 {
+            retry()
+         }
+      }
+
+   An arm whose guard is ready runs its block; the select then
+   completes and yields the value the block produced, or null.  If more
+   than one arm is ready at the same instant, exactly one is chosen;
+   the choice among ready arms is implementation-defined, except that
+   default is chosen only when no other arm is ready.  A select with no
+   ready arm and no default suspends the current task until one arm
+   becomes ready.  After the chosen arm's block has run, the other arms
+   are abandoned; pending sends or receives in them are not completed.
+
+   on in a select is a one-shot wait for a single event; the persistent
+   subscription form is on (Section 6.5).  The event data is bound to
+   the implicit name it, or to an explicit |name| parameter after the
+   topic; the binding MAY be omitted when the data is unused.
+
+6.5.  on: Persistent Event Subscriptions
+
+   on subscribes to a topic for the life of the program or until the
+   subscription is cancelled, and runs a handler task for every event
+   that arrives:
+
+      let sub = on "device.fault" { |ev|
+         latch_fault(ev.name)
+      }
+
+   Each arriving EVENT for a matching topic starts a new task running
+   the handler; handler tasks run concurrently with the main flow and
+   with one another.  The handler names the event data with |ev| or uses
+   the implicit binding it; if the handler panics, the panic is reported
+   on the
+   runtime topic core.error [RFC0004], Section 9.2.1, and the
+   subscription survives.  on returns a subscription handle, and
+   sub.cancel() sends UNSUBSCRIBE [RFC0004], Section 5.7 and stops
+   further handlers.
+
+   The topic MAY contain the wildcards + and # exactly as [RFC0004],
+   Section 6.5.2 defines: "device.+" matches one level, "device.#"
+   matches every level beneath device.
+
+6.6.  Timing: sleep and wait
+
+   sleep dur suspends the current task for dur seconds, then yields
+   null.  dur is a number; fractional seconds are permitted.  sleep
+   never spins: the task is removed from the run queue for the
+   duration.
+
+      sleep 0.5          # pause half a second
+
+   wait topic suspends the current task until the next EVENT on topic
+   arrives and yields its data; it is sugar for a one-arm select:
+
+      let ev = wait "device.status"
+      let fault = wait "device.fault"
+
+   wait topic is a one-shot subscriber: it does not outlive the call and
+   does not require an explicit unsubscribe.  A wildcard topic is
+   accepted and matches the first concrete event it receives.
+
+6.7.  Cancellation
+
+   cancel(future) requests cancellation of the task behind a future or
+   of a subscription handle.  Cancellation is cooperative: a task
+   observes it at the next await, sleep, select or device call and then
+   stops; work already dispatched to a device is not recalled, because
+   [RFC0004], Section 6.4.4 defines no RPC cancellation, so a CALL that
+   has left the host is allowed to run to its RESULT, which is then
+   discarded.  A cancelled task settles its future as failed with the
+   kind Cancel.
+
+   race (Section 6.3) cancels the losers, and select (Section 6.4)
+   abandons the arms it did not choose; both use the same cooperative
+   mechanism.  A handler started by on is cancelled when its
+   subscription is cancelled.
+
+   A task that ignores cancellation -- one that never awaits, sleeps,
+   selects or calls a device -- cannot be stopped by the host; a
+   program SHOULD not write such a task on a long-running path.
+
+6.8.  Failure: panic, try and except
+
+   panic kind raises a failure carrying a kind, which is a text value
+   naming the class of error; an optional second argument carries a
+   human-readable message.
+
+      panic "HardwareError" "motor stalled"
+
+   try { body } except Kind as e { handler } finally { cleanup }
+   catches a panic whose kind equals Kind; the optional as e binds the
+   panic object, whose members are kind and message.  A bare except
+   catches any kind.  finally runs whether the body panicked or not.  A
+   panic not caught by any try propagates to the nearest enclosing task
+   and fails its future; an uncaught panic in the top-level task ends
+   the program and is reported on core.error.
+
+   The kinds a program MUST be prepared to catch are the OCP error-code
+   names of Section 9.5 and the built-in kinds Timeout and Cancel.
+
+6.9.  until: Event-Gated Loop Exit
+
+   The until clause applies to every loop head uniformly -- while,
+   loop, do-while and both forms of for.  It lets a loop be gated on an
+   an event captured in the loop's own cycle, instead of, or in addition
+   to its condition:
+
+      while cond until "event.foo" as bar { ... }
+      loop until "event.foo" { ... }
+      for x in coll until "event.foo" { ... }
+      for (init; cond; update) until "event.foo" { ... }
+      do { body } while cond until "event.foo" as bar { ... }
+
+   For a do-while loop the until clause is written after the condition,
+   because the body, during which events are captured, has already run
+   once before the until clause is reached.
+
+   until does NOT wait.  During each loop cycle -- the running of the
+   body, and for a counted loop the update and condition test -- every
+   event published on the named topic or topics is captured into that
+   cycle's buffer.  When the cycle ends, the until clause inspects the
+   buffer:
+
+   *  no matching event in the cycle: the until body is skipped and the
+      loop proceeds straight to its next iteration (or, for while/for,
+      to the next condition test);
+
+   *  one or more matching events in the cycle: the until body runs
+      once, with the first-captured event bound (as below).  If
+      several events matched, the earliest one -- the first captured --
+      is the one used; later ones in the same cycle are ignored by
+      until.
+
+   What the until body does then decides the loop's fate:
+
+   *  (fall-through) if the until body finishes without a break or a
+      continue, it is as if a break were inserted at its end: the loop
+      exits.  To exit directly when an event occurred, with no action,
+      write an empty until body: } until "event.foo" { };
+
+   *  continue: control returns to the loop to run its next iteration,
+      which opens a fresh cycle buffer;
+
+   *  break: the loop exits immediately, as it would from the loop
+      body.
+
+   The topic is a string, an array of strings, or a single string using
+   OCP topic wildcards.  Each element of an array may be a strict topic
+   or a wildcard, and the two MAY be mixed freely.  A wildcard (for
+   example + and #, per the OCP spec) lets a whole family of topics
+   match; several topics or wildcards may fire, and on multiple matches
+   within one cycle the first-captured event is the one bound, as above.
+   Examples:
+
+      loop until ["motor.a", "motor.+"] as e { ... } # strict + wildcard
+      loop until "sensor.+.temp"       as e { ... }  # OCP wildcard
+
+   The optional as bar binds the first-captured event's payload to bar
+   for the duration of the until body; the body may read bar's members.
+   When as bar is omitted the payload is bound to the implicit name it,
+   as in on and wait.  The binding is local to the until body.
+
+   An until clause never changes the loop's own condition; the loop may
+   also exit through that condition, return, break or a failure.  The
+   capture behind an until clause is part of the loop task and is
+   therefore cancelled with it (Section 6.7); a panic inside the until
+   body propagates to the loop's task.
+
+7.  Functions, Scope and Arguments
+
+7.1.  Definition and Call
+
+   A function is defined with fn name(params) { body } or as an arrow
+   (Section 5.5).  Parameters are names; a parameter MAY carry a
+   default.  A call binds arguments by position or by name (Section
+   5.1).  A function returns the value of its last expression or of an
+   explicit return; a function that falls off the end returns null.
+
+7.2.  Closures
+
+   A function closes over the lexical bindings visible where it is
+   defined.  A mutation of a closed binding is visible to every closure
+   that shares it.  A closure is a first-class value and may be stored,
+   passed and spawned.
+
+7.3.  Scope and Declaration
+
+   Scopes nest: a block opens a child scope; a name is resolved in the
+   nearest enclosing scope that declares it.  let and const declare a
+   binding in the current scope; const forbids reassignment and is a
+   runtime error to assign to.  var declares a binding in the
+   top-level scope from anywhere (a global), matching the globals view
+   of Section 5.7.  A name used before it is declared in its scope is a
+   runtime error, not a silent null.
+
+7.4.  Argument Passing by Alias
+
+   Arguments are passed by alias: the parameter names the same value
+   the caller passed, so a mutation the function makes is visible to the
+   caller.  Reassigning the parameter to a new value does not change the
+   caller's binding; to return a changed container the function returns
+   it.
+
+7.5.  Defaults, Named Arguments and the Parameter Sink
+
+   A parameter name = expr gives a default, evaluated at call time in
+   the function's scope.  A call MAY bind a parameter by name.  The
+   sink parameter ...rest collects the positional arguments not bound
+   by a named parameter into a list, and **kw collects the named
+   arguments not bound by a parameter into a dictionary.
+
+      fn log(level = "info", ...rest) { ... }
+
+8.  Destructuring Assignment
+
+   A binding target may be a pattern that takes apart a value:
+
+      let (x, y) = point            # tuple or list of two
+      let [a, b, ...rest] = items   # list, with a tail
+      let {name, unit} = sensor     # dictionary by key
+
+   Destructuring works in let, const, var, the for variable, the
+   parameter list and the walrus operator.  A failed match -- too few
+   elements, a missing key -- panics with the kind BadMatch.  A key
+   absent from the source dictionary may be given a default with name =
+   expr in the pattern.
+
+9.  Host Interface, OCP Binding and Hardware
+
+   A host embeds the language and supplies the machine-facing
+   operations by speaking [RFC0004].  This section is the contract
+   between a program and the host.  Every procedure a program invokes on
+   a device becomes a CALL [RFC0004], Section 5.3; every value a
+   device returns becomes a RESULT [RFC0004], Section 5.4; every
+   notification becomes an EVENT [RFC0004], Section 5.5.
+
+9.1.  Native Functions
+
+   The host provides the built-in procedures of Section 9.3 and 9.4 and
+   the session operations of Section 9.2.  A host MAY expose further
+   native functions under names it chooses, but it MUST NOT shadow the
+   keywords of Section 2.4 or the built-ins of this section.  A host
+   hook is any native function the host registers; the language places
+   no requirement on its body beyond that it returns a future when it
+   performs I/O.
+
+9.2.  Sessions and connect()
+
+   A session is an open [RFC0004] connection.  The host opens one
+   default session at start; connect() opens another and returns a
+   session object.  The session object carries the peer's agreed
+   capabilities (rpc, pubsub, blobtun) [RFC0004], Section 8 and the
+   security mode in force.
+
+      let dev = connect("ocp://arm.example:6286")
+      let sec = connect("ocp-fls://arm.example", {
+         algs: {enc: ["chacha20-poly1305"], itg: ["crc32"]}
+      })
+      let tls = connect("ocps://arm.example:16286", {
+         tls: {server: "arm.example"}
+      })
+
+   The URI scheme selects the protection in force:
+
+      +-----------+----------+----------------------------------+
+      |Scheme     |Port      |Protection                         |
+      +-----------+----------+----------------------------------+
+      |ocp://     |6286      |Cleartext [RFC0004], Section 7.4  |
+      +-----------+----------+----------------------------------+
+      |ocp-fls:// |6357      |Frame-layer security [RFC0009]     |
+      +-----------+----------+----------------------------------+
+      |ocps://    |16286     |Secure transport [RFC0010], ALPN  |
+      |           |          |"ocp/1"                           |
+      +-----------+----------+----------------------------------+
+
+                         Table 2: Session Schemes
+
+   connect() performs the [RFC0004] handshake: it sends HELLO with its
+   capabilities and, for a secured scheme, the members that [RFC0009]
+   or [RFC0010] require, and waits for WELCOME.  If the security mode
+   the caller required is not confirmed by WELCOME, connect() closes
+   the session and panics with the kind the negotiation reports (for
+   example Unauthorized or Unsupported); an Air peer [RFC0011] silently
+   closes a secured session, which the host surfaces as SessionExpired.
+
+   A device call may name a session: sense("temp", @dev) issues the CALL
+   on dev instead of the default session.  The @ prefix is the session
+   selector; when omitted the call uses the default session.
+
+9.3.  Core Profile Bindings
+
+   The Core Profile instructions of [RFC0004], Section 9.1 are available
+   as built-in asynchronous functions.  Each returns a future that
+   resolves with the RESULT value or fails with the RESULT error.
+
+      +------------+-----------------------------------+-----------+
+      |Function    |Maps to                            |Returns    |
+      +------------+-----------------------------------+-----------+
+      |ping()      |CALL ping                          |{t, time}  |
+      +------------+-----------------------------------+-----------+
+      |status()    |CALL status                        |state map  |
+      +------------+-----------------------------------+-----------+
+      |metadata()  |CALL metadata                      |five arrays|
+      +------------+-----------------------------------+-----------+
+      |sense(n)    |CALL sense (name = n)              |reading    |
+      +------------+-----------------------------------+-----------+
+      |actuate(n,  |CALL actuate (name = n, rest by    |null       |
+      |   ...)     |position or name)                  |           |
+      +------------+-----------------------------------+-----------+
+      |get_param(n)|CALL get_param (name = n)          |value      |
+      +------------+-----------------------------------+-----------+
+      |set_param(n,|CALL set_param (name = n, value =  |null       |
+      |   v)       |v)                                 |           |
+      +------------+-----------------------------------+-----------+
+
+                      Table 3: Core Profile Bindings
+
+   Because each call is a future, awaiting it is the norm:
+
+      let t = await sense("temp", @dev)
+      await actuate("gripper", force = 20)
+
+   An unknown name, an argument form the peer refuses, or a failure
+   inside the procedure is delivered in RESULT with ok false; the host
+   fails the future with the error's kind (Section 9.5), which the
+   program catches with except.  This matches [RFC0004], Section 6.4.2:
+   a refused call is an outcome, never an ERROR frame.
+
+   metadata() returns {instructions, sensors, actuators, params,
+   events} exactly as [RFC0004], Section 9.1.2 specifies; a program
+   SHOULD read it once after connect() and re-read it when the
+   core.metadata topic fires (Section 6.5).
+
+9.4.  Publish/Subscribe Bindings
+
+   SUBSCRIBE, EVENT and UNSUBSCRIBE [RFC0004], Sections 5.5 to 5.7 are
+   exposed by on (Section 6.5) and wait (Section 6.6).  The topics a
+   program may use are those of [RFC0004], Table 21: the device.*
+   topics published by the peer and the core.*, rpc.*, pubsub.* and
+   blobtun.* topics raised by the runtime.  A pseudo-topic (one the
+   runtime raises, not the peer) is handled exactly like a PubSub topic
+   -- the same on, the same handler, the same subscribe -- because to
+   the language the two are indistinguishable [RFC0004], Section 9.2.1.
+
+   Publishing from the program side is the call publish(topic, data):
+   it sends an EVENT on the session.  A program publishes only under a
+   name it is entitled to, that is, a name it owns or one under the
+   private x. prefix.
+
+9.5.  Error Model and OCP Error Codes
+
+   A future fails with a kind.  The kind is one of two origins.  An
+   application failure arrives in RESULT as {kind, message}; the host
+   uses that kind verbatim.  A protocol failure arrives as an ERROR
+   frame [RFC0004], Section 5.11; the host maps its code to the name of
+   [RFC0004], Appendix A:
+
+      +--------+-------------------+-------------------------------+
+      |Code    |Kind               |Meaning                        |
+      +--------+-------------------+-------------------------------+
+      |0x0000  |Internal           |Internal error.                |
+      +--------+-------------------+-------------------------------+
+      |0x0001  |BadMagic           |Magic octets are wrong.        |
+      +--------+-------------------+-------------------------------+
+      |0x0002  |BadVersion         |Protocol version unsupported. |
+      +--------+-------------------+-------------------------------+
+      |0x0003  |HelloExpected      |First frame was not HELLO.     |
+      +--------+-------------------+-------------------------------+
+      |0x0004  |UnknownType        |Message type unknown.          |
+      +--------+-------------------+-------------------------------+
+      |0x0005  |BadPayload         |Payload not decodable CBOR.    |
+      +--------+-------------------+-------------------------------+
+      |0x0006  |PayloadTooLarge    |Payload over the limit.        |
+      +--------+-------------------+-------------------------------+
+      |0x0007  |SessionExpired     |Session no longer usable.      |
+      +--------+-------------------+-------------------------------+
+      |0x0008  |Unsupported        |Feature not supported.         |
+      +--------+-------------------+-------------------------------+
+      |0x0009  |RateLimited        |Peer is rate limited.          |
+      +--------+-------------------+-------------------------------+
+      |0x000A  |Busy               |Peer busy or call timed out.   |
+      +--------+-------------------+-------------------------------+
+      |0x000B  |Unauthorized       |Auth missing, wrong or unusable|
+      +--------+-------------------+-------------------------------+
+      |0x000C  |NoTunnel           |Tunnel unknown or not open.    |
+      +--------+-------------------+-------------------------------+
+      |0x000D  |TunnelReset        |Tunnel reset or offset bad.    |
+      +--------+-------------------+-------------------------------+
+      |0x000E  |Decompress         |Compressed payload malformed.  |
+      +--------+-------------------+-------------------------------+
+
+                   Table 4: OCP Error Code Mapping
+
+   These names are reserved: a program MUST NOT define an application
+   error of the same name.  The built-in kinds Timeout (a select after
+   or an await within that expired) and Cancel (a cancelled task) are
+   also reserved.  Codes 0x000F and above belong to [RFC0009] and are
+   mapped the same way when that extension is in force.
+
+9.6.  Security Modes: [RFC0009] and [RFC0010]
+
+   Three protections are available, and they are alternatives, never
+   layers ([RFC0004], Section 1):
+
+   *  None.  ocp:// with no extension.  The session is cleartext; the
+      host sets no session flag beyond what the peer agrees.
+
+   *  Frame-layer security [RFC0009].  ocp-fls:// (port 6357).  The
+      host offers the algs of [RFC0009], Section 9: enc, itg and ztr,
+      each a most-preferred-first list, and requests the "ext" header.
+      A primitive is switched on only when WELCOME confirms a name the
+      host offered; silence never switches one on.  If the host requires
+      a primitive WELCOME does not confirm, connect() panics
+      Unsupported and closes, as [RFC0009], Section 9 directs.  F_ENC is
+      session scope; F_ITG and F_ZTR are per-frame and are applied by
+      the host, not by the program.
+
+   *  Secure transport [RFC0010].  ocps:// (port 16286, ALPN "ocp/1").
+      The whole session runs inside TLS, DTLS or QUIC.  The host
+      performs the handshake and validates the peer certificate; the
+      program supplies the server name and, when the deployment needs
+      it, the pre-shared key.  The language sees one OCP session
+      regardless of which transport carries it.
+
+   A program selects the mode only by the URI scheme and the options it
+   passes to connect(); it never toggles individual flags.  The host
+   reports the agreed mode through the session object's security member.
+
+9.7.  The Air Subset: [RFC0011]
+
+   An Air device [RFC0011] is an ordinary OCP peer that implements a
+   constrained subset.  The language is unchanged when it talks to Air;
+   the host honours the subset transparently:
+
+   *  An Air peer refuses ocp-fls:// and ocps:// sessions and closes
+      them; talk to it with ocp:// ([RFC0011], Section 7).
+
+   *  Compression (F_COMP) is never used with Air, and the frame
+      security of [RFC0009] is absent ([RFC0011], Section 3).
+
+   *  Air's max_payload is at most 1024 octets ([RFC0011], Section 10).
+      A program SHOULD keep each call's arguments and each event's data
+      small; the host panics PayloadTooLarge if it would exceed the
+      peer's limit.
+
+   *  The error codes 0x0000 to 0x000E are reused unchanged
+      ([RFC0011], Section 6); the same kinds of Table 4 apply.
+
+   *  An Air device is reached over a stream (UART, USB-CDC or TCP);
+      ACK and F_ACK are not used ([RFC0011], Section 4).  The language
+      does not see this difference.
+
+   A script written for a full peer runs against an Air peer by
+   intersection: whatever the Air peer does not offer is simply absent,
+   and the same metadata() call reveals it.
+
+9.8.  Instance Meta Object
+
+   The host exposes one meta object, octo, carrying the interpreter and
+   session state:
+
+      +-----------+------------------------------------------+
+      |Member     |Meaning                                   |
+      +-----------+------------------------------------------+
+      |octo.version|Language and protocol versions.          |
+      +-----------+------------------------------------------+
+      |octo.sessions|List of open session objects.         |
+      +-----------+------------------------------------------+
+      |octo.default|The default session object.            |
+      +-----------+------------------------------------------+
+      |octo.now()  |Wall-clock seconds (float).              |
+      +-----------+------------------------------------------+
+      |octo.sleep  |Alias of the sleep statement as a        |
+      |           |callable.                                 |
+      +-----------+------------------------------------------+
+
+                      Table 5: Meta Object octo
+
+   Writing octo.mock = true (Section 2.4) is permitted and is the only
+   way a program influences host behaviour out of band; a host MAY
+   interpret it as a request to substitute a simulated peer.
+
+9.9.  Name Resolution Order
+
+   A name is resolved in this order: the current block scope; enclosing
+   function scopes outward; the top-level scope; the built-ins of
+   Sections 9.3 and 9.4; the meta object octo; then the host's native
+   functions.  A name that resolves nowhere is a runtime error, not a
+   silent null.
+
+10. Library and External Objects
+
+10.1. Operations on Values
+
+   Lists, tuples, sets and dictionaries support len, in (membership),
+   iteration and indexing.  Text supports indexing, slicing, len, + and
+   the formatting of Section 10.4.  Numbers support the arithmetic of
+   Section 4.  Functions are values and support calling only.
+
+10.2. Standard Library Functions
+
+   The standard library is small and pure (no I/O): abs, min, max, sum,
+   len, range, sorted, reversed, zip, enumerate, map, filter, any, all,
+   int, float, str, bool, type, keys, values, items, and the channel
+   primitives chan, close, send, recv.  A host MAY add more but MUST
+   NOT remove or rename these.
+
+10.3. Modules
+
+   import name brings a module's bindings into scope; from name import
+   a, b brings named bindings.  A module is a separate compilation unit
+   the host loads; the language defines no module format, only the
+   import syntax.  A cyclic import is a load-time error.
 
       import mod
       import a.b.c
@@ -932,760 +1248,265 @@ Table of Contents
       from mod import name
       from mod import name as other, second
 
-   A dotted module name first resolves to a source module (Section
-   10.3); if none exists, a library module supplied by the
-   implementation is imported.  Importing binds the module object; a
-   dotted name binds nested namespaces so that "a.b.c.f()" is valid.
-   There is no wildcard import.
-
-7.  Functions, Scope and Arguments
-
-7.1.  Definition and Call
-
-      fn greet(name) { "hello, " + name }
-      var r = greet("octo")
-
-   Parameters are bound positionally, by name, or from defaults
-   (Section 7.6).  A function value MAY be stored, passed and returned;
-   calling a non-callable value fails.
-
-7.2.  Closures
-
-   Functions capture the lexical scope chain of their definition.
-
-      fn make_counter() {
-          var n = 0
-          return () => { n += 1; n }
-      }
-      var c = make_counter()
-      c()   # => 1
-      c()   # => 2
-
-7.3.  Scope and Declaration
-
-   A scope is one pair of braces.
-
-      Declaration   Scope
-      +==============+=================================================+
-      | Declaration  | Scope                                           |
-      +==============+=================================================+
-      | var x = v    | Always the root scope, even inside a block.     |
-      +--------------+-------------------------------------------------+
-      | let x = v    | The current (innermost) scope.                  |
-      +--------------+-------------------------------------------------+
-      | const x = v  | The current scope, and not reassignable.        |
-      +--------------+-------------------------------------------------+
-      | fn f() {}    | The current scope.                              |
-      +--------------+-------------------------------------------------+
-      | x = v (bare) | Updates along the scope chain; if the name is   |
-      +--------------+-------------------------------------------------+
-
-   Declaring the same name twice in one scope is an error; shadowing in
-   a nested scope is permitted.  Assigning to an existing name is not a
-   declaration.  The walrus operator follows the same rules.
-
-7.4.  Argument Passing by Alias
-
-   Argument passing is by reference alias for positional arguments:
-
-   *  When the argument is a variable of the caller, the parameter
-      becomes an alias of that variable for the duration of the call.
-      Assigning to the parameter writes back to the caller's variable;
-      reading it yields the variable's current value; mutating a mutable
-      object through it is visible to the caller.
-   *  When the argument is a literal or a computed expression, the
-      parameter is an independent binding.
-   *  If the caller's variable is a constant, writing through the alias
-      fails with the ordinary constant-reassignment failure; the
-      constant does not prevent mutation of the object it refers to.
-
-      fn add1(a) { a = a + 1 }
-      var x = 10
-      add1(x)
-      print(x)          # => 11
-
-      fn push(a) { a.append(3) }
-      var xs = [1, 2]
-      push(xs)
-      print(xs)         # => [1, 2, 3]
-
-   Named arguments and the parameter sink do not create aliases: their
-   values are independent.
-
-7.5.  Promoting a Local Function
-
-   A function defined in a block is local to that block.  To make it
-   reachable from the root scope, declare a new name with "var" whose
-   value is the function:
-
-      {
-          fn f() { 42 }
-          var g = f        # correct
-      }
-      g()                  # => 42
-
-   The function's own name remains block-local, and an ordinary
-   assignment is not a promotion.
-
-7.6.  Defaults, Named Arguments and the Parameter Sink
-
-      fn greet(name, greeting = "hello", times = 1) {
-          (greeting + ", " + name + "!") * times
-      }
-      greet("octopus")                     # defaults apply
-      greet("octopus", "hi")               # positional override
-      greet("octopus", times = 3)          # named argument
-      greet(greeting = "hi", name = "x")   # all named, order free
-      var add = (a, b = 1) => a + b        # arrow functions too
-
-   Default values are evaluated once, at definition time, and a default
-   expression cannot see other parameters.  A REQUIRED parameter MAY
-   follow a parameter with a default.
-
-   A parameter written "..name" collects excess arguments into a
-   dictionary:
-
-      fn log(level, ..fields) { "[" + level + "] " + str(fields.args) }
-      log("i", 1, 2, 3)       # fields.args == [1, 2, 3]
-      log("i", tag = "boot")  # fields.args == [], fields.kwargs ==
-                              {'tag': 'boot'}
-
-      Key     Type        Content
-      +========+============+==========================================+
-      | Key    | Type       | Content                                  |
-      +========+============+==========================================+
-      | args   | list       | Excess positional arguments; empty if    |
-      +--------+------------+------------------------------------------+
-      | kwargs | dictionary | Excess named arguments in call order;    |
-      +--------+------------+------------------------------------------+
-
-   The sink MUST be the last parameter and collects new containers.
-   Binding order is: positional, then named, then defaults, then sink.
-   Faults: too many positional arguments, an unexpected named argument,
-   the same parameter filled twice, or a missing REQUIRED argument.
-
-8.  Destructuring Assignment
-
-      var (a, b) = [1, 2]
-      let (c, d) = [3, 4]
-      const (e, f) = [5, 6]
-      (m, n) = [7, 8]                  # assignment form; new names are
-                                       implicit lets
-      var (p, (q, r)) = [1, [2, 3]]    # nested
-      var (s,) = [9]                   # single element
-      var (x, y) = "hi"                # => x == "h", y == "i"
-      for (i, j) in [[1, 2], [3, 4]] { }
-
-   The value MUST be an iterable of the right length; a length mismatch,
-   a non-iterable value or an item that cannot be unpacked is an error.
-   Names introduced by a constant declaration remain constants.
-
-9.  Host Interface, Hooks and Hardware Binding
-
-9.1.  Native Functions
-
-   The host environment registers callable operations under a name; a
-   program then calls that name like any other function.  Native results
-   and failures are values and errors of the language.
-
-9.2.  Standard Library Entry Points
-
-   The following library entry points are available to every program.
-
-      Name                        Behaviour
-      +==========================+=====================================+
-      | Name                     | Behaviour                           |
-      +==========================+=====================================+
-      | on(event, fn)            | Registers fn as a hook for event;   |
-      +--------------------------+-------------------------------------+
-      | emit(event, data = null) | Invokes the hooks registered for    |
-      +--------------------------+-------------------------------------+
-      | watch(name, fn)          | Registers fn as a watcher of the    |
-      +--------------------------+-------------------------------------+
-      | eval(expr)               | Evaluates one OctoScript expression |
-      +--------------------------+-------------------------------------+
-      | exec(code)               | Executes OctoScript statements      |
-      +--------------------------+-------------------------------------+
-
-   Instance messaging is not a set of library entry points: it is
-   provided by the meta object under the "octo" keyword (Section 9.6),
-   so that the operations are namespaced ("octo.send(...)",
-   "octo.recv()") instead of occupying global names.
-
-   eval and exec are library entry points and take precedence over any
-   other name of the same spelling, so a bare reference to "eval" or
-   "exec" resolves to them.  They accept a single expression and a
-   statement sequence respectively; a non-string argument, or an
-   expression that is not exactly one expression, is an argument error.
-   Source errors inside them are reported as runtime failures and are
-   therefore catchable.
-
-9.3.  Hook Semantics
-
-   Hooks are registered per event name in the shared host; registration
-   order is preserved.  Emitting an event invokes every hook registered
-   for it with a single argument (the payload).  Recursion into the same
-   event name is guarded.  A hook failure is reported and isolated: it
-   neither aborts the emitter nor prevents the remaining hooks.
-
-   The following lifecycle event names are reserved and are emitted by
-   the platform: "start", "shutdown", "tick", "reset" and "error".  The
-   "shutdown" event is emitted when a program finishes and when an
-   interactive session ends.
-
-9.4.  Watcher Semantics
-
-   "watch(name, fn)" invokes "fn(new_value, old_value)" synchronously
-   whenever the variable name changes value.  The trigger points are
-   ordinary assignment, the walrus form, and a destructuring assignment
-   that binds the name, including the first, implicit creation of the
-   variable.  A declaration does not trigger a watcher.  A watcher is
-   invoked only when the value actually differs.  A watcher that assigns
-   the same name again does not recurse into itself; chains across
-   different names are allowed.  A watcher failure is reported and
-   isolated.  A non-string name or a non-callable handler is an argument
-   error.
-
-9.5.  Hardware Instructions
-
-   Hardware instructions are not part of the language: they exist only
-   after a peer has been contacted and its instruction list has been
-   registered as native functions.  Registration happens at start-up and
-   is refreshed on each reconnection.  Calling an unregistered name
-   fails; with no peer reachable the failure message states that
-   hardware instructions are unavailable.  A peer MAY additionally
-   provide sensors, actuators and buses in a structured form (Section
-   9.6).
-
-9.6.  Instance Meta Object
-
-   The keyword "octo" denotes the meta object of the instance.  It is
-   the same object in every scope, in every module of the instance, and
-   in code evaluated by eval and exec; separate interpreter instances
-   have separate meta objects.  Its members are:
-
-      Member                    Access      Behaviour
-      +=========================+============+=========================+
-      | Member                  | Access     | Behaviour               |
-      +=========================+============+=========================+
-      | id                      | read/write | Instance identifier;    |
-      +-------------------------+------------+-------------------------+
-      | version                 | read-only  | Version string of the   |
-      +-------------------------+------------+-------------------------+
-      | script                  | read/write | Path of the running     |
-      +-------------------------+------------+-------------------------+
-      | runtime                 | read-only  | Name of the runtime     |
-      +-------------------------+------------+-------------------------+
-      | search_paths            | read/write | Module search           |
-      +-------------------------+------------+-------------------------+
-      | daemon_host,            | read/write | Connection target;      |
-      +-------------------------+------------+-------------------------+
-      | allow_spawn             | read/write | Whether the instance    |
-      +-------------------------+------------+-------------------------+
-      | daemon_opts             | read/write | Opaque option map       |
-      +-------------------------+------------+-------------------------+
-      | connect_timeout         | read/write | Connection timeout in   |
-      +-------------------------+------------+-------------------------+
-      | launch_delay            | read/write | Delay after starting a  |
-      +-------------------------+------------+-------------------------+
-      | config                  | read-only  | Descriptor path         |
-      +-------------------------+------------+-------------------------+
-      | peer                    | read-only  | Recorded peer record,   |
-      +-------------------------+------------+-------------------------+
-      | instructions            | read-only  | Names of instructions   |
-      +-------------------------+------------+-------------------------+
-      | faults                  | read-only  | Latched, not yet        |
-      +-------------------------+------------+-------------------------+
-      | clear_faults()          | call       | Returns and clears the  |
-      +-------------------------+------------+-------------------------+
-      | sensors                 | read-only  | Sensor view (below).    |
-      +-------------------------+------------+-------------------------+
-      | actuators               | read-only  | Actuator view (below).  |
-      +-------------------------+------------+-------------------------+
-      | devices                 | read-only  | Device view (below).    |
-      +-------------------------+------------+-------------------------+
-      | send(target, msg)       | call       | Delivers msg to another |
-      +-------------------------+------------+-------------------------+
-      | recv()                  | call       | Returns and removes the |
-      +-------------------------+------------+-------------------------+
-      | mailbox()               | call       | Snapshot of this        |
-      +-------------------------+------------+-------------------------+
-      | publish(channel, msg)   | call       | Publishes msg on a      |
-      +-------------------------+------------+-------------------------+
-      | consume(channel)        | call       | Returns and removes the |
-      +-------------------------+------------+-------------------------+
-      | channels()              | call       | Names of the known      |
-      +-------------------------+------------+-------------------------+
-      | instances()             | call       | Identifiers of the      |
-      +-------------------------+------------+-------------------------+
-      | has(name)               | call       | Whether name is         |
-      +-------------------------+------------+-------------------------+
-      | reconnect()             | call       | Drops the current       |
-      +-------------------------+------------+-------------------------+
-
-   Writing a connection-related member resets the session; the new
-   values take effect at the next hardware call.  In pure-language mode,
-   writing a connection-related member fails.
-
-   The three views expose the peer's declarations to programs:
-
-      View       Members
-      +===========+====================================================+
-      | View      | Members                                            |
-      +===========+====================================================+
-      | sensors   | names, read(name), info(name), all()               |
-      +-----------+----------------------------------------------------+
-      | actuators | names, info(name), set_torque(name, value),        |
-      +-----------+----------------------------------------------------+
-      | devices   | status(), connection(), buses                      |
-      +-----------+----------------------------------------------------+
-
-9.7.  Latched Hardware Faults
-
-   A fault reported by a peer is stored, an event named "hardware_fault"
-   is emitted with the fault record, and the next hardware call fails
-   before anything is sent.  Consuming a fault clears the latch, so a
-   program MAY continue deliberately after clearing.  The fields of a
-   fault record are: name, identifier, raw payload, bus and an OPTIONAL
-   description.
-
-9.8.  Name Resolution Order
-
-   Resolution of a call name is, in order:
-
-   1.  a runtime-provided hardware helper of the runtime binding, if the
-       runtime defines one for that name;
-   2.  a language library entry point (Section 9.2);
-   3.  a registered native function, including discovered hardware
-       instructions;
-   4.  the scope chain, then library entry points again, then the
-       standard library functions of Section 10.2;
-   5.  failing that, a single late discovery attempt per process; if it
-       registers the name, the call proceeds, otherwise the call fails.
-
-   A member call on a value additionally has an inner order: the string
-   formatting member is resolved first, a dictionary key takes
-   precedence over member operations, and a missing key fails rather
-   than returning "null" (only OPTIONAL chaining returns "null").
-
-10. Library and External Objects
-
-10.1. Operations on Values
-
-   Values provide operations reached with member-call syntax.  The
-   following operations are part of the language; an implementation MAY
-   provide more.
-
-      Kind        Operations
-      +============+===================================================+
-      | Kind       | Operations                                        |
-      +============+===================================================+
-      | String     | upper, lower, strip, split, replace, find,        |
-      +------------+---------------------------------------------------+
-      | List       | append, extend, insert, remove, pop, sort,        |
-      +------------+---------------------------------------------------+
-      | Dictionary | get, keys, values, items, update, pop             |
-      +------------+---------------------------------------------------+
-      | Set        | add, remove, union, intersection, difference      |
-      +------------+---------------------------------------------------+
-
-      var xs = [3, 1, 2]
-      xs.append(4)
-      xs.sort()
-      "Hello, Octo".upper()      # => "HELLO, OCTO"
-      "a,b".split(",")           # => ["a", "b"]
-      {x: 10}.get("x", 0)        # => 10
-
-   An operation that changes its receiver changes the value that every
-   binding of that value observes.
-
-10.2. Standard Library Functions
-
-   The following functions are available in every scope.  A name bound
-   by the program takes precedence over a function of the same name.
-
-      Function                        Behaviour
-      +===============================+================================+
-      | Function                      | Behaviour                      |
-      +===============================+================================+
-      | print(values...)              | Writes a textual form of each  |
-      +-------------------------------+--------------------------------+
-      | len(value)                    | Number of elements, or of      |
-      +-------------------------------+--------------------------------+
-      | str(value)                    | Textual form of a value.       |
-      +-------------------------------+--------------------------------+
-      | int(value)                    | Integer conversion.            |
-      +-------------------------------+--------------------------------+
-      | float(value)                  | Floating-point conversion.     |
-      +-------------------------------+--------------------------------+
-      | abs(value)                    | Absolute value.                |
-      +-------------------------------+--------------------------------+
-      | min(values...),               | Smallest or largest value.     |
-      +-------------------------------+--------------------------------+
-      | sum(values)                   | Sum of a sequence of numbers.  |
-      +-------------------------------+--------------------------------+
-      | sorted(values)                | New list with the values in    |
-      +-------------------------------+--------------------------------+
-      | list(value)                   | New list built from a          |
-      +-------------------------------+--------------------------------+
-      | set(value)                    | New set built from a sequence. |
-      +-------------------------------+--------------------------------+
-      | range(...)                    | A sequence of integers (range  |
-      +-------------------------------+--------------------------------+
-      | type(value)                   | A value describing the kind of |
-      +-------------------------------+--------------------------------+
-      | input(prompt)                 | Reads one line from the        |
-      +-------------------------------+--------------------------------+
-      | wait(seconds)                 | Suspends the program for the   |
-      +-------------------------------+--------------------------------+
-
-10.3. Modules
-
-   A dotted module name resolves to a source module first, then to a
-   library module supplied by the implementation.  Source-module search
-   directories are the directory of the importing script, extended by
-   the current working directory and by configured search paths.
-   Modules are cached by absolute location, so importing twice executes
-   once.  A module's top-level bindings are its public interface and are
-   reachable through the imported name; a function defined in a module
-   executes in that module's scope.  Taking a name from a module that
-   does not provide it fails.
+   A dotted module name first resolves to a source module; if none
+   exists, a library module supplied by the implementation is imported.
+   Importing binds the module object; a dotted name binds nested
+   namespaces so that "a.b.c.f()" is valid.  A name bound by import may
+   be reassigned like any other binding.  There is no wildcard import:
+   every imported name is written explicitly.
 
 10.4. String Formatting
 
-   The formatting member of a string accepts positional, indexed and
-   named placeholders, format specifications and literal braces.
-   Interpolated string literals (Section 2.6.3) are the preferred
-   spelling.
-
-      "{a}-{b}".format(a = 1, b = 2)   # => "1-2"
-      "{0}{1}".format(1, 2)            # => "12"
-      "{n:>5}".format(n = 42)          # => "   42"
-      "{{x}}".format()                 # => "{x}"
-
-10.5. Interactive Input
-
-   The standard library provides reading a line from the terminal.  In a
-   non-interactive environment where no terminal is attached, the
-   attempt fails and the program terminates with an error rather than
-   blocking.
-
-10.6. Formatting Tool
-
-   A conforming implementation SHOULD provide a formatter that rewrites
-   source text without changing its meaning.  Formatting is lossless at
-   token level: string contents, numeric literal spellings and comments
-   are preserved verbatim; only whitespace, indentation, line breaks
-   inside brackets and brace placement are normalised.  Applying the
-   formatter twice MUST produce the same text as applying it once.  The
-   command-line interface of the formatter is specified in [RFC0007].
+   The formatting used by interpolated strings (Section 2.6) and by
+   str(x) is: null -> "null", booleans -> "true"/"false", numbers in
+   their shortest round-tripping form, text as itself, lists and
+   tuples as [a, b], sets as {a, b}, dictionaries as {k: v}.  A value
+   with a fmt member MAY supply its own text form.
 
 11. Error Model and Diagnostics
 
-11.1. Taxonomy
+   Diagnostics fall into three classes: lexical (Section 2), syntactic
+   (this document's grammar) and runtime (a panic, Section 6.8).  A
+   lexical or syntactic error MUST stop the program before any
+   statement runs.  A runtime error is a panic carrying a kind and a
+   message; the built-in kinds are those of Sections 9.5 and 6.8.
 
-   Failures form a hierarchy; the base names of the classification are
-   observable through the "kind" member of a caught failure.
-
-      Kind                    Condition
-      +========================+=======================================+
-      | Kind                   | Condition                             |
-      +========================+=======================================+
-      | LexicalFailure         | Invalid character, unterminated       |
-      +------------------------+---------------------------------------+
-      | SyntaxFailure          | Token sequence does not match the     |
-      +------------------------+---------------------------------------+
-      | UndefinedNameError     | Unknown variable, function or module  |
-      +------------------------+---------------------------------------+
-      | RedefinitionError      | Same name declared twice in one       |
-      +------------------------+---------------------------------------+
-      | ConstReassignError     | Assignment to a constant.             |
-      +------------------------+---------------------------------------+
-      | InvalidAssignmentError | Assignment target is not assignable.  |
-      +------------------------+---------------------------------------+
-      | UnpackError            | Destructuring or spreading failed.    |
-      +------------------------+---------------------------------------+
-      | TypeMismatchError      | Operator, iteration, index or         |
-      +------------------------+---------------------------------------+
-      | KeyNotFoundError       | Missing dictionary key.               |
-      +------------------------+---------------------------------------+
-      | IndexOutOfRangeError   | Index outside the container.          |
-      +------------------------+---------------------------------------+
-      | DivisionByZeroError    | Integer division or remainder by      |
-      +------------------------+---------------------------------------+
-      | NotCallableError       | Calling a non-callable value.         |
-      +------------------------+---------------------------------------+
-      | ArgumentError          | Wrong number or shape of arguments.   |
-      +------------------------+---------------------------------------+
-      | FormatStringError      | Interpolated string or formatting     |
-      +------------------------+---------------------------------------+
-      | PanicError             | The failure statement was executed.   |
-      +------------------------+---------------------------------------+
-      | NativeError            | A call into a native function or a    |
-      +------------------------+---------------------------------------+
-      | HardwareError          | A hardware instruction or the device  |
-      +------------------------+---------------------------------------+
-      | InternalError          | An inconsistency inside the           |
-      +------------------------+---------------------------------------+
-
-   All runtime kinds except lexical and syntax failures form one
-   catchable family: "except" catches every one of them.  Lexical and
-   syntax failures occur before execution and are not catchable from a
-   program, although source compiled by eval or exec reports them as
-   runtime failures and they are then catchable.  Failures raised by the
-   host environment itself, rather than by a program, are outside the
-   catchable family.
-
-11.2. Diagnostics
-
-      Situation                  Output
-      +===========================+====================================+
-      | Situation                 | Output                             |
-      +===========================+====================================+
-      | Script fails at run time  | runtime error: <kind>: <message>   |
-      +---------------------------+------------------------------------+
-      | Script fails to parse     | syntax error: <message>            |
-      +---------------------------+------------------------------------+
-      | Script fails to lex       | lexical error: <message>           |
-      +---------------------------+------------------------------------+
-      | Missing script file       | error: script file not found:      |
-      +---------------------------+------------------------------------+
-      | Interactive command fails | error: <kind>: <message>, session  |
-      +---------------------------+------------------------------------+
-      | Native call fails         | Message prefixed [native]          |
-      +---------------------------+------------------------------------+
-      | Hardware call fails       | Message prefixed [octod]           |
-      +---------------------------+------------------------------------+
-      | Hook fails                | [hook:<event>] error: <message>    |
-      +---------------------------+------------------------------------+
-      | Watcher fails             | [watch:<name>] error: <message>    |
-      +---------------------------+------------------------------------+
-
-   All messages intended for users are written in English.
+   A conforming implementation reports each diagnostic with a position
+   (line and column) and a message in English.  It MUST NOT proceed past
+   a lexical or syntactic error by guessing, and it MUST NOT suppress a
+   panic it cannot attribute.
 
 12. Complete Example
 
-      # A control program exercising most of the language.
-      fn circle_area(r) {
-          import math
-          math.pi * r * r
+   The example below drives a two-wheeled arm: it reads both encoders
+   concurrently, races a gripper close against a status timeout,
+   subscribes to faults for the life of the run, and loops on commands
+   arriving over a channel.
+
+      connect("ocp://arm.local:6286")
+
+      # Latch every fault for the whole program.
+      on "device.fault" { |ev|
+         log("fault", ev.name)
       }
 
-      var areas = []
-      for r in 1..4 {
-          areas.append(circle_area(r))
+      # Read both encoders at once; await them together.
+      let lf = spawn sense("enc.left")
+      let rt = spawn sense("enc.right")
+      let left = await lf
+      let right = await rt
+
+      # Race the gripper against a two-second status reply.
+      let outcome = race {
+         actuate("gripper", force = 20)
+         status() within 2.0
       }
-      print("areas:", sorted(areas))
-
-      fn classify(x) {
-          if x < 0 { return "neg" }
-          if x > 0 { return "pos" }
-          "zero"
+      if outcome == null {
+         log("warn", "gripper slow; status won the race")
       }
 
-      var cfg = {name: "octo", limits: {speed: 100}}
-      print(cfg.name)                 # => octo
-      print(cfg?.limits?.speed)       # => 100
-      print(cfg?.missing?.speed)      # => null
-
-      var base = {host: "127.0.0.1", port: 6286}
-      var merged = {..base, port: 7000}
-      print(merged)                   # => {'host': '127.0.0.1', 'port':
-                                      7000}
-
-      var squares = [x * x for x in range(5) if x % 2 == 0]
-      print(squares)                  # => [0, 4, 16]
-
-      var total = 0
-      for (let i = 1; i <= 5; i += 1) { total += i }
-      print("total:", total)          # => 15
-
-      var n = 0
-      do { n += 1 } while n < 3
-      print("n:", n)                  # => 3
-
-      fn handle(op, ..rest) { [op, rest.args, rest.kwargs] }
-      print(handle("mv", 1, 2, force = true))
-      # => ['mv', [1, 2], {'force': True}]
-
-      try {
-          {a: 1}.missing
-      } except (e) {
-          print(e.kind, "-", e)
+      # Command loop: first ready arm wins.
+      let cmd_chan = chan Text(4)
+      loop {
+         select {
+            case cmd := <-cmd_chan {
+               if cmd == "halt" { break }
+               await actuate("drive", cmd)
+            }
+            on "device.fault" {
+               await actuate("drive", stop = true)
+            }
+            after 30.0 {
+               await actuate("led", blink = 1)
+            }
+         }
       }
+
+      # The same loop, ended cleanly by a shutdown event instead of a
+      # channel command, using until:
+      loop {
+         await step()
+      } until "shutdown.requested" as cmd {
+         if cmd.soft { continue }   # soft stop: keep stepping
+         break                      # hard stop: leave the loop
+      }
+
+      # One-shot wait for the next status report.
+      let st = wait "device.status"
+      log("state", st.state)
+
+   The expression status() within 2.0 is sugar for race { status();
+   sleep 2.0 }; if the timeout arm wins, the result is null and the
+   status future is cancelled.  on "device.fault" appears twice: once as
+   a program-lifetime subscription and once inside select as a one-shot
+   wait; both are legal and independent.
 
 13. Security Considerations
 
-   *  The language can evaluate source text at run time ("eval",
-      "exec") and can read its environment.  Programs are therefore
-      trusted input; a deployment that runs untrusted programs MUST
-      isolate the process.
-   *  Hardware instructions act on physical machinery.  The language
-      provides no implicit safety interlock: a program that issues a
-      command issues it.
-   *  Hook and watcher failures are isolated, which means a program that
-      relies on hooks for safety MUST check their failures itself.
-   *  Credentials are configuration and MUST NOT be readable through the
-      meta object.
+   OctoScript is a control language; its safety is the safety of the
+   session it drives.  Under ocp:// the session is cleartext and MUST
+   NOT cross an untrusted network ([RFC0004], Section 12, [RFC0011],
+   Section 12).  A deployment that needs confidentiality or integrity
+   uses ocp-fls:// [RFC0009] or ocps:// [RFC0010]; the language selects
+   these by URI only and never downgrades a required protection.
+
+   A panic in an event handler does not tear down the subscription, but
+   an uncaught panic in the top-level task ends the program; a host
+   SHOULD run a supervisor that re-establishes the session on
+   SessionExpired rather than leaving the machine uncommanded.  A task
+   that ignores cancellation (Section 6.7) cannot be stopped; a program
+   that commands a machine MUST await, sleep or select on a bound, so
+   the host can cancel it on shutdown.
+
+   User-supplied scripts are code: importing a module or calling a host
+   native function is the same trust decision as running any program,
+   and a host that loads untrusted scripts MUST sandbox them.
 
 14. IANA Considerations
 
-   This document registers no names with IANA.
+   This document requests no IANA action.  It reuses the URI schemes,
+   ports, ALPN identifier and error codes of [RFC0004], [RFC0009],
+   [RFC0010] and [RFC0011] without defining new ones.
 
 15. References
 
 15.1. Normative References
 
-   [RFC0002]  Yang, S., "OpenOcto Ecosystem Architecture", RFC 0002,
-             September 2026.
+   [RFC0004]  Yang, S., "Octopus Control Protocol (OCP)", RFC 0004,
+              September 2026.
 
-   [RFC0007]  Yang, S., "OpenOcto Command-Line Tools and Interfaces",
-             RFC 0007,
-             September 2026.
+   [RFC0009]  Yang, S., "OCP with Frame-Level Security", RFC 0009,
+              September 2026.
 
-   [RFC0008]  Yang, S., "OpenOcto Error Taxonomy and Diagnostics",
-             RFC 0008,
-             September 2026.
+   [RFC0010]  Yang, S., "OCP over Secure Transport", RFC 0010,
+              September 2026.
+
+   [RFC0011]  Yang, S., "OCP Air: an OCP Subset for MCUs", RFC 0011,
+              September 2026.
+
+   [IETF-RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", IETF BCP 14, IETF RFC 2119,
+              March 1997.
+
+   [IETF-RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in
+              RFC 2119 Key Words", IETF BCP 14, IETF RFC 8174,
+              May 2017.
+
+   [IETF-RFC8949]  Bormann, C. and P. Hoffman, "Concise Binary Object
+              Representation (CBOR)", IETF STD 94, IETF RFC 8949,
+              December 2020.
+
+   [IEEE754]  IEEE, "IEEE Standard for Floating-Point Arithmetic", IEEE
+              Std 754-2019, July 2019.
 
 15.2. Informative References
 
-   Each document below is an IETF publication; its tag carries the
-   IETF- prefix so that it cannot be confused with a document of
-   this series.
+   [IETF-RFC7301]  Friedl, A., Popov, A. and A. Hada, "Transport Layer
+              Security (TLS) Application-Layer Protocol Negotiation
+              Extension", IETF RFC 7301, July 2014.
 
-   [RFC0006]  Yang, S., "OpenOcto Device Daemon Behaviour", RFC 0006,
-             September 2026.
+Appendix A. Collected Grammar (ABNF)
 
-   [IETF-RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
-              Requirement Levels", IETF BCP 14, IETF RFC 2119
-              March 1997.
+   This appendix is informative.  It collects the syntax in one place;
+   the prose sections are normative.
 
-Appendix A.  Collected Grammar (ABNF)
+      program      = stmt *( [newline] stmt ) [newline]
 
-   The following grammar is normative for the constructs it covers.  It
-   is written in ABNF [IETF-RFC5234] with the customary extensions:
-   terminals are quoted, repetition uses "*" and "/" separates
-   alternatives.
+      stmt        = let-stmt / const-stmt / var-stmt / expr-stmt
+                  / if-stmt / for-stmt / while-stmt / loop-stmt
+                  / try-stmt / match-stmt / return-stmt / break-stmt
+                  / continue-stmt / panic-stmt / pass-stmt
+                  / spawn-stmt / race-stmt / select-stmt / on-stmt
+                  / assign-stmt / fn-def
 
-   program        = *statement
+      expr        = ternary
+      ternary     = within-expr [ "?" within-expr ":" within-expr ]
+      within-expr = or-expr [ "within" or-expr ]
+      or-expr     = and-expr *( "or" and-expr )
+      and-expr    = not-expr *( "and" not-expr )
+      not-expr    = "not" not-expr / cmp-expr
+      cmp-expr    = add-expr *( cmp-op add-expr )
+      add-expr    = mul-expr *( ( "+" / "-" / "|" / "^" ) mul-expr )
+      mul-expr    = pow-expr *( ( "*" / "/" / "//" / "%"
+                  / "&" / "<<" / ">>" ) pow-expr )
+      pow-expr    = unary-expr [ "**" pow-expr ]
+      unary-expr  = ( "!" / "~" / "-" / "await" / "spawn"
+                  / "<-" ) unary-expr / postfix-expr
+      postfix-expr= primary *( "." name / "[" expr "]" / call / "?." )
+      call        = "(" [ call-arg *( "," call-arg ) ] ")"
+      call-arg    = name ":" expr / expr
 
-   statement      = block / if_stmt / while_stmt / loop_stmt / do_stmt
-                  / for_in_stmt / for_c_stmt / fn_def / return_stmt
-                  / panic_stmt / break_stmt / continue_stmt / pass_stmt
-                  / try_stmt / match_stmt / import_stmt /
-                        from_import_stmt
-                  / declaration / assignment / expr_stmt
+      spawn-stmt  = "spawn" expr
+      race-stmt   = "race" block
+      select-stmt = "select" block
+      select-arm  = ( "on" topic block ) / ( "case" [ name ":=" ]
+                  ( "<-" chan / chan "<-" expr ) block )
+                  / ( "after" expr block ) / ( "default" block )
+      on-stmt     = "on" topic [ "(" param ")" ] block
+      wait-expr   = "wait" topic
+      sleep-expr  = "sleep" expr
+      cancel-stmt = "cancel" expr
 
-   block          = "{" *statement "}"
+      if-stmt     = "if" expr block *( "elif" expr block )
+                  [ "else" block ]
+      while-stmt  = "while" expr block until-clause?
+      loop-stmt   = "loop" block until-clause?
+      do-stmt     = "do" block "while" expr until-clause?
+      for-stmt    = for-iter / for-c
+      for-iter    = for-target "in" expr block until-clause?
+      for-c       = "for" "(" [ for-init ] ";" [ expr ] ";"
+                  [ expr ] ")" block until-clause?
+      for-init    = let-stmt / const-stmt / var-stmt / expr-stmt
+      for-target  = name / pattern
+      until-clause = "until" topic [ "as" name ] block
+      match-stmt  = "match" "(" expr ")" "{" 1*( case-arm ) "}"
+      case-arm    = "case" pattern [ "if" expr ] block
+      pattern     = literal / seq-pattern / name / "_"
+      seq-pattern = "[" [ pattern *( "," pattern ) ] "]"
+      literal     = number / text / "true" / "false" / "null"
+      pass-stmt   = "pass"
+      let-stmt    = ( "let" / "const" / "var" ) name [ ":" type ]
+                  [ "=" expr ]
+      fn-def      = "fn" name "(" [ param *( "," param ) ] ")"
+                  [ ":" type ] block
+      param       = name [ ":" type ] [ "=" expr ]
+                  / "..." name [ ":" type ] / "**" name [ ":" type ]
+      topic       = dq-string / "[" [ dq-string *( "," dq-string ) ] "]"
+      # a string may hold OCP wildcards; array elements may mix them
+      type        = name [ "<" type *( "," type ) ">" ] [ "?" ]
+      name        = ident
 
-   if_stmt        = "if" [ "(" ] expr [ ")" ] block
-                    *( "elif" [ "(" ] expr [ ")" ] block )
-                    [ "else" block ]
-   while_stmt     = "while" [ "(" ] expr [ ")" ] block
-   loop_stmt      = "loop" block
-   do_stmt        = "do" block "while" [ "(" ] expr [ ")" ]
+      future      = spawn-expr / device-call / sense / actuate
+                  / get-param / set-param / ping / status / metadata
 
-   for_in_stmt    = "for" target "in" expr block
-   target         = ident / "(" target_list ")" / target_list
-   target_list    = target *( "," target ) [ "," ]
+      device-call = name "(" [ call-arg *( "," call-arg ) ]
+                  [ "@" session ] ")"
 
-   for_c_stmt      = "for" "(" [ init ] ";" [ expr ] ";" [ expr ] ")"
-                  block
+   The channel operator <- is lowest precedence when sending and
+   highest when receiving; the grammar's unary-expr admits receive and
+   the call-arg / select-arm forms admit send.
 
-   fn_def         = "fn" ident "(" [ params ] ")" block
-   params         = param *( "," param )
-   param          = [ ".." ] ident [ "=" expr ]
-   return_stmt    = "return" [ expr ]
-   panic_stmt     = "panic" [ expr ]
+Appendix B. Conformance Notes
 
-   try_stmt       = "try" block
-                    *except_clause
-                    [ "finally" block ]
-   except_clause  = "except" [ ( ident / "(" ident ")" ) ] block
+   A conforming implementation MUST:
 
-   match_stmt     = "match" [ "(" ] expr [ ")" ] "{" 1*case_clause "}"
-   case_clause    = "case" pattern [ "if" expr ] block
-   pattern        = literal / "[" [ pattern *( "," pattern ) ] "]"
-                  / ident / "_"
+   *  accept every construct in Sections 2 to 11 and reject anything it
+      does not implement, never silently ignoring it;
 
-   import_stmt    = "import" module_name [ "as" ident ]
-                    *( "," module_name [ "as" ident ] )
-   from_import_stmt = "from" module_name "import" import_item
-                      *( "," import_item )
-   import_item    = ident [ "as" ident ]
-   module_name    = ident *( "." ident )
+   *  treat every device call as a future and every device event as a
+      message a program waits for, never blocking the caller before the
+      await;
 
-   declaration    = ( "var" / "let" / "const" ) decl_target "=" expr
-   decl_target    = ident / "(" target_list ")"
-   assignment     = assignable ( "=" / compound_op ) expr
-   assignable     = ident / postfix
-   compound_op    = "+=" / "-=" / "*=" / "/=" / "&=" / "|=" / "^="
-                  / "<<=" / ">>="
+   *  map OCP ERROR codes to the kinds of Table 4 and application
+      RESULT errors to their own kind;
 
-   expr_stmt      = expr
+   *  honour [RFC0009] and [RFC0010] when the URI scheme selects them,
+      and surface an Air peer [RFC0011] without a language change;
 
-   expr           = walrus_expr
-   walrus_expr    = ternary_expr / ident ":=" walrus_expr
-   ternary_expr   = range_expr [ "?" ternary_expr ":" ternary_expr ]
-   range_expr     = or_expr [ ".." [ or_expr ] [ ".." [ or_expr ] ] ]
-   or_expr        = and_expr *( ( "or" / "||" ) and_expr )
-   and_expr       = not_expr *( ( "and" / "&&" ) not_expr )
-   not_expr       = ( "not" / "!" ) not_expr / comparison
-   comparison     = bit_or [ comp_op bit_or ] *
-   comp_op        =  "==" / "!=" / "<" / ">" / "<=" / ">=" / "in" / "not
-                    in"
-   bit_or         = bit_xor *( "|" bit_xor )
-   bit_xor        = bit_and *( "^" bit_and )
-   bit_and        = shift *( "&" shift )
-   shift          = additive *( ( "<<" / ">>" ) additive )
-   additive       = multiplicative *( ( "+" / "-" ) multiplicative )
-   multiplicative = unary *( ( "*" / "/" / "%" / "//" ) unary )
-   unary          = ( "-" / "~" ) unary / power
-   power          = postfix [ "**" unary ]
-   postfix        = atom *( "." ident / "[" expr "]" / call_args
-                          / "?." ident / "?.[" expr "]" / "?." call_args
-                                )
-   call_args      = "(" [ arg *( "," arg ) ] ")"
-   arg            = expr / ident "=" expr
-   atom           =  literal / ident / "this" / "octo" / "globals" /
-                    "locals"
-                  / "(" expr ")" / tuple_literal / list_literal
-                  / set_or_dict / comprehension / arrow_fn /
-                        range_shorthand
+   *  cancel cooperatively and fail a cancelled future with Cancel.
 
-   arrow_fn       = ( ident / "(" [ params ] ")" ) "=>" ( block / expr )
-
-   literal        = number / string / "true" / "false" / "null"
-
-   Tuple, list, set and dictionary literals, comprehensions, the spread
-   element form "..expr" and the range shorthand follow the forms shown
-   in Sections 3.2 to 3.5; the element position of a literal accepts
-   either a plain element or a spread element.
-
-Appendix B.  Conformance Notes
-
-   This appendix is non-normative and records differences between this
-   document and the reference implementation.
-
-   B.1. The meta member "script" is specified as read/write, which
-   matches the reference implementation; some earlier documentation
-   described it as read-only.
-
-   B.2. Where several "except" clauses are written, the reference
-   implementation evaluates only the first, as specified in Section
-   6.12, but it does not reject the surplus clauses.
-
-   B.3. A failure from the host-environment messaging operation is not
-   catchable by "except" in the reference implementation, because that
-   failure type is raised outside the catchable family (Section 11.1).
-
-   B.4. A function value stored as a dictionary entry cannot be invoked
-   with member-call syntax in the reference implementation; the call
-   MUST be reached through a key access.
-
-   B.5. The reference implementation accepts a parenthesised
-   keyword-form ternary in a plain call argument, as this document
-   permits.
+   A conforming implementation MAY enforce channel element types, MAY
+   add native functions and MAY choose among ready select arms.
 
 Authors' Addresses
 
