@@ -608,11 +608,11 @@ Table of Contents
       identifiers and codes.  A float is appropriate only for a
       measurement whose precision is inherently limited.
 
-   *  Encode numeric values at 64-bit width: unsigned and negative
-      integers as the 8-octet form, and floats as [IEEE754] double; this
-      is a recommendation and not a requirement; a sender MAY use a
-      narrower legal form, and a receiver MUST still accept any legal
-      CBOR width, as Section 2 requires.
+   *  Encode numeric values at their default width: integers as 32-bit
+      signed values and floats as [IEEE754] binary64 (double).  This is
+      a recommendation and not a requirement; a sender MAY use another
+      legal form, and a receiver MUST still accept any legal CBOR
+      width, as Section 2 requires.
 
    *  Keep a payload small.  The negotiated limit (Section 3.3) bounds
       the octets of one frame, and a value that can be large belongs in

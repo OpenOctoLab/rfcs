@@ -11,11 +11,12 @@ Category: Standards Track                                 September 2026
 
 Abstract
 
-   This document specifies OctoScript, a dynamically typed programming
-   language for controlling robots and the devices attached to them.  It
-   is designed to drive the Octopus Control Protocol [RFC0004] and its
-   extensions [RFC0009], [RFC0010] and [RFC0011] from a small, C-family
-   surface.  The language is built around asynchronous remote procedure
+   This document specifies OctoScript, a statically typed programming
+   language, with types inferred where they are not written, for
+   controlling robots and the devices attached to them.  It is designed
+   to drive the Octopus Control Protocol [RFC0004] and its
+   extensions [RFC0009], [RFC0010] and [RFC0011] from a small surface.
+   The language is built around asynchronous remote procedure
    calls and asynchronous events: every call to a device is a future,
    and every event from a device is a message a program waits for.
    To that end the language provides first-class constructs for
@@ -75,6 +76,7 @@ Table of Contents
      3.5.  Future
      3.6.  Channel
      3.7.  Spread
+     3.8.  struct: Composite Types
    4.  Operators and Precedence
    5.  Expressions
      5.1.  Member Access, Indexing, Calling
@@ -128,10 +130,10 @@ Table of Contents
 
 1.  Introduction
 
-   OctoScript is a dynamically typed, Turing-complete language intended
-   for controlling machines over a network.  It combines a compact,
-   C-family expression syntax with brace-delimited, indentation
-   independent blocks, and it is designed to be embedded in a host
+   OctoScript is a statically typed, Turing-complete language intended
+   for controlling machines over a network.  It combines a compact
+   expression syntax with brace-delimited, indentation independent
+   blocks, and it is designed to be embedded in a host
    environment that supplies the machine-facing operations by speaking
    OCP [RFC0004] on its behalf.  The value model, the operator set, the
    concurrency model and the library are defined by this document; they
@@ -202,17 +204,16 @@ Table of Contents
    function after a keyword where the context is unambiguous
    (Section 10.2):
 
-      and      as       async    await    bool     break
-      case     chan     char     const    continue default
-      do       elif     else     except   f32      f64
-      false    finally  fn       for      from     globals
-      i128     i16      i32      i64      i8       if
-      import   in       isize    let      locals   loop
-      match    not      null     octo     on       or
-      panic    par      pass     race     return   select
-      sleep    spawn    str      this     true     try
-      u128     u16      u32      u64      u8       usize
-      until    var      wait     when     while    within
+      and      as       async    await    bool     break    case
+      chan     char     const    continue default  do       elif
+      else     except   f32      f64      false    finally  fn
+      for      from     globals  i128     i16      i32      i64
+      i8       if       import   in       isize    let      locals
+      loop     match    not      null     octo     on       or
+      panic    par      pass     race     return   select   sleep
+      spawn    str      struct   this     true     try      u128
+      u16      u32      u64      u8       usize    until    var
+      wait     when     while    within
 
    Keywords are read-only: using any keyword as an assignment target,
    including compound assignment, is a syntax
@@ -302,44 +303,43 @@ Table of Contents
       escaped and a \" is literal.  The recognised escapes are
       \" \\ \' \n \t \r \0 \xHH and \u{HHHH}.  A single character is
       a one-element str value; there is no separate char kind, and
-      the char annotation names it.
+      the char annotation names it.  An ordinary string never
+      interpolates; ${ } in one is literal text.
 
          let s1 = "actuator"
          let s2 = 'actuator'
-         let s3 = "it's ${name}"     # ' is literal in "..." strings
+         let s3 = "it's ${name}"     # ${ } is inert here
          let s4 = 'say "hi"'         # " is literal in '...' strings
 
-      An interpolated string embeds expressions between ${ and }; a
-      brace without the leading $ is literal.  Each embedded expression
-      is evaluated in the enclosing scope and is converted to text by
-      the formatting rules of Section 10.4.  The expression in the
-      marker is loose: any single-line expression that contains no
-      meaningful braces may stand there -- a bare name, a member or
-      index chain, a call, an arithmetic expression.  A format spec
-      (Section 10.4) follows a colon, but only on a bare variable or
-      on a parenthesised expression: ${rate:.2}, ${(a + b):.2}.
+   Template strings
 
-         let s = "actuator ${name} = ${speed}"
-         let t = "sum ${a + b} of ${items.len()}"
+      A template string is written between backticks `...`, may span
+      lines, and is the only literal form that interpolates.  A newline
+      in the source is kept as a newline, and \` is the only required
+      escape.  A template embeds expressions between ${ and }; each is
+      evaluated in the enclosing scope and converted to text by the
+      formatting rules of Section 10.4.  The expression in the marker
+      is loose: any single-line expression that contains no meaningful
+      braces may stand there -- a bare name, a member or index chain, a
+      call, an arithmetic expression.  A format spec (Section 10.4)
+      follows a colon, but only on a bare variable or on a
+      parenthesised expression.
 
-      A multi-line str is written between three double or three single
-      quotes and may span lines.  Inside it a newline is kept as a
-      newline, the quote characters and the backslash need no escape,
-      and the closing triple quote ends the string; interpolation
-      follows the rules above.
-
-         let doc = """
-            servo ${id}: limit ${max}
-         """
+         let s = `actuator ${name} = ${speed}`
+         let t = `sum ${a + b} of ${items.len()}`
+         let doc = `servo ${id}: limit ${max}`
+         let lines = `one
+                      two with ${id}`
 
 2.7.  Newline Sensitivity
 
    A newline ends a statement unless one of the following holds: the
    line ends inside a brace, bracket or parenthesis group; the line
-   ends with an operator that begins a continuation (., ->, =>, <-, **,
-   //, .., the assignment operators, the comparison operators, +, -,
-   *, /, %, &, |, ^, &&, ||, <<, >>, <<=, >>=); or a backslash
-   line continuation applies (Section 2.3).
+   ends inside a template string, which may span lines (Section 2.6);
+   the line ends with an operator that begins a continuation (., ->,
+   =>, <-, **, //, .., the assignment operators, the comparison
+   operators, +, -, *, /, %, &, |, ^, &&, ||, <<, >>, <<=, >>=); or a
+   backslash line continuation applies (Section 2.3).
 
 2.8.  Optional Type Annotations
 
@@ -347,7 +347,8 @@ Table of Contents
    a function gives its return type after the parameters with an arrow
    (->).  Annotations are optional: a program without annotations is
    complete, and an implementation MUST NOT reject it for a missing
-   annotation.  Unannotated integers are i64 and unannotated floats
+   annotation: it is inferred from the initialiser and later uses.
+   Unannotated integers are i32 and unannotated floats
    are f64.  Where a name does carry one, the annotation is enforced:
    the value bound to that name -- by let, const, var, an assignment,
    a parameter or a return -- is stored and operated on at the
@@ -355,13 +356,13 @@ Table of Contents
    kind OutOfRange.  An annotation never converts a value; an
    out-of-range value is an error, not a truncation.  The default
    width is enforced the same way: a value or result that does not
-   fit i64 or f64 panics with OutOfRange whether or not a name is
+   fit i32 or f64 panics with OutOfRange whether or not a name is
    annotated.
 
-      let count: i64 = 0
+      let count: i32 = 0
       var name: str = "arm"
-      let maybe: i64? = null   # nullable: may be null
-      let items: Vec<i64> = []
+      let maybe: i32? = null   # nullable: may be null
+      let items: Vec<i32> = []
       let small: i8 = 127      # ok
       let bad: i8 = 300        # panics with OutOfRange
 
@@ -371,32 +372,41 @@ Table of Contents
 
    A type is a name, optionally parameterised by other types:
 
-      type = name [ "<" type *( "," type ) ">" ] [ "?" ] / "()"
+      type = name [ "<" type *( "," type ) ">" ] *( "[]" / "?" )
+           / "()"
 
    The built-in names are bool, char, str, i8, i16, i32, i64, i128,
-   isize, u8, u16, u32, u64, u128, usize, f32, f64, (), Vec, Tuple,
-   HashSet, HashMap, Range, Future, Channel and Any; an identifier
-   names a user or host type and, if unrecognised, is treated as Any.
+   isize, u8, u16, u32, u64, u128, usize, f32, f64, (), Option, Vec,
+   Tuple, HashSet, HashMap, Range, Future, Channel and Any; an
+   identifier names a user or host type and, if unrecognised, is
+   treated as Any.
    The primitive names in the list are keywords (Section 2.4); the
    container names are ordinary identifiers.  i8 through i128, u8
    through u128, isize and usize are the integer widths, and f32 and
    f64 are the float widths; the default width of an unannotated value
-   is i64 or f64.  char names a one-element str
+   is i32 or f64.  char names a one-element str
    (a value of any other length is OutOfRange), and () is the unit
    type of the empty tuple.  Vec, HashMap and Channel carry element
-   types (Channel<i64> is the element type of chan i64, Section 3.6);
-   T? is the nullable marker for a value that may be null.  The
-   language defines no subtyping beyond its built-in kinds.
+   types (Channel<i64> is the element type of chan i64, Section 3.6).
+   T? is sugar for Option<T>, the nullable type of a value that may be
+   null, and T[] is sugar for Vec<T>.  Suffixes apply in the order
+   written, so T[]? is Option<Vec<T>> and T?[] is Vec<Option<T>>.  A
+   type name followed by parenthesised arguments is a constructor of
+   that type, as in Vec<i64>(), i64("42") and Point(x = 1.0)
+   (Section 3.8).  The language defines no subtyping beyond its
+   built-in kinds.
 
 3.  Types and Values
 
 3.1.  Value Model
 
-   Values are dynamically typed.  A value belongs to exactly one of the
-   following kinds: null, bool, integer, float, str, Vec, Tuple,
-   HashSet, HashMap, function, Future or Channel.  An integer is a
-   64-bit signed value and a float is binary64 unless a type
-   annotation (Section 2.8) narrows it.  There is no implicit
+   Types are static: every value has one type, known where it is
+   written.  An unannotated name does not lack a type; it takes the
+   type inferred for it (Section 2.8).  A value belongs to
+   exactly one of the following kinds: null, bool, integer, float, str,
+   Vec, Tuple, HashSet, HashMap, function, Future or Channel.  An
+   integer is a 32-bit signed value and a float is binary64 unless a
+   type annotation (Section 2.8) narrows it.  There is no implicit
    conversion between numeric kinds except where an operator states
    one; text is never silently coerced to a number and a number is
    never silently coerced to text.
@@ -484,6 +494,33 @@ Table of Contents
       let all = [1, 2, ...tail]          # [1, 2, 3, 4]
       fn add(a, b, c, d) { a + b + c + d }
       add(1, ...all)                     # 1 + 2 + 3 + 4
+
+3.8.  struct: Composite Types
+
+   A struct declares a composite type: a named record of fields, each
+   field carrying a type.  A field type is a primitive or another
+   struct; the value is therefore a combination of primitives.  A
+   struct value may be stored in any container -- Vec<Point>,
+   HashMap<str, Point>, HashSet<Point> -- and the container rules of
+   Sections 3.2 and 3.3 then apply.
+
+      struct Point {
+         x: f64
+         y: f64
+      }
+
+      let p: Point = Point(x = 1.0, y = 2.0)
+      let path: Vec<Point> = Vec<Point>([])
+      p.x = 3.0                        # a field is a member
+
+   A struct is a type name: it may annotate a name, a parameter or a
+   return, and it is the type of every value built by its
+   constructor.  The constructor is the type name followed by
+   arguments; a field is given by name, as any call may bind a
+   parameter (Section 7.5), or by position in declaration order.  A
+   field is read and written with the member syntax of Section 5.1.
+   Structs are nominal: two structs are the same type only if they are
+   the same declaration.
 
 4.  Operators and Precedence
 
@@ -584,26 +621,46 @@ Table of Contents
 
 6.  Statements, Control Flow and Concurrency
 
-6.1.  Separation and Blocks
+   This section defines the statements of the language.  Section 6.1
+   covers separation, blocks and conditions, and the sequential control
+   flow built on them; Section 6.2 the failure model; Sections 6.3 to
+   6.8 the concurrency constructs; and Section 6.9 cancellation.
 
-   A statement is terminated by a newline or by one semicolon.  An empty
-   statement is a syntax error.  A block is a sequence of statements
-   enclosed in braces; it introduces a new lexical scope nested in the
-   scope that encloses it.  At statement position "{" always begins a
-   block, even though "{" at expression position begins a literal.
+6.1.  Separation, Blocks and Conditions
 
-   Parentheses around a statement header MAY be omitted without changing
-   meaning, with one exception: the C-style "for" header (Section 6.1.5)
-   REQUIRES parentheses.
+   A statement is terminated by a newline or by one semicolon.  An
+   empty statement is a syntax error; where a block must do nothing it
+   is written empty, "{ }", or holds a single pass (Section 6.1.8).  A
+   block is a sequence of statements enclosed in braces; it introduces
+   a new lexical scope nested in the scope that encloses it.  At
+   statement position "{" always begins a block, even though "{" at
+   expression position begins a literal.
+
+   Parentheses around a statement header MAY be omitted without
+   changing meaning, with one exception: the counted "for" header
+   (Section 6.1.6) REQUIRES them.  The subject of match (Section 6.1.2)
+   is likewise always parenthesised.
 
    The compound statements if, elif, else, for, while, loop, do, try,
-   except, finally, match, race, select and on open a block; so do fn
-   and the arrow body when it is a block.
+   except, finally, match, race, select, par and on open a block; so do
+   fn, a case arm, an until body and the arrow body when it is a block.
 
-   Control flow leaves the current function with return or panic, or at
-   top level ends the program.  Any loop head -- while, loop, do-while
-   and both forms of for -- MAY carry an until clause (Section 6.9)
-   that gates loop exit on an event.
+   Conditions.  Every condition in this section -- those of if and
+   elif, of while and do-while and of the counted for, and the guard of
+   a case arm -- MUST be of type bool.  A value of any other type is
+   never converted to bool: a number, a text, a container, a future or
+   null in a condition is a type error, which an implementation MUST
+   report before the program runs.  A test is therefore written out:
+   x != null, len(xs) > 0, k in table, or an explicit conversion
+   bool(x).  The operands of and, or and not are bool for the same
+   reason, and the rule governs the ternary condition (Section 5.3) and
+   a comprehension filter (Section 5.4) as well.
+
+   A condition is evaluated each time control reaches it and not
+   before: a while condition is tested before every iteration, a
+   do-while condition after every iteration, and an if condition once
+   per execution of the if.  A loop condition that is never reached --
+   the condition of a do-while whose body breaks out -- is not tested.
 
 6.1.1.  if / elif / else
 
@@ -615,118 +672,293 @@ Table of Contents
          log("zero")
       }
 
-   Exactly one branch runs: the first whose condition is true, or the
-   else branch when no condition holds.  elif and else are optional; an
-   if with no else that matches nothing simply does nothing.  The
-   condition is any expression; a non-boolean condition is true when it
-   is not null and not the number 0.
+   The conditions are tested in order and testing stops at the first
+   one that is true.  Exactly one branch runs: that branch, or the else
+   branch when no condition holds.  The branches that are not taken are
+   not evaluated.  elif and else are optional; an if with no else whose
+   conditions all fail does nothing.  elif is one keyword; "else if"
+   opens a second if inside the else block and means the same thing.
 
-6.1.2.  while
+6.1.2.  match / case
 
-      while n > 0 { n -= 1 }
-      while (n > 0) { n -= 1 }
+      match (status) {
+         case 0 {
+            "idle"
+         }
+         case 1 {
+            "run"
+         }
+         case n if n > 10 {
+            "fast"
+         }
+         case [a, b] {
+            a + b
+         }
+         case _ {
+            "unknown"
+         }
+      }
+
+   The subject is evaluated once and is written in parentheses, which
+   are REQUIRED here.  The cases are tried in textual order and exactly
+   one wins: the first whose pattern matches and whose guard, if any,
+   is true.  There is no fall-through; the cases after the winner are
+   not tried.  The value of the match is the value of the winning
+   case's body, or null when no case matches, so a program that means
+   to cover every case SHOULD end with case _.  At least one case is
+   REQUIRED.  Patterns are:
+
+   *  a literal: a number, text, boolean or null, matched by value;
+
+   *  a sequence [p1, p2]: matched against a list or a tuple of the
+      same length, binding the elements to the sub-patterns;
+
+   *  a capture name: matches anything and is bound to the whole
+      value; and
+
+   *  the wildcard _: matches anything and binds nothing.
+
+   A bare name is therefore always a capture and never a constant:
+   case n binds whatever the subject is.  A capture and _ may also
+   appear inside a sequence pattern.  A case MAY carry a guard, "case
+   PATTERN if guard { }": the pattern is tried first and the guard is
+   evaluated only when it matches, so the case is taken only when both
+   hold.  A case body is a block written without a colon; a colon after
+   the pattern is a syntax error.  A name bound by a pattern is local
+   to the case body; where the same name is bound outside, the capture
+   introduces a new binding inside the body and leaves the outer one
+   untouched.
+
+6.1.3.  while
+
+      while n > 0 {
+         n -= 1
+      }
+
+      while (n > 0) {
+         n -= 1
+      }
 
    The condition is evaluated before each iteration; the body runs
-   while it is true.  A while whose condition is false on entry runs
-   zero times.  The loop exits with break, return or a failure, or by
-   an until clause (Section 6.9).
+   while it is true, so a while runs zero or more times.  The loop is
+   left through break (Section 6.1.8), return (Section 6.1.9), a
+   failure (Section 6.2) or an until clause (Section 6.1.7).
 
-6.1.3.  loop
-
-   "loop { ... }" repeats unconditionally and exits only through break,
-   return or a failure.  It takes no condition and runs at least once.
+6.1.4.  loop
 
       loop {
          if done() { break }
          step()
       }
 
-6.1.4.  do...while
+   "loop { ... }" repeats unconditionally: it has no condition, runs at
+   least once and is left only through break, return, a failure or an
+   until clause.  It is the form for a cycle whose end is decided
+   inside the body; "while true { ... }" says the same thing and is
+   equally legal.
 
-      do { n -= 1 } while (n > 0)
+6.1.5.  do...while
 
-   The body executes at least once, then the condition is tested; the
-   loop repeats while it is true.  continue jumps to the condition;
-   break leaves the loop.  A do-while MAY carry an until clause, which
-   is written after the condition:
+      do {
+         n -= 1
+      } while (n > 0)
 
-      do { sample() } while running() until "stop" { break }
+   The body runs once, then the condition is tested; the loop repeats
+   while it is true, so it runs one or more times.  continue jumps to
+   the condition, and break leaves the loop.  The header MAY carry an
+   until clause (Section 6.1.7), normally written after the condition,
+   because the body, during which events are captured, has already run
+   once when the clause is reached:
 
-6.1.5.  for: Iterable and C-Style
+      do {
+         sample()
+      } while running()
+
+6.1.6.  for: Iterable and Counted
 
    Iterable form.  "for t in coll { ... }" binds t to each element of
    coll in turn; coll MAY be a list, tuple, set, dictionary, range or
-   any iterable.  For a dictionary the loop variable is the key, or a
-   k, v pair may be bound:
+   any iterable, and it is evaluated once, before the first iteration.
+   For a dictionary the loop variable is the key, or a k, v pair may be
+   bound:
 
-      for i in [1, 2, 3] { log(i) }
-      for k, v in table.items() { log(k, v) }
-      for (k, v) in pairs { log(a, b) }
+      for i in [1, 2, 3] {
+         log(i)
+      }
+
+      for k, v in table.items() {
+         log(k, v)
+      }
+
+      for (k, v) in pairs {
+         log(k, v)
+      }
 
    The target MAY destructure, with or without parentheses; a single
    variable MAY be wrapped in a redundant pair of parentheses.  The
-   target's bindings are local to the loop.
+   target's bindings are local to the loop.  Modifying coll while the
+   loop runs is not defined by this document; a program MUST NOT rely
+   on what such a loop sees.
 
-   C-style form.  "for (init; cond; update) { ... }" mirrors C; the
-   parentheses are mandatory and all three clauses MAY be omitted
-   (for (;;) { } is an infinite loop):
+   Counted form.  "for (init; cond; update) { ... }" runs init once,
+   then repeats the body while cond is true, running update after each
+   iteration; the parentheses are mandatory and all three clauses MAY
+   be omitted, an omitted condition being taken as true:
 
-      for (let i = 0; i < n; i += 1) { log(i) }
-      for (;;) { if done() { break } }
+      for (let i = 0; i < n; i += 1) {
+         log(i)
+      }
 
-   The initialiser MAY be a declaration or an assignment; "let" is
-   RECOMMENDED because "var" writes to the root scope, where a repeated
-   declaration in the same scope is an error.  continue still executes
-   the update clause before the next iteration; break leaves the loop.
-   Both forms MAY carry an until clause (Section 6.9).
+      for (;;) {
+         if done() {
+            break
+         }
+      }
 
-6.1.6.  break, continue and pass
+   The initialiser MAY be a declaration or an assignment; a name it
+   declares is local to the whole loop, header and body alike.  "let"
+   is RECOMMENDED because "var" writes to the root scope, where a
+   repeated declaration in the same scope is an error.  continue still
+   executes the update clause before the next condition test; break
+   leaves the loop.  Both forms MAY carry an until clause
+   (Section 6.1.7).
 
-   "break" leaves the innermost enclosing loop (or, inside a match, the
-   match), "continue" starts its next iteration, and "pass" is a no-op
-   placeholder statement that does nothing.  In a loop with an until
-   clause, break and continue also apply inside the until body with the
-   meaning given in Section 6.9.
+6.1.7.  until: Event-Gated Loop Exit
 
-6.1.7.  return
+   The until clause applies to every loop head uniformly -- while,
+   loop, do-while and both forms of for -- and appears at most once on
+   a head.  It gates a loop on an event captured in the loop's own
+   cycle, instead of, or in addition to, its condition:
+
+      while <cond> until "event.foo" [as bar] { ... }
+      loop     until "event.foo" [as bar] { ... }
+      for t in coll until "event.foo" [as bar] { ... }
+      for (init; cond; update) until "event.foo" [as bar] { ... }
+      do { ... } while <cond> until "event.foo" [as bar] { ... }
+      do { ... } until "event.foo" [as bar] { ... } while <cond>
+
+   A cycle is one iteration of the loop: the running of the body, and
+   for a counted loop the update and the condition test.  until opens
+   its subscription when the loop is entered and closes it when the
+   loop is left; every matching event that arrives during a cycle is
+   appended to that cycle's buffer, and the buffer is discarded when
+   the cycle ends.  until does NOT wait: at the end of the cycle it
+   inspects the buffer and
+
+   *  when the cycle captured no matching event, the until body is
+      skipped and the loop proceeds straight to its next iteration or,
+      for while and the counted for, to the next condition test;
+
+   *  when the cycle captured one or more matching events, the until
+      body runs once, with the earliest of them -- the first captured
+      -- bound as below.  Later events of the same cycle are ignored
+      by until.
+
+   What the until body does then decides the loop's fate:
+
+   *  (fall-through) if the until body finishes without a break or a
+      continue, it is as if a break were inserted at its end: the loop
+      is left.  To leave directly when an event occurred, with no
+      action, write an empty until body: } until "event.foo" { };
+
+   *  continue: control returns to the loop to run its next iteration,
+      which opens a fresh cycle buffer;
+
+   *  break: the loop is left immediately, as it would be from the loop
+      body.
+
+   For a do-while loop the until clause normally follows the condition,
+   for the reason given in Section 6.1.5.  Written before the condition
+   instead, it is checked first: the until check precedes the condition
+   test, so an event taken in the body may end the loop before the
+   condition is ever evaluated.
+
+   The topic is a string, an array of strings, or a single string using
+   OCP topic wildcards [RFC0004], Section 6.5.2, where "+" matches one
+   level and "#" every level beneath it.  Each element of an array may
+   be a strict topic or a wildcard, and the two MAY be mixed freely;
+   several topics or wildcards may fire in one cycle, and the
+   first-captured event is the one bound, as above:
+
+      loop until ["motor.a", "motor.+"] as e { ... } # strict + wildcard
+      loop until "sensor.+.temp"       as e { ... }  # OCP wildcard
+
+   The optional as bar binds the first-captured event's payload to bar
+   for the duration of the until body; the body may read bar's members.
+   When as bar is omitted the payload is bound to the implicit name _,
+   as in on (Section 6.7) and wait (Section 6.8).  The binding is local
+   to the until body; reading the captured value through _ is not
+   recommended, and a program SHOULD bind a name with as instead.
+
+   An until clause never changes the loop's own condition; the loop may
+   also be left through that condition, return, break or a failure.
+   The subscription behind an until clause belongs to the loop's task
+   and is therefore cancelled with it (Section 6.9); a panic inside the
+   until body propagates to the loop's task.
+
+6.1.8.  break, continue and pass
+
+   "break" leaves the innermost enclosing breakable construct: a loop,
+   or the match (Section 6.1.2) when the break stands in one of its
+   case bodies.  The blocks of if and try and the arms of select do not
+   trap break; it crosses them to reach that construct, so a break in a
+   select arm inside a loop leaves the loop.  "continue" starts the
+   next iteration of the innermost enclosing loop: in the counted for
+   it runs the update clause first, in a do-while it jumps to the
+   condition, and in an until body it returns control to the loop
+   (Section 6.1.7).  A break or a continue with nothing to leave is a
+   syntax error.
+
+   "pass" is a no-op statement: it does nothing, and exists so that a
+   branch which is meant to do nothing says so.  An empty block is
+   likewise legal where a block is required.
+
+6.1.9.  return
 
    "return" with a value returns it; "return" without a value yields
    null.  A return propagates out of any nesting of blocks, loops and
-   try statements -- an except clause does not intercept it, while a
-   finally clause still runs.  If a function body finishes without an
-   explicit return, the value of its last statement is returned; if it
-   finishes with no value, the function returns null.  An uncaught
-   return at the top level of a program terminates the program.
+   try statements: an except clause does not intercept it, while a
+   finally clause still runs on the way out.  A return inside a finally
+   clause supersedes the one in flight.  If a function body finishes
+   without an explicit return, the value of its last statement is
+   returned; if that statement has no value, the function returns null.
+   Inside a task (Section 6.3), return resolves the task's future with
+   that value.  A return at the top level of a program terminates the
+   program.
 
-6.1.8.  match / case
+6.2.  Failure: panic, try and except
 
-      match (status) {
-      case 0 { "idle" }
-      case 1 { "run" }
-      case n if n > 10 { "fast" }
-      case [a, b] { a + b }
-      case _ { "unknown" }
-      }
+   panic kind raises a failure carrying a kind, which is a text value
+   naming the class of error; an optional second argument carries a
+   human-readable message.
 
-   The value of a match is the selected case's value, or null if no
-   case matches.  At least one case is REQUIRED.  Patterns are:
+      panic "HardwareError" "motor stalled"
 
-   *  a literal: a number, text, boolean or null, matched by value;
+   A panic abandons the statement that raised it: the statements after
+   it in the same block do not run.  try { body } except Kind as e {
+   handler } finally { cleanup } catches a panic raised by body whose
+   kind equals Kind, exactly; the optional as e binds the panic object,
+   whose members are kind and message.  A try MAY carry several except
+   clauses, which are tried in textual order and of which at most one
+   runs; a bare except catches any kind and, when present, SHOULD come
+   last, since a clause after it could never run.  An except clause
+   does not catch a panic raised by another except clause, and a panic
+   raised in finally supersedes the failure in flight.  finally runs
+   whether the body panicked or not, and also when the body is left by
+   return, break or continue.
 
-   *  a sequence [p1, p2]: matched against a list or tuple of the same
-      length, binding the elements;
+   A panic that no try catches propagates to the nearest enclosing task
+   and fails its future (Section 6.3).  An uncaught panic in a handler
+   started by on (Section 6.7) is reported on the runtime topic
+   core.error [RFC0004], Section 9.2.1, and the subscription survives.
+   An uncaught panic in the top-level task ends the program and is
+   reported on core.error.
 
-   *  a capture name: bound to the whole value; and
+   The kinds a program MUST be prepared to catch are the OCP error-code
+   names of Section 9.5 and the built-in kinds Timeout, Cancel and
+   OutOfRange (Section 2.8).
 
-   *  the wildcard _: matches anything and binds nothing.
-
-   A case MAY carry a guard: "case PATTERN if guard { }"; the case is
-   taken only when the pattern matches and the guard is true.  A case
-   body is a block written without a colon; a colon is a syntax error.
-   Capture names are local to the case and do not shadow outer
-   bindings.
-
-6.2.  Tasks, spawn and await
+6.3.  Tasks, spawn and await
 
    A task is a unit of concurrent execution.  The program itself runs
    as one task.  New tasks are started with spawn:
@@ -735,7 +967,10 @@ Table of Contents
 
    spawn evaluates its operand in a new task and returns a future
    (Section 3.5) immediately; the caller's task is not suspended.  The
-   future resolves with the task's result or fails with its panic.
+   operand is normally a call: its arguments are evaluated in the
+   current task and the call itself runs in the new one.  The future
+   resolves with the task's result or fails with its panic.  Discarding
+   the future does not cancel the task.
 
    await suspends the current task until a future resolves, then yields
    its value or re-raises its panic:
@@ -743,23 +978,66 @@ Table of Contents
       let result = await f
       let temp = await sense("temp")      # a device call is a future
 
-   await may appear in any task, including the top-level one.  A task
-   that awaits several futures does so one at a time; to await them
-   together, spawn each and race or select over the futures.
+   A future keeps its outcome: awaiting one that has already resolved
+   yields the same value again, and awaiting one that has already
+   failed re-raises the same panic.  await may appear in any task,
+   including the top-level one.  A task that awaits several futures
+   does so one at a time; to await them together, spawn each and race
+   (Section 6.5) or select (Section 6.6) over the futures, or run them
+   as the branches of a par block (Section 6.4).
 
-   within bounds an await.  await f within d suspends until f resolves
-   or until d seconds pass, whichever is first; if the timeout wins the
-   await yields null and f is cancelled.  Without await, expr within d
-   is sugar for race { expr; sleep d }: it races the value-producing
-   expression against a timeout and yields the expression's value, or
-   null if the timeout wins.
+   The within operator bounds an await.  await f within d suspends
+   until f resolves or until d seconds pass, whichever is first; if the
+   timeout wins the await yields null and f is cancelled.  Without
+   await, expr within d is sugar for race { expr; sleep d }: it races
+   the value-producing expression against a timeout and yields the
+   expression's value, or null if the timeout wins.
 
    A task that finishes is joined automatically; its result is held by
    its future for as long as the future is reachable.  A top-level
    program does not end until every task it started, directly or
    transitively, has resolved, failed or been cancelled.
 
-6.3.  race: Racing Outcomes
+6.4.  par: Parallel Blocks
+
+   par runs several statements at once and waits for all of them to
+   finish.  Each top-level statement in a par block starts as its own
+   task, concurrently with the others and with the enclosing task; par
+   then suspends the enclosing task until every branch has resolved,
+   panicked or been cancelled:
+
+      par {
+         move_arm("home")
+         await sense("grip")      # each branch may await
+         log_status()
+      }
+
+   A branch is any statement.  The last statement of a branch that is
+   an expression yields that value, and par yields an array of the
+   branch values in textual order; a branch with no value contributes
+   null.  A name declared with let or const inside a branch is local to
+   that branch's task and is not visible outside it, and so is a name
+   bound by as or by the implicit _.
+
+   Branches share the enclosing scope, so a branch MAY read and assign
+   a variable declared outside the par block.  Such a shared assignment
+   is a data race when two or more branches write the same variable;
+   the result is then indeterminate and a program MUST NOT rely on it.
+   Reading a variable another branch may write, unsynchronised, is
+   likewise a data race.
+
+   par joins all branches: it does not return until the last has
+   resolved.  If a branch panics, the other branches are cancelled
+   (Section 6.9) and par re-raises the panic of the branch that appears
+   first in the block among those that panicked.  A panic in a branch
+   reaches the enclosing task as if the branch had run there.
+
+   If the enclosing task is cancelled while par waits, par cancels
+   every branch and the cancellation surfaces as a Cancel failure in
+   the enclosing task (Section 6.9).  par takes no until clause; the
+   gating of a loop is the province of Section 6.1.7.
+
+6.5.  race: Racing Outcomes
 
    race runs several branches concurrently and keeps the value of the
    first branch that resolves; every other branch is cancelled.
@@ -772,16 +1050,20 @@ Table of Contents
 
    The block contains one or more expressions or statements; each is
    started as a task.  race returns the value of the first branch that
-   resolves.  Branches that are still pending when a winner resolves are
-   cancelled (Section 6.7).  If every branch fails, race re-raises the
-   panic of the first branch to fail, in textual order.  A branch that
-   is a statement with no value resolves with null.
+   resolves.  Branches that are still pending when a winner resolves
+   are cancelled (Section 6.9).  A branch that is a statement with no
+   value resolves with null, and null is then a value that can win the
+   race; a timeout arm expressed as sleep d wins the same way.  If
+   every branch fails, race re-raises the panic of the branch that
+   appears first in the block among those that failed.
 
    race is the construct for the common robotic question "which of
    these reaches a result first": the faster sensor, the first
-   actuator to confirm, or a status reply before a timeout.
+   actuator to confirm, or a status reply before a timeout.  A timeout
+   is written either as a sleep branch of the race or, more compactly,
+   with within (Section 6.3).
 
-6.4.  select: Waiting on Events, Channels and Time
+6.6.  select: Waiting on Events, Channels and Time
 
    select waits for the first of several independent outcomes and runs
    the arm that won.  Each arm is one of:
@@ -793,15 +1075,16 @@ Table of Contents
       default:        run immediately if no other arm is ready
 
    The arms are written as a block; each arm is a label followed by a
-   block:
+   block.  A select with no arm would wait forever, so a program SHOULD
+   write at least one; at most one default arm is permitted:
 
       select {
-         on "device.fault" {
-            fault = it
+         on "device.fault" as fault {
+            latch(fault)
             stop_all()
          }
-         recv cmd_chan {
-            handle(it)
+         recv cmd_chan as cmd {
+            handle(cmd)
          }
          after 2.0 {
             retry()
@@ -817,13 +1100,19 @@ Table of Contents
    becomes ready.  After the chosen arm's block has run, the other arms
    are abandoned; pending sends or receives in them are not completed.
 
-   on in a select is a one-shot wait for a single event; the persistent
-   subscription form is on (Section 6.5).  The event data is bound to
-   the implicit name it, or to an explicit as name after the topic;
-   the binding MAY be omitted when the data is unused.  A recv arm
-   binds the received value to it, or to its as name, in the same way.
+   In a send arm the value is computed and the send is performed when
+   the arm is chosen, immediately before its block runs; an arm that is
+   not chosen sends nothing.  An after arm is a timer of the same kind
+   as sleep (Section 6.8), started when the select begins to wait.
 
-6.5.  on: Persistent Event Subscriptions
+   on in a select is a one-shot wait for a single event; the persistent
+   subscription form is on (Section 6.7).  The event data is bound to
+   an explicit as name after the topic; without one it is bound to the
+   implicit name _.  A recv arm binds the received value the same way.
+   Reading the captured value through _ is not recommended; a program
+   SHOULD bind a name with as and read that instead.
+
+6.7.  on: Persistent Event Subscriptions
 
    on subscribes to a topic for the life of the program or until the
    subscription is cancelled, and runs a handler task for every event
@@ -836,18 +1125,23 @@ Table of Contents
    Each arriving EVENT for a matching topic starts a new task running
    the handler; handler tasks run concurrently with the main flow and
    with one another.  The handler names the event data with as ev or
-   uses the implicit binding it; if the handler panics, the panic is
-   reported on the
+   uses the implicit binding _.  Reading the captured value through _
+   is not recommended; a program SHOULD bind a name with as and read
+   that instead.  If the handler panics, the panic is reported on the
    runtime topic core.error [RFC0004], Section 9.2.1, and the
-   subscription survives.  on returns a subscription handle, and
-   sub.cancel() sends UNSUBSCRIBE [RFC0004], Section 5.6 and stops
-   further handlers.
+   subscription survives.
+
+   on is an expression: it yields a subscription handle, which a
+   program SHOULD bind so that it can cancel the subscription later.
+   sub.cancel() sends UNSUBSCRIBE [RFC0004], Section 5.6, so that no
+   further event starts a handler; handler tasks already running are
+   cancelled (Section 6.9).
 
    The topic MAY contain the wildcards + and # exactly as [RFC0004],
    Section 6.5.2 defines: "device.+" matches one level, "device.#"
    matches every level beneath device.
 
-6.6.  Timing: sleep and wait
+6.8.  Timing: sleep and wait
 
    sleep dur suspends the current task for dur seconds, then yields
    null.  dur is a number; fractional seconds are permitted.  sleep
@@ -857,13 +1151,16 @@ Table of Contents
       sleep 0.5          # pause half a second
 
    wait topic suspends the current task until the next EVENT on topic
-   arrives and yields its data; it is sugar for a one-arm select:
+   arrives and yields its data; it is sugar for a one-arm select
+   (Section 6.6):
 
       let ev = wait "device.status"
       let fault = wait "device.fault"
 
    The block form runs its body once with the payload bound by as, or
-   to it when as is omitted:
+   to _ when as is omitted.  Reading the captured value through _ is
+   not recommended; a program SHOULD bind a name with as and read that
+   instead.
 
       wait "device.fault" as fault {
          latch_fault(fault.name)
@@ -871,158 +1168,37 @@ Table of Contents
 
    wait is a one-shot subscriber: it does not outlive the call and
    does not require an explicit unsubscribe.  A wildcard topic is
-   accepted and matches the first concrete event it receives.
+   accepted and matches the first concrete event it receives.  A wait
+   that is given no way to end -- no event and no timeout -- suspends
+   until one arrives; a bounded wait is written with the after arm of
+   select or, for a future, with within (Section 6.3).
 
-6.7.  Cancellation
+6.9.  Cancellation
 
    cancel(future) requests cancellation of the task behind a future or
    of a subscription handle.  For a future that is a device CALL it is
    implemented by the cancel procedure of the Core Profile: the
    implementation sends CALL {name: "cancel", args: {"id": <the CALL's
    id>}} to the device, which answers whether the cancellation took
-   (RFC0004, Sections 5.4 and 9.1.4).  Cancellation is cooperative for a
-   local task: the task observes the request at the next await, sleep,
-   select or device call and then stops; work already dispatched to a
-   device is not recalled, because a CALL that has left the host is
-   allowed to run to its RESULT (RFC0004, Section 6.4.4), which the
-   cancel procedure then reports as not taken.  A cancelled task settles
-   its future as failed with the kind Cancel.
+   (RFC0004, Sections 5.4 and 9.1.4).  Cancellation is cooperative for
+   a local task: the task observes the request at the next await,
+   sleep, select or device call and then stops; work already dispatched
+   to a device is not recalled, because a CALL that has left the host
+   is allowed to run to its RESULT (RFC0004, Section 6.4.4), which the
+   cancel procedure then reports as not taken.  A cancelled task
+   settles its future as failed with the kind Cancel.  Cancelling a
+   future that has already settled, or a subscription that is already
+   cancelled, does nothing.
 
-   race (Section 6.3) cancels the losers, and select (Section 6.4)
-   abandons the arms it did not choose; both use the same cooperative
-   mechanism.  A handler started by on is cancelled when its
-   subscription is cancelled.
+   race (Section 6.5) cancels the losers, select (Section 6.6)
+   abandons the arms it did not choose, par (Section 6.4) cancels its
+   branches when the enclosing task is cancelled, and a handler started
+   by on (Section 6.7) is cancelled with its subscription; all four use
+   the same cooperative mechanism.
 
    A task that ignores cancellation -- one that never awaits, sleeps,
    selects or calls a device -- cannot be stopped by the host; a
-   program SHOULD not write such a task on a long-running path.
-
-6.8.  Failure: panic, try and except
-
-   panic kind raises a failure carrying a kind, which is a text value
-   naming the class of error; an optional second argument carries a
-   human-readable message.
-
-      panic "HardwareError" "motor stalled"
-
-   try { body } except Kind as e { handler } finally { cleanup }
-   catches a panic whose kind equals Kind; the optional as e binds the
-   panic object, whose members are kind and message.  A bare except
-   catches any kind.  finally runs whether the body panicked or not.  A
-   panic not caught by any try propagates to the nearest enclosing task
-   and fails its future; an uncaught panic in the top-level task ends
-   the program and is reported on core.error.
-
-   The kinds a program MUST be prepared to catch are the OCP error-code
-   names of Section 9.5 and the built-in kinds Timeout and Cancel.
-
-6.9.  until: Event-Gated Loop Exit
-
-   The until clause applies to every loop head uniformly -- while,
-   loop, do-while and both forms of for.  It lets a loop be gated on an
-   an event captured in the loop's own cycle, instead of, or in addition
-   to its condition:
-
-      while cond until "event.foo" as bar { ... }
-      loop until "event.foo" { ... }
-      for x in coll until "event.foo" { ... }
-      for (init; cond; update) until "event.foo" { ... }
-      do { body } while cond until "event.foo" as bar { ... }
-
-   For a do-while loop the until clause is written after the condition,
-   because the body, during which events are captured, has already run
-   once before the until clause is reached.
-
-   until does NOT wait.  During each loop cycle -- the running of the
-   body, and for a counted loop the update and condition test -- every
-   event published on the named topic or topics is captured into that
-   cycle's buffer.  When the cycle ends, the until clause inspects the
-   buffer:
-
-   *  no matching event in the cycle: the until body is skipped and the
-      loop proceeds straight to its next iteration (or, for while/for,
-      to the next condition test);
-
-   *  one or more matching events in the cycle: the until body runs
-      once, with the first-captured event bound (as below).  If
-      several events matched, the earliest one -- the first captured --
-      is the one used; later ones in the same cycle are ignored by
-      until.
-
-   What the until body does then decides the loop's fate:
-
-   *  (fall-through) if the until body finishes without a break or a
-      continue, it is as if a break were inserted at its end: the loop
-      exits.  To exit directly when an event occurred, with no action,
-      write an empty until body: } until "event.foo" { };
-
-   *  continue: control returns to the loop to run its next iteration,
-      which opens a fresh cycle buffer;
-
-   *  break: the loop exits immediately, as it would from the loop
-      body.
-
-   The topic is a string, an array of strings, or a single string using
-   OCP topic wildcards.  Each element of an array may be a strict topic
-   or a wildcard, and the two MAY be mixed freely.  A wildcard (for
-   example + and #, per the OCP spec) lets a whole family of topics
-   match; several topics or wildcards may fire, and on multiple matches
-   within one cycle the first-captured event is the one bound, as above.
-   Examples:
-
-      loop until ["motor.a", "motor.+"] as e { ... } # strict + wildcard
-      loop until "sensor.+.temp"       as e { ... }  # OCP wildcard
-
-   The optional as bar binds the first-captured event's payload to bar
-   for the duration of the until body; the body may read bar's members.
-   When as bar is omitted the payload is bound to the implicit name it,
-   as in on and wait.  The binding is local to the until body.
-
-   An until clause never changes the loop's own condition; the loop may
-   also exit through that condition, return, break or a failure.  The
-   capture behind an until clause is part of the loop task and is
-   therefore cancelled with it (Section 6.7); a panic inside the until
-   body propagates to the loop's task.
-
-6.10.  par: Parallel Blocks
-
-   par runs several statements at once and waits for all of them to
-   finish.  Each top-level statement in a par block starts as its own
-   task, concurrently with the others and with the enclosing task; par
-   then suspends the enclosing task until every branch has resolved,
-   panicked or been cancelled:
-
-      par {
-         move_arm("home")
-         await sense("grip")      # each branch may await
-         log_status()
-      }
-
-   A branch is any statement.  The last statement of a branch that is an
-   expression yields that value, and par yields an array of the branch
-   values in textual order; a branch with no value contributes null.
-   The binding of "it" and of as names is local to each branch, a
-   name declared with let or const inside a branch is local to that
-   branch's task and is not visible outside it.
-
-   Branches share the enclosing scope, so a branch MAY assign to a
-   variable declared outside the par block.  Such shared assignment is a
-   data race when two or more branches write the same variable; the
-   result is then indeterminate and a program MUST NOT rely on it.
-   Reading a variable another branch may write, unsynchronised, is
-   likewise a data race.
-
-   par joins all branches: it does not return until the last has
-   resolved.  If a branch panics, the other branches are cancelled
-   (Section 6.7) and par re-raises the panic of the first branch to
-   panic, in textual order.
-   A panic in a branch reaches the enclosing task as if the branch had
-   run there.
-
-   If the enclosing task is cancelled while par waits, par cancels every
-   branch and the cancellation surfaces as a Cancel failure in the
-   enclosing task (Section 6.7).  par takes no until clause; loop exits
-   are the province of Section 6.9.
+   program SHOULD NOT write such a task on a long-running path.
 
 7.  Functions, Scope and Arguments
 
@@ -1415,9 +1591,9 @@ Table of Contents
    tuples as [a, b], sets as {a, b}, dictionaries as {k: v}.  A value
    with a fmt member MAY supply its own text form.  The ${...} marker
    of an interpolated string accepts any single-line expression that
-   contains no meaningful braces.  A format spec modelled on Rust's
-   follows a colon, but only on a bare variable or on an expression
-   enclosed in parentheses; any other expression MUST be parenthesised
+   contains no meaningful braces.  A format spec, written after a
+   colon, follows only on a bare variable or on an expression enclosed
+   in parentheses; any other expression MUST be parenthesised
    to carry one, so a spec is never ambiguous.  The spec is ${x:spec}
    where spec is
 
@@ -1431,13 +1607,13 @@ Table of Contents
    Numbers default to right alignment and text to left; the default
    fill is a space.  Examples:
 
-      "${rate:.2}"     # "3.14"
-      "${id:6}"        # "    42"
-      "${id:<6}"       # "42    "
-      "${id:06}"       # "000042"
-      "${n:#06x}"      # "0x002a"
-      "${name:.3}"     # first three characters
-      "${(a + b):.2}"  # spec on a parenthesised expression
+      `rate ${rate:.2}`      # "rate 3.14"
+      `id [${id:6}]`         # "id [    42]"
+      `id [${id:<6}]`        # "id [42    ]"
+      `id ${id:06}`          # "id 000042"
+      `n ${n:#06x}`          # "n 0x002a"
+      `na ${name:.3}`        # first three characters
+      `sum ${(a + b):.2}`    # spec on a parenthesised expression
 
 11. Error Model and Diagnostics
 
@@ -1485,9 +1661,9 @@ Table of Contents
       let cmd_chan = chan str(4)
       loop {
          select {
-            recv cmd_chan {
-               if it == "halt" { break }
-               await actuate("drive", it)
+            recv cmd_chan as cmd {
+               if cmd == "halt" { break }
+               await actuate("drive", cmd)
             }
             on "device.fault" {
                await actuate("drive", stop = true)
@@ -1594,7 +1770,7 @@ Appendix A. Collected Grammar (ABNF)
                   / continue-stmt / panic-stmt / pass-stmt
                   / spawn-stmt / race-stmt / par-stmt
                   / select-stmt / wait-stmt
-                  / assign-stmt / fn-def
+                  / assign-stmt / struct-def / fn-def
 
       expr        = send-expr / ternary
       send-expr   = ternary ( ( "<-" / "->" ) ternary )
@@ -1623,7 +1799,7 @@ Appendix A. Collected Grammar (ABNF)
                   / ( "send" expr "->" chan block )
                   / ( "after" expr block )
                   / ( "default" block )
-      # a recv arm binds the received value to it or to the as name
+      # a recv arm binds the received value to _ or to the as name
       wait-expr   = "wait" topic
       wait-stmt   = "wait" topic [ "as" name ] block
       on-expr     = "on" topic [ "as" name ] block
@@ -1637,6 +1813,7 @@ Appendix A. Collected Grammar (ABNF)
       while-stmt  = "while" expr block until-clause?
       loop-stmt   = "loop" block until-clause?
       do-stmt     = "do" block "while" expr until-clause?
+                  / "do" block until-clause "while" expr
       for-stmt    = for-iter / for-c
       for-iter    = for-target "in" expr block until-clause?
       for-c       = "for" "(" [ for-init ] ";" [ expr ] ";"
@@ -1649,10 +1826,15 @@ Appendix A. Collected Grammar (ABNF)
       pattern     = literal / seq-pattern / name / "_"
       seq-pattern = "[" [ pattern *( "," pattern ) ] "]"
       literal     = number / text / "true" / "false" / "null"
-      text        = dq-string / sq-string / ml-string
-      # "..." and '...' are one-line strings; """...""" and '''...'''
-      # are multi-line; ${ident} / ${ident:spec} / ${(expr)} /
-      # ${(expr):spec} interpolate, a bare brace is literal
+      text        = dq-string / sq-string
+      template    = tpl-string
+      ctor        = type "(" [ call-arg *( "," call-arg ) ] ")"
+      # a type name used as a constructor: Vec<i64>(), i64("42"),
+      # Point(x = 1.0); for a primitive it is the Section 10.2
+      # conversion function
+      # "..." and '...' are one-line strings and never interpolate;
+      # `...` is a template string, may span lines, and interpolates
+      # ${ident} / ${ident:spec} / ${(expr)} / ${(expr):spec}
       pass-stmt   = "pass"
       let-stmt    = ( "let" / "const" / "var" ) name [ ":" type ]
                   [ "=" expr ]
@@ -1660,14 +1842,16 @@ Appendix A. Collected Grammar (ABNF)
                   [ "->" type ] block
       param       = name [ ":" type ] [ "=" expr ]
                   / "..." name [ ":" type ] / ":::" name [ ":" type ]
+      struct-def  = "struct" name "{" 1*( field ) "}"
+      field       = name ":" type
       topic       = dq-string / "[" [ dq-string *( "," dq-string ) ] "]"
       # a string may hold OCP wildcards; array elements may mix them
-      type        = name [ "<" type *( "," type ) ">" ] [ "?" ]
-                  / "()"
+      type        = name [ "<" type *( "," type ) ">" ]
+                  *( "[]" / "?" ) / "()"
       name        = ident
 
       primary     = literal / name / tuple / vec-lit / map-lit / set-lit
-                  / on-expr / wait-expr
+                  / on-expr / wait-expr / template / ctor
       tuple       = "(" [ expr *( "," expr ) [ "," ] ] ")" / "(,)"
       vec-lit     = "[" [ expr *( "," expr ) [ "," ] ] "]" / "[,]"
       map-lit     = "{" [ expr ":" expr *( "," expr ":" expr ) ]

@@ -177,16 +177,15 @@ Table of Contents
    *  Floating point: OPTIONAL.  Measurements on an MCU are usually
       integers or fixed-point; an Air device that omits floats answers
       E_BAD_PAYLOAD to a float item.  An Air device that accepts floats
-      uses the 32-bit (single-precision) form; it is not required to
-      decode the 64-bit (double) form, though it MAY.
+      decodes the binary64 (double) form, as [RFC0004] Section 4.4
+      recommends.
 
-   *  Numeric width: 32-bit.  Air encodes integers and floats it sends
-      at 32-bit width (unsigned/signed 32-bit range, [IEEE754] single
-      for floats). This is the Air choice under the non-mandatory 64-bit
-      recommendation of [RFC0004] Section 4.4.  A received 64-bit value
-      is outside the Air range; an Air device MAY reject it with
-      E_BAD_PAYLOAD or truncate it to 32-bit, at its own discretion, and
-      a peer MUST NOT rely on either behaviour.
+   *  Numeric width: Air uses the same default widths as [RFC0004]
+      Section 4.4 -- integers at 32-bit signed and floats at [IEEE754]
+      binary64.  The two members of the family are therefore isomorphic
+      at the value layer: no value legal in one is illegal in the other
+      for a width reason, and a peer need not narrow a value for an Air
+      device.
 
    *  Tags: an Air decoder MUST ignore a tag and decode the tagged data
       item directly, rather than reject it.
