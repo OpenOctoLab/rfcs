@@ -255,7 +255,10 @@ Table of Contents
          @                        timeout (within, Section 6.3)
 
    The characters (, ), {, }, [, ], ,, ; and . are punctuation tokens
-   and are not operators.  The token => introduces an arrow function and
+   and are not operators.  Two braces written next to each other, {{ and
+   }}, are the delimiters of a statement comprehension (Section 6.1.10);
+   a space between them is two separate braces and not the same thing.
+   The token => introduces an arrow function and
    is not the comparison >=.  The token <- is the channel operator:
    as a prefix it receives from a channel, as an infix it sends to one
    (Section 3.7); the infix -> is the same send written value first,
@@ -953,7 +956,7 @@ Table of Contents
 
    The condition is evaluated before each iteration; the body runs
    while it is true, so a while runs zero or more times.  The loop is
-   left through break (Section 6.1.7), return (Section 6.1.10), a
+   left through break (Section 6.1.7), return (Section 6.1.9), a
    failure (Section 6.2) or an until clause written after its body
    (Section 6.1.6).
 
@@ -1166,7 +1169,7 @@ Table of Contents
    branch which is meant to do nothing says so.  An empty block is
    likewise legal where a block is required.
 
-6.1.9.  with: Scoped Resources
+6.1.8.  with: Scoped Resources
 
       with open_log("run.log") as log {
          log.write("start")
@@ -1187,7 +1190,7 @@ Table of Contents
    return in the body runs exit before it returns.  The name bound by
    as is local to the block.
 
-6.1.10.  return
+6.1.9.  return
 
    "return" with a value returns it; "return" without a value yields
    null.  A return propagates out of any nesting of blocks, loops and
@@ -1199,6 +1202,38 @@ Table of Contents
    Inside a task (Section 6.3), return resolves the task's future with
    that value.  A return at the top level of a program terminates the
    program.
+
+6.1.10.  Statement Comprehensions
+
+      {{ for m in motors spawn move(m, 10) }}
+
+      {{ for d in devices if d.ready {
+         spawn sense(d.name)
+      } }}
+
+   A statement comprehension stands where a statement stands and
+   expands to one copy of its statement for every item the iteration
+   yields, in order; an empty collection expands to nothing.  It is
+   written between two braces that MUST stand next to each other, {{
+   and }}, and holds the for clause of the iterable form (Section
+   6.1.5) -- whose target may be a pattern -- any number of if clauses
+   that filter as they do in an expression comprehension (Section 5.4),
+   and one statement.  The statement is a single one: a simple
+   statement, or a compound statement written in its own braces.
+
+   Expansion releases the copies into the scope the comprehension
+   stands in, not into a scope of their own, so a copy that declares a
+   name declares it there, and two copies that declare the same name
+   are an error; a copy that declares names SHOULD be written as a
+   block.  The target is bound in one copy at a time and is not visible
+   once expansion is done: the copies do not share it.
+
+   The form is at its most useful when every item needs a statement of
+   its own, and above all when those statements are concurrent:
+
+      {{ for m in motors spawn move(m, 10) }}
+      {{ for c in chans spawn drain(c) }}
+      {{ for t in topics on t as ev { log("event", ev.name) } }}
 
 6.2.  Failure: panic, try and catch
 
@@ -2200,7 +2235,7 @@ Appendix A. Collected Grammar (ABNF)
       stmt        = let-stmt / const-stmt / var-stmt / expr-stmt
                   / if-stmt / for-stmt / while-stmt / loop-stmt
                   / try-stmt / with-stmt / match-stmt / return-stmt
-                  / break-stmt
+                  / break-stmt / comp-stmt
                   / continue-stmt / next-stmt / panic-stmt
                   / pass-stmt
                   / spawn-stmt / race-stmt / par-stmt
@@ -2255,6 +2290,8 @@ Appendix A. Collected Grammar (ABNF)
       # await makes the statement blocking: it runs in this task
       cancel-stmt = "cancel" expr
 
+      comp-stmt   = "{{" for-target "in" expr *( "if" expr ) stmt "}}"
+      # expands to one copy of stmt per item, in the enclosing scope
       try-stmt    = "try" block *( catch-clause ) [ "finally" block ]
       catch-clause= "catch" [ expr ] [ "as" name ] block
       with-stmt   = "with" expr [ "as" name ] block
