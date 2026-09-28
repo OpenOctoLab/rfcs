@@ -990,10 +990,9 @@ Table of Contents
 
    The optional as bar binds the first-captured event's payload to bar
    for the duration of the until body; the body may read bar's members.
-   When as bar is omitted the payload is bound to the implicit name _,
-   as in on (Section 6.7) and wait (Section 6.8).  The binding is local
-   to the until body; reading the captured value through _ is not
-   recommended, and a program SHOULD bind a name with as instead.
+   Without as bar the payload is discarded, as it is in on (Section
+   6.7) and wait (Section 6.8): there is no implicit binding.  The
+   binding is local to the until body.
 
    An until clause never changes the loop's own condition; the loop may
    also be left through that condition, return, break or a failure.
@@ -1125,7 +1124,7 @@ Table of Contents
    branch values in textual order; a branch with no value contributes
    null.  A name declared with let or const inside a branch is local to
    that branch's task and is not visible outside it, and so is a name
-   bound by as or by the implicit _.
+   bound by as.
 
    Branches share the enclosing scope, so a branch MAY read and assign
    a variable declared outside the par block.  Such a shared assignment
@@ -1215,10 +1214,8 @@ Table of Contents
 
    on in a select is a one-shot wait for a single event; the persistent
    subscription form is on (Section 6.7).  The event data is bound to
-   an explicit as name after the topic; without one it is bound to the
-   implicit name _.  A recv arm binds the received value the same way.
-   Reading the captured value through _ is not recommended; a program
-   SHOULD bind a name with as and read that instead.
+   an explicit as name after the topic, and is discarded when as is
+   omitted.  A recv arm binds the received value the same way.
 
 6.7.  on: Persistent Event Subscriptions
 
@@ -1232,10 +1229,9 @@ Table of Contents
 
    Each arriving EVENT for a matching topic starts a new task running
    the handler; handler tasks run concurrently with the main flow and
-   with one another.  The handler names the event data with as ev or
-   uses the implicit binding _.  Reading the captured value through _
-   is not recommended; a program SHOULD bind a name with as and read
-   that instead.  If the handler panics, the panic is reported on the
+   with one another.  The handler names the event data with as ev;
+   without as the data is discarded.  If the handler panics, the panic
+   is reported on the
    runtime topic core.error [RFC0004], Section 9.2.1, and the
    subscription survives.
 
@@ -1265,10 +1261,8 @@ Table of Contents
       let ev = wait "device.status"
       let fault = wait "device.fault"
 
-   The block form runs its body once with the payload bound by as, or
-   to _ when as is omitted.  Reading the captured value through _ is
-   not recommended; a program SHOULD bind a name with as and read that
-   instead.
+   The block form runs its body once with the payload bound by as, and
+   discards the payload when as is omitted.
 
       wait "device.fault" as fault {
          latch_fault(fault.name)
@@ -2008,7 +2002,8 @@ Appendix A. Collected Grammar (ABNF)
                   / ( "send" expr "->" chan block )
                   / ( "after" expr block )
                   / ( "default" block )
-      # a recv arm binds the received value to _ or to the as name
+      # a recv arm binds the received value to the as name and discards
+      # it when as is omitted
       wait-expr   = "wait" topic
       wait-stmt   = "wait" topic [ "as" name ] block
       on-expr     = "on" topic [ "as" name ] block
