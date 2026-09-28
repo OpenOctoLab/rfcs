@@ -79,23 +79,22 @@ Table of Contents
      3.8.  struct: Composite Types
    4.  Operators and Precedence
    5.  Expressions
-     5.1.  Member Access, Indexing, Calling
+     5.1.  Member Access, Indexing, Slicing, Calling
      5.2.  Optional Chaining
      5.3.  Ternary Operator
      5.4.  Comprehensions
      5.5.  Arrow Functions
      5.6.  Scope Views: globals and locals
    6.  Statements, Control Flow and Concurrency
-     6.1.  Separation and Blocks
-     6.2.  Tasks, spawn and await
-     6.3.  race: Racing Outcomes
-     6.4.  select: Waiting on Events, Channels and Time
-     6.5.  on: Persistent Event Subscriptions
-     6.6.  Timing: sleep and wait
-     6.7.  Cancellation
-     6.8.  Failure: panic, try and except
-     6.9.  until: Event-Gated Loop Exit
-     6.10. par: Parallel Blocks
+     6.1.  Separation, Blocks and Conditions
+     6.2.  Failure: panic, try and except
+     6.3.  Tasks, spawn and await
+     6.4.  par: Parallel Blocks
+     6.5.  race: Racing Outcomes
+     6.6.  select: Waiting on Events, Channels and Time
+     6.7.  on: Persistent Event Subscriptions
+     6.8.  Timing: sleep and wait
+     6.9.  Cancellation
    7.  Functions, Scope and Arguments
      7.1.  Definition and Call
      7.2.  Closures
@@ -150,11 +149,11 @@ Table of Contents
    synchronous function returning a value; it is a request that returns
    a future (Section 3.5).  The future resolves when the device answers
    with a RESULT frame [RFC0004], Section 5.4.  A program reads the
-   answer with await (Section 6.2), races several answers with race
-   (Section 6.3), or selects among an answer, an event and a timeout
-   with select (Section 6.4).  An event from a device -- an EVENT frame
+   answer with await (Section 6.3), races several answers with race
+   (Section 6.5), or selects among an answer, an event and a timeout
+   with select (Section 6.6).  An event from a device -- an EVENT frame
    [RFC0004], Section 5.5 -- is something a program waits for with on
-   (Section 6.5) or wait (Section 6.6), never something it polls.
+   (Section 6.7) or wait (Section 6.8), never something it polls.
 
    A conforming implementation MUST support everything specified in this
    document.  Behaviour that is not specified here is unconstrained,
@@ -436,16 +435,25 @@ Table of Contents
 
 3.4.  Range
 
-   A range a..b is a half-open interval from a up to but not including
-   b, stepped by one; a..b:step carries an explicit step.  A range is
-   an immutable value that is consumed by iteration and by slicing.  A
-   trailing .. denotes an open upper bound and is meaningful only as a
-   slice index.
+   A range is written start..stop..step and holds the positions start,
+   start + step, start + 2*step and so on, for as long as they are
+   before stop: less than it when the step is positive, greater than
+   it when the step is negative.  The stop MUST be written; the start
+   and the step MAY be omitted and are then 0 and 1.  A negative step
+   walks down: 0..10 is 0, 1, ..., 9; 0..10..2 is 0, 2, 4, 6, 8;
+   10..0..-2 is 10, 8, 6, 4, 2.  A step of zero is the empty range.
+
+   A range whose direction contradicts its step -- 5..2, or 0..5..-1
+   -- holds no position: it is the empty range, not an error.  A range
+   is an immutable value, compared by value and usable as a key; it is
+   consumed by iteration and by slicing, and inside a slice every part
+   MAY be omitted, the subject supplying the bound that is missing
+   (Section 5.1).
 
 3.5.  Future
 
    A future is a placeholder for a value that is not yet known.  It is
-   created by spawn (Section 6.2), by an async function (Section 7.1)
+   created by spawn (Section 6.3), by an async function (Section 7.1)
    and by every device call (Section 9.3).  A future is one of three
    states: pending, resolved or failed.
 
@@ -454,7 +462,7 @@ Table of Contents
    *  resolved: the work produced a value; await yields that value.
 
    *  failed: the work raised a panic; await re-raises it (Section
-      6.8) so the failure propagates to the awaiter.
+      6.2) so the failure propagates to the awaiter.
 
    A future carries no method that reads its value without waiting; the
    only ways to observe it are await, race, select and cancel.
@@ -480,7 +488,7 @@ Table of Contents
       receives drain the buffer then yield null.
 
    A channel is first-class and may be stored, passed as an argument
-   and selected upon (Section 6.4).
+   and selected upon (Section 6.6).
 
 3.7.  Spread
 
@@ -538,7 +546,7 @@ Table of Contents
       +----------+--------------------------------+--------------------+
       |4         | +  -  |  ^                     | left              |
       +----------+--------------------------------+--------------------+
-      |5         | ..  ..:                       | left              |
+      |5         | ..                            | left              |
       +----------+--------------------------------+--------------------+
       |6         | ==  !=  <  >  <=  >=  in  as   | left (chained)    |
       +----------+--------------------------------+--------------------+
@@ -560,13 +568,16 @@ Table of Contents
 
                          Table 1: Precedence
 
+   A range is one form of three parts (Section 3.4), not a chain of ..
+   operators: 0..10..2 is the range 0..10 taken in steps of two.
+
    Chained comparison (a < b < c) and chained assignment (a = b = c)
    are evaluated left to right with the natural meaning.  Member access,
    indexing and calling (Section 5.1) bind tighter than precedence 1.
 
 5.  Expressions
 
-5.1.  Member Access, Indexing, Calling
+5.1.  Member Access, Indexing, Slicing, Calling
 
    expr.name reads a member.  expr[index] indexes a list, tuple, text
    or dictionary; negative indices count from the end.  expr(args) calls
@@ -577,6 +588,73 @@ Table of Contents
    value).  A position and a name MAY appear in one call; positions
    count from zero among themselves, exactly as [RFC0004], Section 5.3
    binds CALL arguments, because a device call is encoded as a CALL.
+
+   Slicing.  A list and a text are sliced; no other value is.  A slice
+   selects elements of a list or characters of a text and yields a new
+   value of the subject's kind -- a copy, never a view on the subject.
+   The brackets hold one rule or several rules separated by ;:
+
+      slice = rule *( ";" rule )
+      rule  = [ start ] ".." [ stop ] [ ".." step ] / expr
+
+   A rule is a range (Section 3.4) or one position.  Every part of a
+   range rule MAY be omitted: the step is then one; the start is the
+   first element of the subject, or the last one when the step is
+   negative; the stop is the boundary past the last element, or the
+   boundary before the first one when the step is negative.  Two
+   markers with nothing between them are one range whose stop is
+   omitted; the form is written .... or, with a space, .. .. , and
+   with no step after it is the same as one marker: xs[....] and
+   xs[..] are the same slice.  The dots are read in pairs, so a run
+   of them is never the spread token of Section 3.7.  A step written
+   after two markers is the step of that range and not a bound:
+   xs[....-1] is the whole list reversed, the same slice as
+   xs[-1.. .. -1], while xs[..-1] is every element but the last.  The
+   rules are read in the order written and their pieces joined into
+   one value:
+
+      let xs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+      xs[6]                            # 6, one element
+      xs[0..3]                         # [0, 1, 2]
+      xs[..3]                          # [0, 1, 2]
+      xs[8..]                          # [8, 9, 10]
+      xs[..]                           # a copy of xs
+      xs[0..6..2]                      # [0, 2, 4]
+      xs[..9..3]                       # [0, 3, 6]
+      xs[-3..]                         # [8, 9, 10]
+      xs[8..2..-2]                     # [8, 6, 4]
+      xs[..-1]                         # [0, 1, ..., 9]
+      xs[....-1]                       # [10, 9, ..., 0]
+      xs[6; 0..3; ..2; 0..4..2; ..9..3]
+                                       # [6, 0,1,2, 0,1, 0,2, 0,3,6]
+
+   One rule that is one position is indexing, not slicing: it yields
+   one element of a list or a one-character text.  One rule that is a
+   range, or two or more rules, is a slice and yields a list or a
+   text, even when the selection is empty or holds one element.  A
+   rule that selects nothing contributes nothing: xs[5..2],
+   xs[0..5..-1] and xs[0..5..0] are three ways to select nothing.
+
+   Positions.  On a subject of length n a written position p is read
+   as p, or as p + n when p is negative: 0 is the first element, -1
+   the last and -n the first one again.  The read positions -1 and n
+   are the boundaries, before the first element and past the last one,
+   and are written -n - 1 and n.  An index MUST name an element; a
+   start MUST name an element or the boundary n; a stop MAY name an
+   element or either boundary.  A position that is none of these --
+   xs[11], xs[-13] or xs[0..12] on the list above -- names nothing and
+   panics with the kind OutOfRange (Section 2.8).  On an empty subject
+   no position names an element: xs[..] is the empty list and xs[0..]
+   is a panic.
+
+   Only a list and a text are sliced.  A tuple is indexed but not
+   sliced: its elements differ in type, so a slice of it would have no
+   type.  A bracket after any other value takes the bracketed value as
+   a key (Section 3.3), so on a dictionary d[0..3] is the entry keyed
+   by the range 0..3 and not a slice, and several rules are not
+   permitted there.  A slice MAY be read through the optional chain of
+   Section 5.2, as in xs?[0..3].
 
 5.2.  Optional Chaining
 
@@ -742,7 +820,8 @@ Table of Contents
    The condition is evaluated before each iteration; the body runs
    while it is true, so a while runs zero or more times.  The loop is
    left through break (Section 6.1.8), return (Section 6.1.9), a
-   failure (Section 6.2) or an until clause (Section 6.1.7).
+   failure (Section 6.2) or an until clause written after its body
+   (Section 6.1.7).
 
 6.1.4.  loop
 
@@ -753,9 +832,9 @@ Table of Contents
 
    "loop { ... }" repeats unconditionally: it has no condition, runs at
    least once and is left only through break, return, a failure or an
-   until clause.  It is the form for a cycle whose end is decided
-   inside the body; "while true { ... }" says the same thing and is
-   equally legal.
+   until clause written after its body.  It is the form for a cycle
+   whose end is decided inside the body; "while true { ... }" says the
+   same thing and is equally legal.
 
 6.1.5.  do...while
 
@@ -765,10 +844,11 @@ Table of Contents
 
    The body runs once, then the condition is tested; the loop repeats
    while it is true, so it runs one or more times.  continue jumps to
-   the condition, and break leaves the loop.  The header MAY carry an
-   until clause (Section 6.1.7), normally written after the condition,
-   because the body, during which events are captured, has already run
-   once when the clause is reached:
+   the condition, and break leaves the loop.  A do-while MAY carry an
+   until clause (Section 6.1.7), written after the condition that
+   closes it, since the body, during which events are captured, has
+   already run once; written before that condition instead, it is
+   checked first:
 
       do {
          sample()
@@ -820,30 +900,44 @@ Table of Contents
    is RECOMMENDED because "var" writes to the root scope, where a
    repeated declaration in the same scope is an error.  continue still
    executes the update clause before the next condition test; break
-   leaves the loop.  Both forms MAY carry an until clause
-   (Section 6.1.7).
+   leaves the loop.  Both forms MAY carry an until clause written after
+   their body (Section 6.1.7).
 
 6.1.7.  until: Event-Gated Loop Exit
 
-   The until clause applies to every loop head uniformly -- while,
-   loop, do-while and both forms of for -- and appears at most once on
-   a head.  It gates a loop on an event captured in the loop's own
-   cycle, instead of, or in addition to, its condition:
+   The until clause is written after the loop's body: it follows the
+   closing brace of the body.  A do-while, which closes with its
+   condition instead, takes the clause either after that condition or,
+   so that it is checked first, before it.  The clause applies to every
+   loop uniformly -- while, loop, do-while and both forms of for -- and
+   appears at most once on a loop.  It gates a loop on an event captured
+   in the loop's own cycle, instead of, or in addition to, its
+   condition:
 
-      while <cond> until "event.foo" [as bar] { ... }
-      loop     until "event.foo" [as bar] { ... }
-      for t in coll until "event.foo" [as bar] { ... }
-      for (init; cond; update) until "event.foo" [as bar] { ... }
+      while running() {
+         step()
+      } until "shutdown.requested" as req {
+         log("stopping", req.reason)
+      }
+
+   The same clause follows any other loop body:
+
+      loop { ... } until "event.foo" [as bar] { ... }
+      for t in coll { ... } until "event.foo" [as bar] { ... }
+      for (;;) { ... } until "event.foo" [as bar] { ... }
       do { ... } while <cond> until "event.foo" [as bar] { ... }
       do { ... } until "event.foo" [as bar] { ... } while <cond>
 
-   A cycle is one iteration of the loop: the running of the body, and
-   for a counted loop the update and the condition test.  until opens
-   its subscription when the loop is entered and closes it when the
-   loop is left; every matching event that arrives during a cycle is
-   appended to that cycle's buffer, and the buffer is discarded when
-   the cycle ends.  until does NOT wait: at the end of the cycle it
-   inspects the buffer and
+   A cycle is one iteration of the loop: the running of the body and,
+   for a counted for, the update clause that follows it.  The until
+   check stands between two cycles -- after the body of the cycle that
+   has just finished, and before the condition test that decides
+   whether another one runs.  until opens its subscription when the loop
+   is entered and closes it when the loop is left; every matching event
+   that arrives during a cycle is appended to that cycle's buffer, and
+   the buffer is discarded once that cycle's until check has been made.
+   until does NOT wait: at the end of the cycle it inspects the buffer
+   and
 
    *  when the cycle captured no matching event, the until body is
       skipped and the loop proceeds straight to its next iteration or,
@@ -867,11 +961,17 @@ Table of Contents
    *  break: the loop is left immediately, as it would be from the loop
       body.
 
-   For a do-while loop the until clause normally follows the condition,
-   for the reason given in Section 6.1.5.  Written before the condition
-   instead, it is checked first: the until check precedes the condition
-   test, so an event taken in the body may end the loop before the
-   condition is ever evaluated.
+   Where the clause is written fixes its place relative to the
+   condition.  In a while, a loop and both forms of for the until check
+   plainly falls after one body and before the condition test that
+   opens the next cycle.  A do-while carries its condition at the end of
+   the loop, and there the two spellings differ: "do { ... } until ...
+   { ... } while <cond>" puts the until check before that condition, so
+   an event taken in the body may end the loop before the condition is
+   ever evaluated; "do { ... } while <cond> until ... { ... }" puts it
+   after, so a condition that has already become false ends the loop
+   first.  A loop that runs no cycle at all -- a while whose condition
+   is false on entry -- makes no until check.
 
    The topic is a string, an array of strings, or a single string using
    OCP topic wildcards [RFC0004], Section 6.5.2, where "+" matches one
@@ -880,8 +980,13 @@ Table of Contents
    several topics or wildcards may fire in one cycle, and the
    first-captured event is the one bound, as above:
 
-      loop until ["motor.a", "motor.+"] as e { ... } # strict + wildcard
-      loop until "sensor.+.temp"       as e { ... }  # OCP wildcard
+      loop {
+         ...
+      } until ["motor.a", "motor.+"] as e { ... }   # strict + wildcard
+
+      loop {
+         ...
+      } until "sensor.+.temp" as e { ... }          # OCP wildcard
 
    The optional as bar binds the first-captured event's payload to bar
    for the duration of the until body; the body may read bar's members.
@@ -906,8 +1011,11 @@ Table of Contents
    next iteration of the innermost enclosing loop: in the counted for
    it runs the update clause first, in a do-while it jumps to the
    condition, and in an until body it returns control to the loop
-   (Section 6.1.7).  A break or a continue with nothing to leave is a
-   syntax error.
+   (Section 6.1.7).  Neither crosses a task boundary: a break or a
+   continue inside a par or race branch (Sections 6.4 and 6.5) or in a
+   handler started by on (Section 6.7) has nothing to leave and is a
+   syntax error, as is any break or continue written outside a loop,
+   a match or an until body.
 
    "pass" is a no-op statement: it does nothing, and exists so that a
    branch which is meant to do nothing says so.  An empty block is
@@ -1091,7 +1199,7 @@ Table of Contents
          }
       }
 
-   An arm whose guard is ready runs its block; the select then
+   An arm that is ready runs its block; the select then
    completes and yields the value the block produced, or null.  If more
    than one arm is ready at the same instant, exactly one is chosen;
    the choice among ready arms is implementation-defined, except that
@@ -1211,11 +1319,11 @@ Table of Contents
    explicit return; a function that falls off the end returns null.
 
    An fn MAY be prefixed with async: an async function returns a future,
-   not a value: calling it starts a task (as spawn would, Section 6.2)
+   not a value: calling it starts a task (as spawn would, Section 6.3)
    and yields a future that resolves with the function's return value or
    fails with its panic.  The future is observed with await, race or
    select exactly as any other, and is cancelled with the same
-   cooperative mechanism (Section 6.7).
+   cooperative mechanism (Section 6.9).
 
 7.2.  Closures
 
@@ -1372,12 +1480,12 @@ Table of Contents
    metadata() returns {instructions, sensors, actuators, params,
    events} exactly as [RFC0004], Section 9.1.2 specifies; a program
    SHOULD read it once after connect() and re-read it when the
-   core.metadata topic fires (Section 6.5).
+   core.metadata topic fires (Section 6.7).
 
 9.4.  Publish/Subscribe Bindings
 
    SUBSCRIBE, EVENT and UNSUBSCRIBE [RFC0004], Sections 5.5 to 5.6 are
-   exposed by on (Section 6.5) and wait (Section 6.6).  The topics a
+   exposed by on (Section 6.7) and wait (Section 6.8).  The topics a
    program may use are those of [RFC0004], Table 21: the device.*
    topics published by the peer and the core.*, rpc.*, pubsub.* and
    blobtun.* topics raised by the runtime.  A pseudo-topic (one the
@@ -1536,9 +1644,11 @@ Table of Contents
 10.1. Operations on Values
 
    Lists, tuples, sets and dictionaries support len, in (membership),
-   iteration and indexing.  Text supports indexing, slicing, len, + and
-   the formatting of Section 10.4.  Numbers support the arithmetic of
-   Section 4.  Functions are values and support calling only.
+   iteration and indexing.  Lists and text support slicing (Section
+   5.1): a list is sliced by element and a text by character.  Text
+   also supports len, + and the formatting of Section 10.4.  Numbers
+   support the arithmetic of Section 4.  Functions are values and
+   support calling only.
 
 10.2. Standard Library Functions
 
@@ -1585,43 +1695,135 @@ Table of Contents
 
 10.4. String Formatting
 
-   The formatting used by interpolated strings (Section 2.6) and by
-   str(x) is: null -> "null", booleans -> "true"/"false", numbers in
-   their shortest round-tripping form, text as itself, lists and
-   tuples as [a, b], sets as {a, b}, dictionaries as {k: v}.  A value
-   with a fmt member MAY supply its own text form.  The ${...} marker
-   of an interpolated string accepts any single-line expression that
-   contains no meaningful braces.  A format spec, written after a
-   colon, follows only on a bare variable or on an expression enclosed
-   in parentheses; any other expression MUST be parenthesised
-   to carry one, so a spec is never ambiguous.  The spec is ${x:spec}
-   where spec is
+   Two things turn a value into text: the default form, used by str(x),
+   by print and by an interpolation written without a spec, and an
+   explicit format spec, written after a colon in an interpolation.
+   The same rules apply wherever this document converts a value to
+   text (Sections 2.6 and 10.2).
+
+   Default form.  The default form of a value is:
+
+   *  null is "null";
+
+   *  a boolean is "true" or "false";
+
+   *  an integer is its decimal digits, with a leading "-" when it is
+      negative: no base prefix, no digit separators, no padding;
+
+   *  a float is its shortest round-tripping form -- the fewest digits
+      that read back as the same value -- with a leading "-" when it
+      is negative.  A value that is not finite is "nan", "inf" or
+      "-inf";
+
+   *  text is itself, unchanged, without quotes;
+
+   *  a list or a tuple is its elements in order, each in its own
+      default form, separated by ", " and enclosed in [ ]; a tuple of
+      one element keeps a trailing comma, and the empty tuple is ();
+
+   *  a set is its elements in iteration order, separated by ", " and
+      enclosed in { }, and the empty set is {,};
+
+   *  a dictionary is its entries, each written "key: value" with the
+      key and the value in their own default forms, separated by ", "
+      and enclosed in { }, and the empty dictionary is { };
+
+   *  a value of any other kind -- a struct, a future, a channel, a
+      function or a range -- is written by its fmt member when it has
+      one, and otherwise in a form the implementation chooses, which
+      MUST be the same for the life of the program.
+
+   A fmt member, where a type supplies one, is called with no
+   arguments and MUST yield text; that text is the value's default
+   form.  It is how a struct or a host object chooses how it reads.
+
+   The interpolation marker.  An interpolation is written ${expr} or
+   ${expr:spec} and appears only in a template string (Section 2.6);
+   an ordinary string never interpolates.  The expression is loose:
+   any single-line expression with no meaningful brace may stand
+   there -- a name, a member or index chain, a call, an arithmetic
+   expression.  Its value is converted to text by the default form
+   above, or by the spec when one is given.
+
+   A colon introduces a spec, and a colon is also part of the ternary
+   operator (Section 5.3), so a spec may follow only where the colon
+   cannot belong to the expression: after a bare variable
+   (${name:.2}) or after a parenthesised expression (${(a + b):.2}).
+   Any other expression MUST be parenthesised to carry a spec, which
+   is what keeps a spec unambiguous: ${(a ? b : c):.2} is a spec on
+   the whole ternary, and ${a ? b : c:.2} is not written.
+
+   The format spec.  A spec is
 
       [[fill]align][sign]["#"]["0"][width]["." precision][type]
 
-   align is <, ^ or > for left, centre or right, and the character
-   before it is the fill; sign is + or -; # adds the 0x, 0o or 0b
-   prefix; 0 pads with zeros; width is a minimum field width;
-   precision is the number of fraction digits for a float (or a
-   maximum length for text); type is one of b, o, x, X, e or E.
-   Numbers default to right alignment and text to left; the default
-   fill is a space.  Examples:
+   written in that order; every part is optional, and an empty spec is
+   the same as no spec at all.  The parts are:
+
+   *  fill and align: align is < for left, ^ for centre and > for
+      right.  A fill is recognised only together with an align, and
+      only when the second character of the spec is <, ^ or >: that
+      character is the align and the one before it is the fill, so
+      "*<6" fills with * and "<6" alone is a left alignment with the
+      default fill.  The fill is any character but { or }, and
+      defaults to a space;
+
+   *  sign: + writes a sign for every number, zero included, and -
+      writes one for a negative number only.  - is the default.  Both
+      apply to numbers alone;
+
+   *  #: the alternate form, which writes the base prefix 0b, 0o or
+      0x with the types b, o, x and X.  With any other type it has no
+      effect;
+
+   *  0: pads a number with leading zeros instead of spaces, up to the
+      width; when the spec also gives an align, the align decides
+      where the zeros go.  It has no effect without a width, and none
+      on text;
+
+   *  width: a decimal number, the least number of characters the
+      result occupies.  A result shorter than the width is padded
+      with the fill, placed by the align; a result longer than the
+      width is never cut short by it, though a precision may shorten
+      it;
+
+   *  precision: "." followed by a decimal number.  For a float it is
+      the number of digits after the point, rounded rather than
+      truncated; for text it is the greatest number of characters
+      kept.  For any other value it has no effect;
+
+   *  type: b, o, x and X write an integer in base 2, 8 or 16, X
+      using the upper-case digits A to F; e and E write a float in
+      scientific notation with a lower-case or an upper-case
+      exponent letter.  With no type letter an integer is written in
+      decimal and a float in its default form, each subject to the
+      precision.
+
+   A type letter that does not fit the value -- a base type on
+   anything but an integer, e or E on anything but a float -- is an
+   error.  Numbers default to right alignment and text to left; the
+   default fill is a space, the default sign -, and the default is no
+   #, no zero padding, no width, no precision and no type.  A spec
+   that does not match the grammar above is an error (Section 11).
+   Examples:
 
       `rate ${rate:.2}`      # "rate 3.14"
       `id [${id:6}]`         # "id [    42]"
       `id [${id:<6}]`        # "id [42    ]"
+      `id [${id:*^6}]`       # "id [**42**]"
       `id ${id:06}`          # "id 000042"
       `n ${n:#06x}`          # "n 0x002a"
-      `na ${name:.3}`        # first three characters
-      `sum ${(a + b):.2}`    # spec on a parenthesised expression
+      `na ${name:.3}`        # the first three characters
+      `sum ${(a + b):.2}`    # a spec on a parenthesised expression
+      `d ${dist:e}`          # "d 1.5e3"
 
 11. Error Model and Diagnostics
 
    Diagnostics fall into three classes: lexical (Section 2), syntactic
-   (this document's grammar) and runtime (a panic, Section 6.8).  A
+   (this document's grammar) and runtime (a panic, Section 6.2).  A
    lexical or syntactic error MUST stop the program before any
    statement runs.  A runtime error is a panic carrying a kind and a
-   message; the built-in kinds are those of Sections 9.5 and 6.8.
+   message; the built-in kinds are those of Sections 9.5 and 6.2.
 
    A conforming implementation reports each diagnostic with a position
    (line and column) and a message in English.  It MUST NOT proceed past
@@ -1706,7 +1908,7 @@ Table of Contents
    an uncaught panic in the top-level task ends the program; a host
    SHOULD run a supervisor that re-establishes the session on
    SessionExpired rather than leaving the machine uncommanded.  A task
-   that ignores cancellation (Section 6.7) cannot be stopped; a program
+   that ignores cancellation (Section 6.9) cannot be stopped; a program
    that commands a machine MUST await, sleep or select on a bound, so
    the host can cancel it on shutdown.
 
@@ -1786,7 +1988,14 @@ Appendix A. Collected Grammar (ABNF)
       pow-expr    = unary-expr [ "**" pow-expr ]
       unary-expr  = ( "!" / "~" / "-" / "await" / "spawn"
                   / "<-" ) unary-expr / postfix-expr
-      postfix-expr= primary *( "." name / "[" expr "]" / call / "?." )
+      postfix-expr= primary *( "." name / "[" index "]" / call / "?." )
+      index       = slice-rule *( ";" slice-rule )
+      slice-rule  = range / expr
+      range       = [ expr ] ".." [ expr ] [ ".." expr ]
+      # one rule is a key or an index; two or more rules slice a list
+      # or a text (Section 5.1); a range value names its stop, only a
+      # slice may leave it out; two markers with nothing between them
+      # may be written .... or .. ..
       call        = "(" [ call-arg *( "," call-arg ) ] ")"
       call-arg    = name ":" expr / expr
 
@@ -1820,7 +2029,8 @@ Appendix A. Collected Grammar (ABNF)
                   [ expr ] ")" block until-clause?
       for-init    = let-stmt / const-stmt / var-stmt / expr-stmt
       for-target  = name / pattern
-      until-clause = "until" topic [ "as" name ] block
+      until-clause= "until" topic [ "as" name ] block
+      # an until clause follows the loop body it gates
       match-stmt  = "match" "(" expr ")" "{" 1*( case-arm ) "}"
       case-arm    = "case" pattern [ "if" expr ] block
       pattern     = literal / seq-pattern / name / "_"
