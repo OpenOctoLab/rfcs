@@ -78,6 +78,7 @@ Table of Contents
      3.7.  Channel
      3.8.  Spread
      3.9.  struct: Composite Types
+     3.10. Event and Error
    4.  Operators and Precedence
    5.  Expressions
      5.1.  Member Access, Indexing, Slicing, Calling
@@ -88,7 +89,7 @@ Table of Contents
      5.6.  Scope Views: globals and locals
    6.  Statements, Control Flow and Concurrency
      6.1.  Separation, Blocks and Conditions
-     6.2.  Failure: panic, try and except
+     6.2.  Failure: panic, try and catch
      6.3.  Tasks, spawn and await
      6.4.  par: Parallel Blocks
      6.5.  race: Racing Outcomes
@@ -205,15 +206,15 @@ Table of Contents
    (Section 10.2):
 
       and      as       async    await    bool     break    case
-      chan     char     const    continue default  delay
-      elif     else     every    except   f32      f64      false
-      finally  fn       for      from     globals  i128     i16
-      i32      i64      i8       if       import   in       isize
-      let      locals   loop     match    next     not      null
-      octo     on       or       panic    par      pass     race
-      return   select   sleep    spawn    str      struct   this
-      true     try      u128     u16      u32      u64      u8
-      usize    until    var      wait     when     while    within
+      catch    chan     char     const    continue default  delay
+      elif     else     every    f32      f64      false    finally
+      fn       for      from     globals  i128     i16      i32
+      i64      i8       if       import   in       isize    let
+      locals   loop     match    next     not      null     octo
+      on       or       panic    par      pass     race     return
+      select   sleep    spawn    str      struct   this     true
+      try      u128     u16      u32      u64      u8       usize
+      until    var      wait     when     while    with     within
 
    Keywords are read-only: using any keyword as an assignment target,
    including compound assignment, is a syntax
@@ -368,11 +369,12 @@ Table of Contents
    are f64.  Where a name does carry one, the annotation is enforced:
    the value bound to that name -- by let, const, var, an assignment,
    a parameter or a return -- is stored and operated on at the
-   annotated width, and a value that does not fit it panics with the
-   kind OutOfRange.  An annotation never converts a value; an
+   annotated width, and a value that does not fit it panics with an
+   Error of kind OutOfRange.  An annotation never converts a value;
    out-of-range value is an error, not a truncation.  The default
    width is enforced the same way: a value or result that does not
-   fit i32 or f64 panics with OutOfRange whether or not a name is
+   fit i32 or f64 panics with an Error of kind OutOfRange whether or
+   not a name is
    annotated.
 
       let count: i32 = 0
@@ -380,7 +382,7 @@ Table of Contents
       let maybe: i32? = null   # nullable: may be null
       let items: Vec<i32> = []
       let small: i8 = 127      # ok
-      let bad: i8 = 300        # panics with OutOfRange
+      let bad: i8 = 300        # an Error of kind OutOfRange
 
       fn scale(x: f64, by: i64 = 2) -> f64 {
          return x * by
@@ -393,7 +395,8 @@ Table of Contents
 
    The built-in names are bool, char, str, i8, i16, i32, i64, i128,
    isize, u8, u16, u32, u64, u128, usize, f32, f64, (), Option, Vec,
-   Tuple, HashSet, HashMap, Range, Duration, Future, Channel and Any; an
+   Tuple, HashSet, HashMap, Range, Duration, Event, Error, Future,
+   Channel and Any; an
    identifier names a user or host type and, if unrecognised, is
    treated as Any.
    The primitive names in the list are keywords (Section 2.4); the
@@ -420,7 +423,8 @@ Table of Contents
    written.  An unannotated name does not lack a type; it takes the
    type inferred for it (Section 2.8).  A value belongs to exactly one
    of the following kinds: null, bool, integer, float, str, Vec, Tuple,
-   HashSet, HashMap, Range, Duration, function, Future or Channel.  An
+   HashSet, HashMap, Range, Duration, Event, Error, function, Future or
+   Channel.  An
    integer is a 32-bit signed value and a float is binary64 unless a
    type annotation (Section 2.8) narrows it.  There is no implicit
    conversion between numeric kinds except where an operator states
@@ -493,7 +497,7 @@ Table of Contents
    millisecond.  The writing is not examined for sense: 23h 60m 3600s
    3600000ms is written freely and is the interval 93_600_000ms, the
    same interval as 1d 2h.  A total that does not fit u32, or an
-   operation whose result does not, panics with the kind OutOfRange
+   operation whose result does not, panics with an Error of kind
    (Section 2.8).
 
    Arithmetic.  A Duration is added to and subtracted from a Duration
@@ -557,7 +561,7 @@ Table of Contents
    created with chan T for an unbuffered channel, or chan T(n) for a
    channel buffered with room for n values.  The element type T is
    enforced like any annotation (Section 2.8): a sent value that does
-   not fit T panics with the kind OutOfRange.
+   not fit T panics with an Error of kind OutOfRange.
 
    *  Send: ch <- value, or the value-first form value -> ch, appends
       value to the channel.  On an unbuffered channel the sender
@@ -613,6 +617,43 @@ Table of Contents
    field is read and written with the member syntax of Section 5.1.
    Structs are nominal: two structs are the same type only if they are
    the same declaration.
+
+3.10.  Event and Error
+
+   An Event is what a handler, a wait, an until suffix or a select arm
+   receives.  An Error is what a failure carries.  Both are built-in
+   types declared as structs:
+
+      struct Event {
+         name: str              # the concrete topic it arrived on
+         payload: Any           # what it carries
+      }
+
+      struct Error {
+         kind: str              # the class of failure
+         message: str           # what happened, for a person to read
+         cause: Error?          # what it came from, or null
+      }
+
+   An event is looked up by name: the name is the concrete topic of the
+   event, so the wildcards of Section 6.7 may stand in the topic of a
+   subscription but never in the name of the event that arrives.  The
+   payload is whatever came with it -- the fields of a device
+   notification, the value a program published with emit, or null.  A
+   handler bound with as receives the Event itself and reads its
+   payload, as in ev.payload.name.
+
+   The kind of an Error names its class -- OutOfRange, Cancel, Timeout,
+   BadMatch, one of the OCP error-code names of Section 9.5, or any
+   name a program chooses -- and it is what a catch clause matches
+   (Section 6.2).  The cause carries the failure that was being handled
+   when this one was raised, or null when there was none, so a chain of
+   failures is kept.  Error(kind, message, cause = null) builds one.
+   Written as text an Error is "kind: message", followed by " <- " and
+   the cause's own text when there is one.
+
+   Both are immutable: their fields are set when the value is made and
+   MUST NOT be written afterwards.
 
 4.  Operators and Precedence
 
@@ -728,9 +769,9 @@ Table of Contents
    start MUST name an element or the boundary n; a stop MAY name an
    element or either boundary.  A position that is none of these --
    xs[11], xs[-13] or xs[0..12] on the list above -- names nothing and
-   panics with the kind OutOfRange (Section 2.8).  On an empty subject
-   no position names an element: xs[..] is the empty list and xs[0..]
-   is a panic.
+   panics with an Error of kind OutOfRange (Section 2.8).  On an empty
+   subject no position names an element: xs[..] is the empty list and
+   xs[0..] is a panic.
 
    Only a list and a text are sliced.  A tuple is indexed but not
    sliced: its elements differ in type, so a slice of it would have no
@@ -804,9 +845,9 @@ Table of Contents
    is likewise always parenthesised.
 
    The compound statements if, elif, else, for, while, loop, try,
-   except, finally, match, race, select, par, delay, every and on open a
-   block; so do fn, a case arm, an until body, an every body and the
-   arrow body when it is a block.
+   catch, finally, match, race, select, par, delay, every, with and on
+   open a block; so do fn, a case arm, an until body, an every body and
+   the arrow body when it is a block.
 
    A head that continues a block -- elif, else, until, every, after and
    while -- is written on the same line as the closing brace of the
@@ -912,7 +953,7 @@ Table of Contents
 
    The condition is evaluated before each iteration; the body runs
    while it is true, so a while runs zero or more times.  The loop is
-   left through break (Section 6.1.7), return (Section 6.1.8), a
+   left through break (Section 6.1.7), return (Section 6.1.10), a
    failure (Section 6.2) or an until clause written after its body
    (Section 6.1.6).
 
@@ -1000,7 +1041,7 @@ Table of Contents
       while running() {
          step()
       } until "shutdown.requested" as req {
-         log("stopping", req.reason)
+         log("stopping", req.payload.reason)
       }
 
       loop { ... } every 1s { ... } until "event.foo" [as bar] { ... }
@@ -1088,11 +1129,11 @@ Table of Contents
          ...
       } until "sensor.+.temp" as e { ... }          # OCP wildcard
 
-   The optional as bar binds the first-captured event's payload to bar
-   for the duration of the until body; the body may read bar's members.
-   Without as bar the payload is discarded, as it is in on (Section
-   6.7) and wait (Section 6.8): there is no implicit binding.  The
-   binding is local to the until body.
+   The optional as bar binds the first-captured Event to bar for the
+   duration of the until body; the body may read bar's name and payload.
+   Without as bar the Event is discarded, as it is in on (Section 6.7)
+   and wait (Section 6.8): there is no implicit binding.  The binding is
+   local to the until body.
 
    A loop that runs no cycle at all -- a while whose condition is false
    on entry -- makes no suffix check.  A suffix never changes the loop's
@@ -1125,11 +1166,32 @@ Table of Contents
    branch which is meant to do nothing says so.  An empty block is
    likewise legal where a block is required.
 
-6.1.8.  return
+6.1.9.  with: Scoped Resources
+
+      with open_log("run.log") as log {
+         log.write("start")
+      }
+
+   with binds a resource for the life of a block and releases it when
+   the block is left, however it is left.  The expression is evaluated
+   once; written with as name, name is bound to what the value's enter
+   member yields, and without as the value itself is the resource.
+   When the block is left -- by falling off its end, by break,
+   continue, next, return or a panic -- the resource's exit member is
+   called.  enter and exit are ordinary members read by the member
+   syntax of Section 5.1, so a struct that declares them is a resource;
+   a value that supplies neither is a type error.
+
+   exit runs exactly once, and a panic raised in it supersedes the
+   failure in flight, as one raised in finally does (Section 6.2).  A
+   return in the body runs exit before it returns.  The name bound by
+   as is local to the block.
+
+6.1.10.  return
 
    "return" with a value returns it; "return" without a value yields
    null.  A return propagates out of any nesting of blocks, loops and
-   try statements: an except clause does not intercept it, while a
+   try statements: a catch clause does not intercept it, while a
    finally clause still runs on the way out.  A return inside a finally
    clause supersedes the one in flight.  If a function body finishes
    without an explicit return, the value of its last statement is
@@ -1138,23 +1200,22 @@ Table of Contents
    that value.  A return at the top level of a program terminates the
    program.
 
-6.2.  Failure: panic, try and except
+6.2.  Failure: panic, try and catch
 
-   panic kind raises a failure carrying a kind, which is a text value
-   naming the class of error; an optional second argument carries a
-   human-readable message.
+   panic raises a failure carrying an Error (Section 3.10) and nothing
+   else:
 
-      panic "HardwareError" "motor stalled"
+      panic Error("HardwareError", "motor stalled")
 
    A panic abandons the statement that raised it: the statements after
-   it in the same block do not run.  try { body } except Kind as e {
+   it in the same block do not run.  try { body } catch Kind as e {
    handler } finally { cleanup } catches a panic raised by body whose
-   kind equals Kind, exactly; the optional as e binds the panic object,
-   whose members are kind and message.  A try MAY carry several except
-   clauses, which are tried in textual order and of which at most one
-   runs; a bare except catches any kind and, when present, SHOULD come
-   last, since a clause after it could never run.  An except clause
-   does not catch a panic raised by another except clause, and a panic
+   error's kind equals Kind, exactly; the optional as e binds the Error,
+   whose members are kind, message and cause.  A try MAY carry several
+   catch clauses, which are tried in textual order and of which at most
+   one runs; a bare catch catches any kind and, when present, SHOULD
+   come last, since a clause after it could never run.  A catch clause
+   does not catch a panic raised by another catch clause, and a panic
    raised in finally supersedes the failure in flight.  finally runs
    whether the body panicked or not, and also when the body is left by
    return, break or continue.
@@ -1167,8 +1228,8 @@ Table of Contents
    reported on core.error.
 
    The kinds a program MUST be prepared to catch are the OCP error-code
-   names of Section 9.5 and the built-in kinds Timeout, Cancel and
-   OutOfRange (Section 2.8).
+   names of Section 9.5 and the built-in error kinds Timeout, Cancel
+   and OutOfRange (Section 2.8).
 
 6.3.  Tasks, spawn and await
 
@@ -1321,9 +1382,10 @@ Table of Contents
    dur is a Duration (Section 3.5) and nothing else.
 
    on in a select is a one-shot wait for a single event; the persistent
-   subscription form is on (Section 6.7).  The event data is bound to
+   subscription form is on (Section 6.7).  The Event is bound to
    an explicit as name after the topic, and is discarded when as is
-   omitted.  A recv arm binds the received value the same way.
+   omitted.  A recv arm binds the received value the same way; the value
+   it binds is the value itself, not an Event.
 
 6.7.  on: Persistent Event Subscriptions
 
@@ -1332,13 +1394,13 @@ Table of Contents
    that arrives:
 
       let sub = on "device.fault" as ev {
-         latch_fault(ev.name)
+         latch_fault(ev.payload.name)
       }
 
    Each arriving EVENT for a matching topic starts a new task running
    the handler; handler tasks run concurrently with the main flow and
-   with one another.  The handler names the event data with as ev;
-   without as the data is discarded.  If the handler panics, the panic
+   with one another.  The handler names the Event with as ev; without
+   as the Event is discarded.  If the handler panics, the panic
    is reported on the
    runtime topic core.error [RFC0004], Section 9.2.1, and the
    subscription survives.
@@ -1363,17 +1425,17 @@ Table of Contents
       sleep 500ms        # pause half a second
 
    wait topic suspends the current task until the next EVENT on topic
-   arrives and yields its data; it is sugar for a one-arm select
+   arrives and yields the Event; it is sugar for a one-arm select
    (Section 6.6):
 
       let ev = wait "device.status"
       let fault = wait "device.fault"
 
-   The block form runs its body once with the payload bound by as, and
-   discards the payload when as is omitted.
+   The block form runs its body once with the Event bound by as, and
+   discards the Event when as is omitted.
 
       wait "device.fault" as fault {
-         latch_fault(fault.name)
+         latch_fault(fault.payload.name)
       }
 
    wait is a one-shot subscriber: it does not outlive the call and
@@ -1440,7 +1502,8 @@ Table of Contents
    to a device is not recalled, because a CALL that has left the host
    is allowed to run to its RESULT (RFC0004, Section 6.4.4), which the
    cancel procedure then reports as not taken.  A cancelled task
-   settles its future as failed with the kind Cancel.  Cancelling a
+   settles its future as failed with an Error of kind Cancel.
+   Cancelling a
    future that has already settled, or a subscription that is already
    cancelled, does nothing.
 
@@ -1518,7 +1581,8 @@ Table of Contents
 
    Destructuring works in let, const, var, the for variable, the
    parameter list.  A failed match -- too few
-   elements, a missing key -- panics with the kind BadMatch.  A key
+   elements, a missing key -- panics with an Error of kind BadMatch.
+   A key
    absent from the source dictionary may be given a default with name =
    expr in the pattern.
 
@@ -1576,7 +1640,7 @@ Table of Contents
    capabilities and, for a secured scheme, the members that [RFC0009]
    or [RFC0010] require, and waits for WELCOME.  If the security mode
    the caller required is not confirmed by WELCOME, connect() closes
-   the session and panics with the kind the negotiation reports (for
+   the session and panics with an Error of the kind it reports (for
    example Unauthorized or Unsupported); an Air peer [RFC0011] silently
    closes a secured session, which the host surfaces as SessionExpired.
 
@@ -1619,8 +1683,8 @@ Table of Contents
 
    An unknown name, an argument form the peer refuses, or a failure
    inside the procedure is delivered in RESULT with ok false; the host
-   fails the future with the error's kind (Section 9.5), which the
-   program catches with except.  This matches [RFC0004], Section 6.4.2:
+   fails the future with an Error of that kind (Section 9.5), which the
+   program catches with catch.  This matches [RFC0004], Section 6.4.2:
    a refused call is an outcome, never an ERROR frame.
 
    metadata() returns {instructions, sensors, actuators, params,
@@ -1639,14 +1703,18 @@ Table of Contents
    -- the same on, the same handler, the same subscribe -- because to
    the language the two are indistinguishable [RFC0004], Section 9.2.1.
 
-   Publishing from the program side is the call publish(topic, data):
-   it sends an EVENT on the session.  A program publishes only under a
-   name it is entitled to, that is, a name it owns or one under the
-   private x. prefix.
+   Publishing from the program side is the call publish(name, payload):
+   it sends an Event on the session, over the PubSub pipe, and the peer
+   sees it as it sees any other topic.  The Event is not raised here:
+   no on handler, wait, until suffix or select arm of this program
+   observes it, which is what separates publish from emit (Section
+   10.2).  A program publishes only under a name it is entitled to, that
+   is, a name it owns or one under the private x. prefix.
 
 9.5.  Error Model and OCP Error Codes
 
-   A future fails with a kind.  The kind is one of two origins.  An
+   A future fails with an Error (Section 3.10).  Its kind is one of
+   two origins.  An
    application failure arrives in RESULT as {kind, message}; the host
    uses that kind verbatim.  A protocol failure arrives as an ERROR
    frame [RFC0004], Section 5.11; the host maps its code to the name of
@@ -1689,10 +1757,10 @@ Table of Contents
                    Table 4: OCP Error Code Mapping
 
    These names are reserved: a program MUST NOT define an application
-   error of the same name.  The built-in kinds Timeout (a select after
-   or an await within that expired) and Cancel (a cancelled task) are
-   also reserved.  Codes 0x000F and above belong to [RFC0009] and are
-   mapped the same way when that extension is in force.
+   error of the same name.  The built-in error kinds Timeout (a select
+   after or an await within that expired) and Cancel (a cancelled task)
+   are also reserved.  Codes 0x000F and above belong to [RFC0009] and
+   are mapped the same way when that extension is in force.
 
 9.6.  Security Modes: [RFC0009] and [RFC0010]
 
@@ -1805,18 +1873,25 @@ Table of Contents
    pure; the only functions that do I/O are the three at the end.  The
    pure part is: abs, min, max, sum, len, range, sorted, reversed,
    zip, enumerate, map, filter, any, all, type, keys, values, items,
+   emit,
    and the channel primitives chan, close, send, recv.  Every
    primitive type but () names a conversion function: bool, char, str,
    i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize, f32
    and f64 each take one value and yield that type; a conversion that
-   does not fit panics with the kind OutOfRange (Section 2.8), so
+   does not fit panics with an Error of kind OutOfRange (Section
+   2.8), so
    i8(300) fails rather than truncates.  A Duration is unboxed by
    these constructors: the count of milliseconds is cut down to the
-   width of the target and does not panic (Section 3.5).  Three
-   functions perform simple line I/O: print writes each argument,
-   formatted by Section
-   10.4 and separated by a space, to standard output followed by a
-   newline; eprint does the same on standard error; input reads one
+   width of the target and does not panic (Section 3.5).  emit(name,
+   payload) raises an Event named name with that payload for the
+   subscriptions of this program: the handlers of on, the wait that is
+   waiting on it, and the until and select arms whose topic matches the
+   name.  It yields null, and a name that holds a wildcard matches
+   nothing.  publish (Section 9.4) carries the same Event to the peer
+   over the PubSub pipe and raises nothing here.  Three functions
+   perform simple line I/O: print writes each argument, formatted by
+   Section 10.4 and separated by a space, to standard output followed
+   by a newline; eprint does the same on standard error; input reads one
    line from standard input and yields it without the trailing
    newline, or null at end of input.  A host MAY add more but MUST
    NOT remove or rename these.
@@ -1977,8 +2052,9 @@ Table of Contents
    Diagnostics fall into three classes: lexical (Section 2), syntactic
    (this document's grammar) and runtime (a panic, Section 6.2).  A
    lexical or syntactic error MUST stop the program before any
-   statement runs.  A runtime error is a panic carrying a kind and a
-   message; the built-in kinds are those of Sections 9.5 and 6.2.
+   statement runs.  A runtime error is a panic carrying an Error,
+   whose kind and message say what failed; the built-in kinds are those
+   of Sections 9.5 and 6.2.
 
    A conforming implementation reports each diagnostic with a position
    (line and column) and a message in English.  It MUST NOT proceed past
@@ -1996,7 +2072,7 @@ Table of Contents
 
       # Latch every fault for the whole program.
       on "device.fault" as ev {
-         log("fault", ev.name)
+         log("fault", ev.payload.name)
       }
 
       # Read both encoders at once; await them together.
@@ -2036,13 +2112,13 @@ Table of Contents
       loop {
          await step()
       } until "shutdown.requested" as cmd {
-         if cmd.soft { continue }   # soft stop: keep stepping
+         if cmd.payload.soft { continue }   # soft stop: keep stepping
          break                      # hard stop: leave the loop
       }
 
       # One-shot wait for the next status report.
       let st = wait "device.status"
-      log("state", st.state)
+      log("state", st.payload.state)
 
    The expression status() within 2s is sugar for race { status();
    sleep 2s }; if the timeout arm wins, the result is null and the
@@ -2123,7 +2199,8 @@ Appendix A. Collected Grammar (ABNF)
 
       stmt        = let-stmt / const-stmt / var-stmt / expr-stmt
                   / if-stmt / for-stmt / while-stmt / loop-stmt
-                  / try-stmt / match-stmt / return-stmt / break-stmt
+                  / try-stmt / with-stmt / match-stmt / return-stmt
+                  / break-stmt
                   / continue-stmt / next-stmt / panic-stmt
                   / pass-stmt
                   / spawn-stmt / race-stmt / par-stmt
@@ -2171,13 +2248,16 @@ Appendix A. Collected Grammar (ABNF)
       wait-stmt   = "wait" topic [ "as" name ] block
       on-expr     = "on" topic [ "as" name ] block
       chan        = postfix-expr
-      # on yields a subscription handle; wait yields the event payload
+      # on yields a subscription handle; wait yields the Event
       sleep-expr  = "sleep" expr
       every-stmt  = [ "await" ] "every" expr block
       delay-stmt  = [ "await" ] "delay" expr block
       # await makes the statement blocking: it runs in this task
       cancel-stmt = "cancel" expr
 
+      try-stmt    = "try" block *( catch-clause ) [ "finally" block ]
+      catch-clause= "catch" [ expr ] [ "as" name ] block
+      with-stmt   = "with" expr [ "as" name ] block
       if-stmt     = "if" expr block *( "elif" expr block )
                   [ "else" block ]
       while-stmt  = "while" expr block *( loop-suffix )
