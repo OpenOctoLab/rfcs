@@ -336,6 +336,29 @@ Table of Contents
    correlation, and, when [RFC0009] is in use, as part of the nonce of
    every frame.
 
+   Sequence numbers also give the session a first line of anti-replay
+   defence that needs no key.  A receiver MAY keep a bounded, sliding
+   window of recently accepted sequence numbers and, for each number in
+   the window, a hash of the octets it accepted under that number.  The
+   hash algorithm is an implementation matter and this document does not
+   mandate one.  Storing a hash rather than the octets keeps the
+   per-frame memory small and fixed, and the window is a local matter
+   that MUST NOT grow with the session, so the memory the check uses is
+   bounded.  A frame whose number lies inside the window but whose hash
+   differs from the one remembered for that number is a replay or a
+   forgery, and the receiver SHOULD reject it and report E_REPLAYED
+   (Appendix A).  A frame that repeats a number with an identical hash
+   is a benign retransmission and is processed as such.  A frame whose
+   number is older than the window is stale and MUST be discarded: the
+   number has fallen out of the window, so the frame is either a very
+   late delivery or a replay of an old number and MUST NOT be processed.
+   A frame that carries an unsettled CALL MUST have its raw octets
+   retained until the call settles, because the receiver MUST be able to
+   honour a cancel for it; once the call has completed or been cancelled
+   the raw octets MAY be discarded and the hash kept.  This check is
+   available on a cleartext session and is independent of [RFC0009],
+   which tightens it for an authenticated session in its Section 7.4.
+
 3.5.  Compression
 
    When F_COMP is set, the payload is the compressed form of the CBOR
@@ -2574,6 +2597,9 @@ Appendix A.  Error Code Registry
    +-------+--------------------+--------------------------------------+
    |0x000E |E_DECOMPRESS        |The compressed payload is malformed.  |
    +-------+--------------------+--------------------------------------+
+   |0x000F |E_REPLAYED          |The frame repeats a sequence number   |
+   |       |                    |already accepted with other octets.   |
+   +-------+--------------------+--------------------------------------+
 
                      Table 22: Error Code Registry
 
@@ -2594,15 +2620,17 @@ Appendix A.  Error Code Registry
 
    *  0x000E: a transform.
 
+   *  0x000F: a replayed frame.
+
    The same registry is used by the "error" member of tunnel state
    frames.  A stream parser that simply needs more octets is not a
    protocol error and MUST NOT be reported as one.
 
-   These are all the codes of this document, and 0x000E is the last of
+   These are all the codes of this document, and 0x000F is the last of
    them.  A document of the series that needs more adds them after it,
    so the core never grows into the range of an extension and an
    extension never takes a code the core already owns: [RFC0009] starts
-   at 0x000F.  Once a code has been published it is never renumbered and
+   at 0x0010.  Once a code has been published it is never renumbered and
    its number is never reused.
 
 Appendix B.  Test Vectors

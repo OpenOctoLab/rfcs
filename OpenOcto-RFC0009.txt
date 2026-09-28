@@ -811,14 +811,14 @@ Table of Contents
    IANA.
 
    It takes three values from the namespaces of [RFC0004], which that
-   document maintains, and adds one code to its error registry, all
+   document maintains, and reuses one code from its error registry, all
    under the rules of [RFC0004], Section 11:
 
    *  Flag bits 0x08, 0x10 and 0x20 (Section 3.2).
 
    *  The header length 0x0020 (Section 3.1).
 
-   *  The error code E_REPLAYED (Appendix A).
+   *  The error code E_REPLAYED (now defined in [RFC0004], Appendix A).
 
    The namespaces of algorithm names are not maintained at all.  A name
    in one of them is chosen by agreement between the two endpoints of
@@ -889,22 +889,20 @@ Table of Contents
 
 Appendix A.  Error Codes
 
-   This document adds three codes to the registry of [RFC0004],
-   Appendix A, and reuses one.  They follow the code of that document
-   that has the largest value, 0x000E, so the core keeps the low range
-   and an extension never takes a number the core owns.
+   This document adds two codes to the registry of [RFC0004],
+   Appendix A, and reuses one: E_REPLAYED (0x000F), which that document
+   now defines.  They follow the code of that document that has the
+   largest value, 0x000F, so the core keeps the low range and an
+   extension never takes a number the core owns.
 
    +=======+====================+======================================+
    |Code   |Name                |Meaning                               |
    +=======+====================+======================================+
-   |0x000F |E_BAD_ITG           |Integrity trailer does not match.     |
+   |0x0010 |E_BAD_ITG           |Integrity trailer does not match.     |
    +-------+--------------------+--------------------------------------+
-   |0x0010 |E_DECRYPT           |Decryption or tag verification failed |
+   |0x0011 |E_DECRYPT           |Decryption or tag verification failed |
    |       |                    |or there is no key for the epoch of   |
    |       |                    |the frame.                            |
-   +-------+--------------------+--------------------------------------+
-   |0x0011 |E_REPLAYED          |The frame repeats a sequence number   |
-   |       |                    |already accepted with other octets.   |
    +-------+--------------------+--------------------------------------+
 
                      Table 8: Error Codes Added

@@ -533,7 +533,8 @@ Table of Contents
    operand of % is a Duration and only a Duration: d % n is not
    written.  A Duration is never an operand of the bitwise operators
    &, |, ^, ~, << and >>: a bit operation on an interval has no
-   meaning and is a type error.
+   meaning and is a type error.  A division or modulo by zero panics
+   with an Error of kind DivideByZero.
 
    Text.  A Duration is written as text in the standard form: the units
    d, h, m, s and ms in that order, each with its value, a space
@@ -571,7 +572,8 @@ Table of Contents
       6.2) so the failure propagates to the awaiter.
 
    A future carries no method that reads its value without waiting; the
-   only ways to observe it are await, race, select and cancel.
+   only ways to act on it are await, race, select and cancel, which
+   returns a future carrying the cancellation result (non-blocking).
 
 3.7.  Channel
 
@@ -588,10 +590,12 @@ Table of Contents
 
    *  Receive: <-ch removes and yields the oldest value, suspending the
       receiver until a value is present.  Receiving from a closed
-      channel yields null once it is drained and then fails closed.
+      channel yields null once it is drained and then panics with an
+      Error of kind ChannelClosed.
 
-   *  close(ch) marks a channel closed; further sends fail and further
-      receives drain the buffer then yield null.
+   *  close(ch) marks a channel closed; further sends panic with an
+      Error of kind ChannelClosed and further receives drain the buffer
+      then yield null.
 
    A channel is first-class and may be stored, passed as an argument
    and selected upon (Section 6.6).
@@ -664,8 +668,9 @@ Table of Contents
    payload, as in ev.payload.name.
 
    The kind of an Error names its class -- OutOfRange, Cancel, Timeout,
-   BadMatch, one of the OCP error-code names of Section 9.5, or any
-   name a program chooses -- and it is what a catch clause matches
+   BadMatch and the other built-in kinds of Appendix C, one of the OCP
+   error-code names of Section 9.5, or any name a program chooses --
+   and it is what a catch clause matches
    (Section 6.2).  The cause carries the failure that was being handled
    when this one was raised, or null when there was none, so a chain of
    failures is kept.  Error(kind, message, cause = null) builds one.
@@ -727,7 +732,12 @@ Table of Contents
    expr.name reads a member.  expr[index] indexes a list, tuple, text
    or dictionary; negative indices count from the end.  expr(args) calls
    a function or invokes a native procedure.  The three may be chained:
-   device.status().state.
+   device.status().state.  A member read on a value that has no such
+   member, or a method call on a non-callable, panics with an Error of
+   kind BadMember; an index that names no element panics with OutOfRange
+   (Section 2.8); a dictionary lookup with an absent key panics with an
+   Error of kind BadKey; a member or index through a null value panics
+   with NullDeref.
 
    A call argument is bound by position (a value) or by name (name:
    value).  A position and a name MAY appear in one call; positions
@@ -1093,9 +1103,9 @@ Table of Contents
 
    The suffixes apply to every loop uniformly -- while, loop and both
    forms of for -- and are independent of one another.  A loop MAY chain
-   them in any order and without limit, except that until appears at
-   most once.  They are checked in the order they are typed, beginning
-   with the one nearest the body:
+   any of them, in any order and without limit; until too may repeat,
+   and the tails MAY be mixed freely.  They are checked in the order
+   they are typed, beginning with the one nearest the body:
 
       while running() {
          step()
@@ -1108,6 +1118,7 @@ Table of Contents
       for (;;) { ... } after 5s { ... }
       loop { ... } while <cond> until "event.foo" [as bar] { ... }
       loop { ... } until "event.foo" [as bar] { ... } while <cond>
+      loop { ... } until "a" { ... } until "b" { ... } every 1s { ... }
 
    A cycle is one iteration of the loop: the running of the body and,
    for a counted for, the update clause that follows it.  The suffix
@@ -1330,8 +1341,9 @@ Table of Contents
    reported on core.error.
 
    The kinds a program MUST be prepared to catch are the OCP error-code
-   names of Section 9.5 and the built-in error kinds Timeout, Cancel
-   and OutOfRange (Section 2.8).
+   names of Section 9.5 and the built-in error kinds OutOfRange
+   (Section 2.8), BadMatch (Section 8), Cancel (Section 6.9), Timeout
+   (Section 6.2) and ChannelClosed (Section 3.7).
 
 6.3.  Tasks, spawn and await
 
@@ -1593,21 +1605,29 @@ Table of Contents
 
 6.9.  Cancellation
 
-   cancel(future) requests cancellation of the task behind a future or
-   of a subscription handle.  For a future that is a device CALL it is
+   cancel(future) immediately requests cancellation of the task behind a
+   future or of a subscription handle; it returns a future that resolves
+   with the cancellation result -- whether the cancellation was taken --
+   without blocking the caller.  For a future that is a device CALL it is
    implemented by the cancel procedure of the Core Profile: the
-   implementation sends CALL {name: "cancel", args: {"id": <the CALL's
-   id>}} to the device, which answers whether the cancellation took
-   (RFC0004, Sections 5.4 and 9.1.4).  Cancellation is cooperative for
-   a local task: the task observes the request at the next await,
-   sleep, select or device call and then stops; work already dispatched
-   to a device is not recalled, because a CALL that has left the host
-   is allowed to run to its RESULT (RFC0004, Section 6.4.4), which the
-   cancel procedure then reports as not taken.  A cancelled task
-   settles its future as failed with an Error of kind Cancel.
-   Cancelling a
-   future that has already settled, or a subscription that is already
-   cancelled, does nothing.
+   implementation sends CALL {name: "cancel", args: {"id":
+   <the CALL's id>}} to the device, which answers whether the
+   cancellation took (RFC0004, Sections 5.4 and 9.1.4).  A local
+   task is stopped cooperatively: it observes the request at the next
+   await, sleep, select or device call and then stops; the
+   work already dispatched to a device is not recalled, because a CALL
+   that has left the host is allowed to run to its RESULT (RFC0004,
+   Section 6.4.4), which the cancel procedure then reports as not taken.
+   A cancelled task settles its future as failed with an Error of kind
+   Cancel.
+   Cancelling a future that has already settled, or a subscription that
+   is already cancelled, does nothing, and the cancel future resolves
+   accordingly.
+
+   cancel is not itself cancellable: calling cancel on the future that
+   cancel returned fails that future at once with an Error of kind
+   Cancel, so a cancellation request can never be withdrawn by cancelling
+   it.
 
    race (Section 6.5) cancels the losers, select (Section 6.6)
    abandons the arms it did not choose, par (Section 6.4) cancels its
@@ -1870,13 +1890,15 @@ Table of Contents
       +--------+-------------------+-------------------------------+
       |0x000E  |Decompress         |Compressed payload malformed.  |
       +--------+-------------------+-------------------------------+
+      |0x000F  |Replayed           |Frame repeats a sequence number|
+      +--------+-------------------+-------------------------------+
 
                    Table 4: OCP Error Code Mapping
 
    These names are reserved: a program MUST NOT define an application
    error of the same name.  The built-in error kinds Timeout (a select
    after or an await within that expired) and Cancel (a cancelled task)
-   are also reserved.  Codes 0x000F and above belong to [RFC0009] and
+   are also reserved.  Codes 0x0010 and above belong to [RFC0009] and
    are mapped the same way when that extension is in force.
 
 9.6.  Security Modes: [RFC0009] and [RFC0010]
@@ -1925,7 +1947,7 @@ Table of Contents
       small; the host panics PayloadTooLarge if it would exceed the
       peer's limit.
 
-   *  The error codes 0x0000 to 0x000E are reused unchanged
+   *  The error codes 0x0000 to 0x000F are reused unchanged
       ([RFC0011], Section 6); the same kinds of Table 4 apply.
 
    *  An Air device is reached over a stream (UART, USB-CDC or TCP);
@@ -1999,7 +2021,11 @@ Table of Contents
    and f64 each take one value and yield that type; a conversion that
    does not fit panics with an Error of kind OutOfRange (Section
    2.8), so
-   i8(300) fails rather than truncates.  A Duration is unboxed by
+   i8(300) fails rather than truncates.  A conversion whose input cannot
+   be read as the target -- i64("abc") -- panics with an Error of kind
+   BadParse; a conversion that reads but cannot yield the target type
+   panics with BadCast; str() on bytes that are not valid UTF-8 panics
+   with BadUTF8.  A Duration is unboxed by
    these constructors: the count of milliseconds is cut down to the
    width of the target and does not panic (Section 3.5).  emit(name,
    payload) raises an Event named name with that payload for the
@@ -2307,7 +2333,8 @@ Table of Contents
    error.  Numbers default to right alignment and text to left; the
    default fill is a space, the default sign -, and the default is no
    #, no zero padding, no width, no precision and no type.  A spec
-   that does not match the grammar above is an error (Section 11).
+   that does not match the grammar above panics with an Error of kind
+   BadFormat (Section 11).
    Examples:
 
       `rate ${rate:.2}`      # "rate 3.14"
@@ -2326,8 +2353,10 @@ Table of Contents
    (this document's grammar) and runtime (a panic, Section 6.2).  A
    lexical or syntactic error MUST stop the program before any
    statement runs.  A runtime error is a panic carrying an Error,
-   whose kind and message say what failed; the built-in kinds are those
-   of Sections 9.5 and 6.2.
+   whose kind and message say what failed.  The built-in error kinds --
+   the runtime kinds a program MAY catch and the compile-time diagnostic
+   kinds -- are listed in Appendix C; all are reserved and a program
+   MUST NOT reuse any of their names (Section 9.5).
 
    A conforming implementation reports each diagnostic with a position
    (line and column) and a message in English.  It MUST NOT proceed past
@@ -2644,6 +2673,117 @@ Appendix B. Conformance Notes
 
    A conforming implementation MAY enforce channel element types, MAY
    add native functions and MAY choose among ready select arms.
+
+Appendix C. Built-in Error Kinds
+
+   A built-in error kind is a str carried in Error.kind (Section 3.10);
+   a catch clause matches it by equality (Section 6.2), so the names
+   below are the exact strings a program writes.  All are reserved: a
+   program MUST NOT define an application error of the same name.  The
+   kinds split into runtime kinds a program MAY catch and compile-time
+   diagnostic kinds that stop the program before any statement runs
+   (Section 11).
+
+   Table C.1 lists the runtime kinds; Table C.2 the compile-time
+   diagnostic kinds; Table C.3 the core OCP protocol kinds of Table 4
+   (Section 9.5), each carrying the OCP ERROR code it maps from.  Table
+   C.4 lists the protocol kinds added by [RFC0009], in force only when
+   that extension is selected (Section 9.5).
+
+   Table C.1: Runtime built-in kinds
+
+      +--------------+----------------------------------+---------+
+      |Kind         |Meaning                          |Section |
+      +--------------+----------------------------------+---------+
+      |OutOfRange   |value does not fit its width;    |§2.8    |
+      |             |bad index; Duration overflow     |        |
+      |DivideByZero |division or modulo by zero       |§3.5    |
+      |BadKey       |dictionary key not present       |§5.1    |
+      |BadMember    |no such member on the value      |§5.1    |
+      |NullDeref    |member or index through null     |§5.1    |
+      |TypeError     |operation on an unsupported type |§5.1    |
+      |BadCast      |conversion cannot yield target type|§10.2   |
+      |BadParse     |a runtime string parse failed    |§10.2   |
+      |BadUTF8      |bytes are not valid UTF-8        |§10.2   |
+      |BadFormat    |malformed format spec in template|§10.4   |
+      |BadMatch     |pattern or destructuring failed  |§8      |
+      |Cancel       |the task was cancelled           |§6.9    |
+      |Timeout      |select after or await expired    |§6.2    |
+      |ChannelClosed|send or receive on a closed      |§3.7    |
+      |             |channel                          |        |
+      |IOError      |input or output operation failed |§10     |
+      |AccessDenied |a resource may not be accessed   |§10     |
+      |NotFound     |a named resource does not exist  |§10     |
+      |StackOverflow |the call stack was exhausted     |§3.10   |
+      |OutOfMemory  |the runtime could not allocate   |§3.10   |
+      |ResourceBusy |a resource is held or unavailable|§3.10   |
+      |Deadlock     |a select can never make progress |§6.6    |
+      |BadArgument  |wrong argument count or type     |§5.1    |
+      +--------------+----------------------------------+---------+
+
+                     Table C.1: Runtime built-in kinds
+
+   Table C.2: Compile-time built-in kinds
+
+      +----------------+----------------------------------------+
+      |Kind            |Meaning                                 |
+      +----------------+----------------------------------------+
+      |BadLex          |illegal character or malformed literal  |
+      |BadSyntax       |the source does not follow the grammar  |
+      |TypeError        |wrong type used where another is required|
+      |BadAnnotation   |unknown or malformed type annotation    |
+      |UnknownName     |name used before it is declared         |
+      |BadImport       |import or from-import unresolved        |
+      |CircularImport  |a module imports itself in a cycle     |
+      |DuplicateDef    |name declared twice in one scope        |
+      |BadConst        |assignment to a const or closed binding |
+      |ConstantOverflow|constant expression overflows its type  |
+      |BadRange        |a range bound is not an integer         |
+      +----------------+----------------------------------------+
+
+                     Table C.2: Compile-time built-in kinds
+
+   Table C.3: Core OCP protocol error codes
+
+      +--------+------------------+---------------------------------+
+      |Code    |Kind             |Meaning                         |
+      +--------+------------------+---------------------------------+
+      |0x0000  |Internal         |Internal error.                 |
+      |0x0001  |BadMagic         |Magic octets are wrong.         |
+      |0x0002  |BadVersion       |Protocol version unsupported.   |
+      |0x0003  |HelloExpected    |First frame was not HELLO.      |
+      |0x0004  |UnknownType      |Message type unknown.           |
+      |0x0005  |BadPayload       |Payload not decodable CBOR.     |
+      |0x0006  |PayloadTooLarge  |Payload over the limit.         |
+      |0x0007  |SessionExpired   |Session no longer usable.       |
+      |0x0008  |Unsupported      |Feature not supported.          |
+      |0x0009  |RateLimited      |Peer is rate limited.           |
+      |0x000A  |Busy             |Peer busy or call timed out.    |
+      |0x000B  |Unauthorized     |Auth missing, wrong or unusable |
+      |0x000C  |NoTunnel         |Tunnel unknown or not open.     |
+      |0x000D  |TunnelReset      |Tunnel reset or offset bad.     |
+      |0x000E  |Decompress       |Compressed payload malformed.   |
+      +--------+------------------+---------------------------------+
+      |0x000F  |Replayed        |Frame repeats a sequence number  |
+      +--------+------------------+---------------------------------+
+
+                     Table C.3: Core OCP protocol error codes
+
+   Table C.4: [RFC0009] extension error codes
+
+      +--------+------------------+---------------------------------+
+      |Code    |Kind             |Meaning                         |
+      +--------+------------------+---------------------------------+
+      |0x0010  |BadIntegrity      |Integrity trailer does not match|
+      |0x0011  |BadDecrypt        |Decryption or tag verify failed |
+      +--------+------------------+---------------------------------+
+
+                     Table C.4: [RFC0009] extension error codes
+
+   An implementation that selects [RFC0009] maps E_BAD_ITG and E_DECRYPT
+   to the kinds above; these are the only protocol kinds
+   an extension adds in this edition, and further extensions define
+   their own in their own documents.
 
 Authors' Addresses
 
