@@ -73,10 +73,11 @@ Table of Contents
      3.2.  Vec, Tuple, HashSet
      3.3.  HashMap
      3.4.  Range
-     3.5.  Future
-     3.6.  Channel
-     3.7.  Spread
-     3.8.  struct: Composite Types
+     3.5.  Duration
+     3.6.  Future
+     3.7.  Channel
+     3.8.  Spread
+     3.9.  struct: Composite Types
    4.  Operators and Precedence
    5.  Expressions
      5.1.  Member Access, Indexing, Slicing, Calling
@@ -93,7 +94,7 @@ Table of Contents
      6.5.  race: Racing Outcomes
      6.6.  select: Waiting on Events, Channels and Time
      6.7.  on: Persistent Event Subscriptions
-     6.8.  Timing: sleep and wait
+     6.8.  Timing: sleep, wait, delay and every
      6.9.  Cancellation
    7.  Functions, Scope and Arguments
      7.1.  Definition and Call
@@ -147,7 +148,7 @@ Table of Contents
    default at the boundary with hardware.  A call to a device -- sense,
    actuate, get_param, set_param, ping, status or metadata -- is not a
    synchronous function returning a value; it is a request that returns
-   a future (Section 3.5).  The future resolves when the device answers
+   a future (Section 3.6).  The future resolves when the device answers
    with a RESULT frame [RFC0004], Section 5.4.  A program reads the
    answer with await (Section 6.3), races several answers with race
    (Section 6.5), or selects among an answer, an event and a timeout
@@ -204,15 +205,15 @@ Table of Contents
    (Section 10.2):
 
       and      as       async    await    bool     break    case
-      chan     char     const    continue default  do       elif
-      else     except   f32      f64      false    finally  fn
-      for      from     globals  i128     i16      i32      i64
-      i8       if       import   in       isize    let      locals
-      loop     match    not      null     octo     on       or
-      panic    par      pass     race     return   select   sleep
-      spawn    str      struct   this     true     try      u128
-      u16      u32      u64      u8       usize    until    var
-      wait     when     while    within
+      chan     char     const    continue default  delay
+      elif     else     every    except   f32      f64      false
+      finally  fn       for      from     globals  i128     i16
+      i32      i64      i8       if       import   in       isize
+      let      locals   loop     match    next     not      null
+      octo     on       or       panic    par      pass     race
+      return   select   sleep    spawn    str      struct   this
+      true     try      u128     u16      u32      u64      u8
+      usize    until    var      wait     when     while    within
 
    Keywords are read-only: using any keyword as an assignment target,
    including compound assignment, is a syntax
@@ -250,19 +251,23 @@ Table of Contents
          =                         assignment
          <  >                     comparison
          ?  :                     conditional
+         @                        timeout (within, Section 6.3)
 
    The characters (, ), {, }, [, ], ,, ; and . are punctuation tokens
    and are not operators.  The token => introduces an arrow function and
    is not the comparison >=.  The token <- is the channel operator:
    as a prefix it receives from a channel, as an infix it sends to one
-   (Section 3.6); the infix -> is the same send written value first,
+   (Section 3.7); the infix -> is the same send written value first,
    so v -> ch is the same send as ch <- v.  The token -> also gives a
    function its return type (Section 7.1); context separates the two.
 
-   An at sign (@) is not a valid character; decorator syntax does not
-   exist.  There is no identity operator: is is an ordinary identifier
-   and comparing with == null is the idiom for emptiness.  There is no
-   increment or decrement operator; x += 1 is used instead.
+   The at sign is the timeout operator: between two operands a @ d is
+   the same as a within d (Section 6.3); before a name it is the
+   session prefix of Section 9.3, as in sense("temp", @dev), and
+   context separates the two.  There is no decorator syntax.  There is
+   no identity operator: is is an ordinary identifier and comparing
+   with == null is the idiom for emptiness.  There is no increment or
+   decrement operator; x += 1 is used instead.
 
    The longest token wins: >>= is one operator, not >> followed by =.
 
@@ -287,6 +292,18 @@ Table of Contents
          let e = 1_000_000   # digit separators
          let f = 3.14        # float
          let g = 1.5e3       # exponent
+
+   Duration literals
+
+      A time interval is written as sections, each a decimal number
+      followed by a unit suffix: ms, s, m, h or d.  A section MAY
+      carry digit separators and MAY be a fraction, and sections MAY
+      be separated by spaces.  Section 3.5 defines the form and the
+      value it denotes.
+
+         let a = 500ms
+         let b = 1s 500ms
+         let c = 1.5s
 
    Boolean and null literals
 
@@ -376,23 +393,23 @@ Table of Contents
 
    The built-in names are bool, char, str, i8, i16, i32, i64, i128,
    isize, u8, u16, u32, u64, u128, usize, f32, f64, (), Option, Vec,
-   Tuple, HashSet, HashMap, Range, Future, Channel and Any; an
+   Tuple, HashSet, HashMap, Range, Duration, Future, Channel and Any; an
    identifier names a user or host type and, if unrecognised, is
    treated as Any.
    The primitive names in the list are keywords (Section 2.4); the
-   container names are ordinary identifiers.  i8 through i128, u8
+   others are ordinary identifiers.  i8 through i128, u8
    through u128, isize and usize are the integer widths, and f32 and
    f64 are the float widths; the default width of an unannotated value
    is i32 or f64.  char names a one-element str
    (a value of any other length is OutOfRange), and () is the unit
    type of the empty tuple.  Vec, HashMap and Channel carry element
-   types (Channel<i64> is the element type of chan i64, Section 3.6).
+   types (Channel<i64> is the element type of chan i64, Section 3.7).
    T? is sugar for Option<T>, the nullable type of a value that may be
    null, and T[] is sugar for Vec<T>.  Suffixes apply in the order
    written, so T[]? is Option<Vec<T>> and T?[] is Vec<Option<T>>.  A
    type name followed by parenthesised arguments is a constructor of
    that type, as in Vec<i64>(), i64("42") and Point(x = 1.0)
-   (Section 3.8).  The language defines no subtyping beyond its
+   (Section 3.9).  The language defines no subtyping beyond its
    built-in kinds.
 
 3.  Types and Values
@@ -401,9 +418,9 @@ Table of Contents
 
    Types are static: every value has one type, known where it is
    written.  An unannotated name does not lack a type; it takes the
-   type inferred for it (Section 2.8).  A value belongs to
-   exactly one of the following kinds: null, bool, integer, float, str,
-   Vec, Tuple, HashSet, HashMap, function, Future or Channel.  An
+   type inferred for it (Section 2.8).  A value belongs to exactly one
+   of the following kinds: null, bool, integer, float, str, Vec, Tuple,
+   HashSet, HashMap, Range, Duration, function, Future or Channel.  An
    integer is a 32-bit signed value and a float is binary64 unless a
    type annotation (Section 2.8) narrows it.  There is no implicit
    conversion between numeric kinds except where an operator states
@@ -450,7 +467,74 @@ Table of Contents
    MAY be omitted, the subject supplying the bound that is missing
    (Section 5.1).
 
-3.5.  Future
+3.5.  Duration
+
+   A Duration is a time interval.  It is a built-in type and not a
+   primitive one: beneath it lies a u32 count of milliseconds, so one
+   unit of the count is one millisecond and the longest interval a
+   Duration holds is 4294967295ms.  A Duration takes part in type
+   inference (Section 2.8) as any other type does.
+
+   A Duration literal is one or more sections.  A section is a decimal
+   number followed by one of the unit suffixes ms, s, m, h and d, and
+   sections MAY be separated by spaces:
+
+      let a = 500ms
+      let b = 1s 500ms
+      let c = 2h 30m
+      let d = 1_000ms                    # separators are permitted
+      let e = 1.5s                       # a fraction is permitted
+
+   A section is decimal: it carries no base prefix, no exponent and no
+   sign, and it MAY carry the digit separators of a numeric literal
+   (Section 2.6).  The value of a literal is the sum of its sections,
+   each converted to milliseconds -- 1s is 1000ms, 1m is 60_000ms, 1h
+   is 3_600_000ms and 1d is 86_400_000ms -- rounded to a whole
+   millisecond.  The writing is not examined for sense: 23h 60m 3600s
+   3600000ms is written freely and is the interval 93_600_000ms, the
+   same interval as 1d 2h.  A total that does not fit u32, or an
+   operation whose result does not, panics with the kind OutOfRange
+   (Section 2.8).
+
+   Arithmetic.  A Duration is added to and subtracted from a Duration
+   and from nothing else: + and - with a plain number, or with a value
+   of another kind, is a type error.  One product holds at most one
+   Duration and otherwise only plain numbers, of the integer or the
+   float kind; the product is rounded to a whole millisecond and is a
+   Duration, so 2 * 1s 500ms is 3s.  In a quotient the Duration stands
+   on the left: a Duration over a plain number is a Duration, rounded
+   the same way; a Duration over a Duration is their ratio as an f64,
+   so 1h / 30m is 2.0.  A Duration stands on the left of // and % as
+   well: d1 // d2 is the i32 count of whole d2 in d1, so 1h // 25m is
+   2; d1 % d2 is the Duration left over, so 1h % 25m is 10m; d // n,
+   for a plain number n, is a Duration, so 1h // 2 is 30m.  The right
+   operand of % is a Duration and only a Duration: d % n is not
+   written.  A Duration is never an operand of the bitwise operators
+   &, |, ^, ~, << and >>: a bit operation on an interval has no
+   meaning and is a type error.
+
+   Text.  A Duration is written as text in the standard form: the units
+   d, h, m, s and ms in that order, each with its value, a space
+   between two sections and none between a number and its unit.  A
+   unit of zero at either end is left out; a unit of zero between two
+   sections that are written is kept, so that the sections after it
+   keep their place: 1d 2m is "1d 0h 2m" and 1d 5s is "1d 0h 0m 5s".
+   The interval of no length is written 0ms.  That form is the default
+   form of Section 10.4, so 90m prints as 1h 30m and the empty
+   interval prints as 0ms.
+
+   Conversion.  The constructor of a primitive type unboxes a Duration
+   (Section 10.2): u32(d) is the millisecond count of d.  Unlike the
+   conversions of Section 10.2 the count is cut down to the width of
+   the target and does not panic, so i8(1h) truncates rather than
+   fails.  Duration(n) builds the interval of n milliseconds from a
+   value of a primitive numeric kind; a fraction in n is rounded to a
+   whole millisecond as above.  The timing statements of the language
+   take a Duration and no other kind: sleep (Section 6.8), the after
+   arm of select (Section 6.6) and the within operator, written @
+   (Section 6.3).
+
+3.6.  Future
 
    A future is a placeholder for a value that is not yet known.  It is
    created by spawn (Section 6.3), by an async function (Section 7.1)
@@ -467,7 +551,7 @@ Table of Contents
    A future carries no method that reads its value without waiting; the
    only ways to observe it are await, race, select and cancel.
 
-3.6.  Channel
+3.7.  Channel
 
    A channel is a typed conduit for passing values between tasks.  It is
    created with chan T for an unbuffered channel, or chan T(n) for a
@@ -490,7 +574,7 @@ Table of Contents
    A channel is first-class and may be stored, passed as an argument
    and selected upon (Section 6.6).
 
-3.7.  Spread
+3.8.  Spread
 
    The prefix ... expands a list, tuple or set into the position where
    it stands: into a list literal, into a call's positional arguments,
@@ -503,7 +587,7 @@ Table of Contents
       fn add(a, b, c, d) { a + b + c + d }
       add(1, ...all)                     # 1 + 2 + 3 + 4
 
-3.8.  struct: Composite Types
+3.9.  struct: Composite Types
 
    A struct declares a composite type: a named record of fields, each
    field carrying a type.  A field type is a primitive or another
@@ -558,7 +642,7 @@ Table of Contents
       +----------+--------------------------------+--------------------+
       |10        | ?  :  (ternary)                | right             |
       +----------+--------------------------------+--------------------+
-      |10.5      | within (timeout)               | left              |
+      |10.5      | within  @ (timeout)            | left              |
       +----------+--------------------------------+--------------------+
       |11        | =  +=  -=  *=  /=  &=  |=  ^=  | right (chained)   |
       |          |   <<=  >>=                    |                    |
@@ -606,7 +690,7 @@ Table of Contents
    omitted; the form is written .... or, with a space, .. .. , and
    with no step after it is the same as one marker: xs[....] and
    xs[..] are the same slice.  The dots are read in pairs, so a run
-   of them is never the spread token of Section 3.7.  A step written
+   of them is never the spread token of Section 3.8.  A step written
    after two markers is the step of that range and not a bound:
    xs[....-1] is the whole list reversed, the same slice as
    xs[-1.. .. -1], while xs[..-1] is every element but the last.  The
@@ -708,7 +792,7 @@ Table of Contents
 
    A statement is terminated by a newline or by one semicolon.  An
    empty statement is a syntax error; where a block must do nothing it
-   is written empty, "{ }", or holds a single pass (Section 6.1.8).  A
+   is written empty, "{ }", or holds a single pass (Section 6.1.7).  A
    block is a sequence of statements enclosed in braces; it introduces
    a new lexical scope nested in the scope that encloses it.  At
    statement position "{" always begins a block, even though "{" at
@@ -716,16 +800,25 @@ Table of Contents
 
    Parentheses around a statement header MAY be omitted without
    changing meaning, with one exception: the counted "for" header
-   (Section 6.1.6) REQUIRES them.  The subject of match (Section 6.1.2)
+   (Section 6.1.5) REQUIRES them.  The subject of match (Section 6.1.2)
    is likewise always parenthesised.
 
-   The compound statements if, elif, else, for, while, loop, do, try,
-   except, finally, match, race, select, par and on open a block; so do
-   fn, a case arm, an until body and the arrow body when it is a block.
+   The compound statements if, elif, else, for, while, loop, try,
+   except, finally, match, race, select, par, delay, every and on open a
+   block; so do fn, a case arm, an until body, an every body and the
+   arrow body when it is a block.
+
+   A head that continues a block -- elif, else, until, every, after and
+   while -- is written on the same line as the closing brace of the
+   block it continues.  Written on a line of its own it does not belong
+   to that block: an else on the same line as the brace closes the if,
+   and one
+   at the start of the next line is not the else of that if.
 
    Conditions.  Every condition in this section -- those of if and
-   elif, of while and do-while and of the counted for, and the guard of
-   a case arm -- MUST be of type bool.  A value of any other type is
+   elif, of while and of the counted for, of a while suffix
+   (Section 6.1.6), and the guard of a case arm -- MUST be of type
+   bool.  A value of any other type is
    never converted to bool: a number, a text, a container, a future or
    null in a condition is a type error, which an implementation MUST
    report before the program runs.  A test is therefore written out:
@@ -736,9 +829,9 @@ Table of Contents
 
    A condition is evaluated each time control reaches it and not
    before: a while condition is tested before every iteration, a
-   do-while condition after every iteration, and an if condition once
+   while suffix after every cycle, and an if condition once
    per execution of the if.  A loop condition that is never reached --
-   the condition of a do-while whose body breaks out -- is not tested.
+   a while suffix of a loop whose body breaks out -- is not tested.
 
 6.1.1.  if / elif / else
 
@@ -819,9 +912,9 @@ Table of Contents
 
    The condition is evaluated before each iteration; the body runs
    while it is true, so a while runs zero or more times.  The loop is
-   left through break (Section 6.1.8), return (Section 6.1.9), a
+   left through break (Section 6.1.7), return (Section 6.1.8), a
    failure (Section 6.2) or an until clause written after its body
-   (Section 6.1.7).
+   (Section 6.1.6).
 
 6.1.4.  loop
 
@@ -831,30 +924,14 @@ Table of Contents
       }
 
    "loop { ... }" repeats unconditionally: it has no condition, runs at
-   least once and is left only through break, return, a failure or an
-   until clause written after its body.  It is the form for a cycle
+   least once and is left only through break, return, a failure or a
+   suffix written after its body.  It is the form for a cycle
    whose end is decided inside the body; "while true { ... }" says the
-   same thing and is equally legal.
+   same thing and is equally legal.  With a while suffix it is the
+   do-while of other languages: "loop { ... } while <cond>" runs the
+   body once before the condition is tested for the first time.
 
-6.1.5.  do...while
-
-      do {
-         n -= 1
-      } while (n > 0)
-
-   The body runs once, then the condition is tested; the loop repeats
-   while it is true, so it runs one or more times.  continue jumps to
-   the condition, and break leaves the loop.  A do-while MAY carry an
-   until clause (Section 6.1.7), written after the condition that
-   closes it, since the body, during which events are captured, has
-   already run once; written before that condition instead, it is
-   checked first:
-
-      do {
-         sample()
-      } while running()
-
-6.1.6.  for: Iterable and Counted
+6.1.5.  for: Iterable and Counted
 
    Iterable form.  "for t in coll { ... }" binds t to each element of
    coll in turn; coll MAY be a list, tuple, set, dictionary, range or
@@ -901,18 +978,24 @@ Table of Contents
    repeated declaration in the same scope is an error.  continue still
    executes the update clause before the next condition test; break
    leaves the loop.  Both forms MAY carry an until clause written after
-   their body (Section 6.1.7).
+   their body (Section 6.1.6).
 
-6.1.7.  until: Event-Gated Loop Exit
+6.1.6.  Loop Suffixes: until, every, after and while
 
-   The until clause is written after the loop's body: it follows the
-   closing brace of the body.  A do-while, which closes with its
-   condition instead, takes the clause either after that condition or,
-   so that it is checked first, before it.  The clause applies to every
-   loop uniformly -- while, loop, do-while and both forms of for -- and
-   appears at most once on a loop.  It gates a loop on an event captured
-   in the loop's own cycle, instead of, or in addition to, its
-   condition:
+   A suffix is a clause written after a loop's body, on the same line
+   as the body's closing brace (Section 6.1).  There are four:
+
+      until <topic> [as name] { ... }   an event was captured
+      every <duration> { ... }          the interval elapsed again
+      after <duration> { ... }          the interval elapsed once
+      while <cond>                      a condition, tested after the
+                                         body
+
+   The suffixes apply to every loop uniformly -- while, loop and both
+   forms of for -- and are independent of one another.  A loop MAY chain
+   them in any order and without limit, except that until appears at
+   most once.  They are checked in the order they are typed, beginning
+   with the one nearest the body:
 
       while running() {
          step()
@@ -920,60 +1003,77 @@ Table of Contents
          log("stopping", req.reason)
       }
 
-   The same clause follows any other loop body:
-
-      loop { ... } until "event.foo" [as bar] { ... }
+      loop { ... } every 1s { ... } until "event.foo" [as bar] { ... }
       for t in coll { ... } until "event.foo" [as bar] { ... }
-      for (;;) { ... } until "event.foo" [as bar] { ... }
-      do { ... } while <cond> until "event.foo" [as bar] { ... }
-      do { ... } until "event.foo" [as bar] { ... } while <cond>
+      for (;;) { ... } after 5s { ... }
+      loop { ... } while <cond> until "event.foo" [as bar] { ... }
+      loop { ... } until "event.foo" [as bar] { ... } while <cond>
 
    A cycle is one iteration of the loop: the running of the body and,
-   for a counted for, the update clause that follows it.  The until
-   check stands between two cycles -- after the body of the cycle that
-   has just finished, and before the condition test that decides
-   whether another one runs.  until opens its subscription when the loop
-   is entered and closes it when the loop is left; every matching event
-   that arrives during a cycle is appended to that cycle's buffer, and
-   the buffer is discarded once that cycle's until check has been made.
+   for a counted for, the update clause that follows it.  The suffix
+   chain stands between two cycles: after the body of the cycle that
+   has just finished, and before the next one begins.
+
+   What a suffix body does then decides where control goes:
+
+   *  next: control passes to the next suffix of the chain, or out of
+      the loop when this is the last one;
+
+   *  (fall-through) a suffix body that finishes without break,
+      continue or next passes on the same way: to the next suffix, or
+      out of the loop after the last one.  Falling out of the last
+      suffix therefore leaves the loop, and a loop that is meant to go
+      on writes continue;
+
+   *  continue: control returns to the body, which runs the next cycle
+      and opens a fresh buffer;
+
+   *  break: the loop is left at once, as it would be from the body.
+
+   An every suffix is the one exception to the fall-through rule: it
+   carries an implicit continue, so falling off its end returns to the
+   body and a loop whose suffix is a lone every keeps going.
+
+   while.  The while suffix is the only one with no body of its own: it
+   is a condition and nothing else.  A condition that holds is a
+   continue -- control goes back to the start of the body; one that does
+   not takes the default next, so control falls through to the suffix
+   written after it, or out of the loop.  A suffix written after a while
+   is therefore reached only when the condition has already failed,
+   when the loop is ending in any case, and is dead code in most
+   programs.  A loop whose only suffix is a while is the common
+   spelling of Section 6.1.4.
+
+   until.  An until suffix gates a loop on an event captured in the
+   loop's own cycle.  It opens its subscription when the loop is entered
+   and closes it when the loop is left; every matching event that
+   arrives during a cycle is appended to that cycle's buffer, and the
+   buffer is discarded once that cycle's until check has been made.
    until does NOT wait: at the end of the cycle it inspects the buffer
    and
 
    *  when the cycle captured no matching event, the until body is
-      skipped and the loop proceeds straight to its next iteration or,
-      for while and the counted for, to the next condition test;
+      skipped and control passes to the next suffix of the chain, or to
+      the next cycle when there is none;
 
    *  when the cycle captured one or more matching events, the until
       body runs once, with the earliest of them -- the first captured
       -- bound as below.  Later events of the same cycle are ignored
       by until.
 
-   What the until body does then decides the loop's fate:
+   To leave the loop the moment an event occurred, with no action, write
+   an empty until body: } until "event.foo" { }.
 
-   *  (fall-through) if the until body finishes without a break or a
-      continue, it is as if a break were inserted at its end: the loop
-      is left.  To leave directly when an event occurred, with no
-      action, write an empty until body: } until "event.foo" { };
+   every and after.  An every suffix and an after suffix are until
+   clauses on events the language raises itself: the same anonymous
+   event, raised at that interval by every and once by after.  The
+   event has no topic and no payload and no program can subscribe to
+   it, so no as name follows either suffix; the duration is a Duration
+   (Section 3.5) and nothing else.  Section 6.8 describes the interval
+   and the statement forms.
 
-   *  continue: control returns to the loop to run its next iteration,
-      which opens a fresh cycle buffer;
-
-   *  break: the loop is left immediately, as it would be from the loop
-      body.
-
-   Where the clause is written fixes its place relative to the
-   condition.  In a while, a loop and both forms of for the until check
-   plainly falls after one body and before the condition test that
-   opens the next cycle.  A do-while carries its condition at the end of
-   the loop, and there the two spellings differ: "do { ... } until ...
-   { ... } while <cond>" puts the until check before that condition, so
-   an event taken in the body may end the loop before the condition is
-   ever evaluated; "do { ... } while <cond> until ... { ... }" puts it
-   after, so a condition that has already become false ends the loop
-   first.  A loop that runs no cycle at all -- a while whose condition
-   is false on entry -- makes no until check.
-
-   The topic is a string, an array of strings, or a single string using
+   The topic of an until suffix is a string, an array of strings, or a
+   single string using
    OCP topic wildcards [RFC0004], Section 6.5.2, where "+" matches one
    level and "#" every level beneath it.  Each element of an array may
    be a strict topic or a wildcard, and the two MAY be mixed freely;
@@ -994,13 +1094,15 @@ Table of Contents
    6.7) and wait (Section 6.8): there is no implicit binding.  The
    binding is local to the until body.
 
-   An until clause never changes the loop's own condition; the loop may
-   also be left through that condition, return, break or a failure.
-   The subscription behind an until clause belongs to the loop's task
-   and is therefore cancelled with it (Section 6.9); a panic inside the
-   until body propagates to the loop's task.
+   A loop that runs no cycle at all -- a while whose condition is false
+   on entry -- makes no suffix check.  A suffix never changes the loop's
+   own condition; the loop may also be left through that condition,
+   return, break or a failure.  The subscription behind an until suffix,
+   and the timer behind an every or an after suffix, belongs to the
+   loop's task and is therefore cancelled with it (Section 6.9); a panic
+   inside a suffix propagates to the loop's task.
 
-6.1.8.  break, continue and pass
+6.1.7.  break, continue, next and pass
 
    "break" leaves the innermost enclosing breakable construct: a loop,
    or the match (Section 6.1.2) when the break stands in one of its
@@ -1008,19 +1110,22 @@ Table of Contents
    trap break; it crosses them to reach that construct, so a break in a
    select arm inside a loop leaves the loop.  "continue" starts the
    next iteration of the innermost enclosing loop: in the counted for
-   it runs the update clause first, in a do-while it jumps to the
-   condition, and in an until body it returns control to the loop
-   (Section 6.1.7).  Neither crosses a task boundary: a break or a
-   continue inside a par or race branch (Sections 6.4 and 6.5) or in a
-   handler started by on (Section 6.7) has nothing to leave and is a
-   syntax error, as is any break or continue written outside a loop,
-   a match or an until body.
+   it runs the update clause first, and in a loop it returns control
+   to the body
+   (Section 6.1.6).  "next" passes control to the next suffix of that
+   chain, or out of the loop from the last one; it is written only in a
+   loop suffix, and there it is how a suffix hands the cycle on without
+   running the rest of itself.  None of the three crosses a task
+   boundary: a break, a continue or a next inside a par or race branch
+   (Sections 6.4 and 6.5) or in a handler started by on (Section 6.7)
+   has nothing to leave and is a syntax error, as is any of them written
+   outside a loop, a match or a loop suffix.
 
    "pass" is a no-op statement: it does nothing, and exists so that a
    branch which is meant to do nothing says so.  An empty block is
    likewise legal where a block is required.
 
-6.1.9.  return
+6.1.8.  return
 
    "return" with a value returns it; "return" without a value yields
    null.  A return propagates out of any nesting of blocks, loops and
@@ -1073,7 +1178,7 @@ Table of Contents
       let f = spawn expensive_computation(a, b)
 
    spawn evaluates its operand in a new task and returns a future
-   (Section 3.5) immediately; the caller's task is not suspended.  The
+   (Section 3.6) immediately; the caller's task is not suspended.  The
    operand is normally a call: its arguments are evaluated in the
    current task and the call itself runs in the new one.  The future
    resolves with the task's result or fails with its panic.  Discarding
@@ -1093,12 +1198,14 @@ Table of Contents
    (Section 6.5) or select (Section 6.6) over the futures, or run them
    as the branches of a par block (Section 6.4).
 
-   The within operator bounds an await.  await f within d suspends
-   until f resolves or until d seconds pass, whichever is first; if the
-   timeout wins the await yields null and f is cancelled.  Without
-   await, expr within d is sugar for race { expr; sleep d }: it races
-   the value-producing expression against a timeout and yields the
-   expression's value, or null if the timeout wins.
+   The within operator bounds an await and is also written @: await f
+   within d and await f @ d are the same expression.  It suspends
+   until f resolves or until d passes, whichever is first; if the
+   timeout wins the await yields null and f is cancelled.  d is a
+   Duration (Section 3.5) and nothing else; a plain number in its place
+   is a type error.  Without await, expr @ d is sugar for race { expr;
+   sleep d }: it races the value-producing expression against a timeout
+   and yields the expression's value, or null if the timeout wins.
 
    A task that finishes is joined automatically; its result is held by
    its future for as long as the future is reachable.  A top-level
@@ -1142,7 +1249,7 @@ Table of Contents
    If the enclosing task is cancelled while par waits, par cancels
    every branch and the cancellation surfaces as a Cancel failure in
    the enclosing task (Section 6.9).  par takes no until clause; the
-   gating of a loop is the province of Section 6.1.7.
+   gating of a loop is the province of Section 6.1.6.
 
 6.5.  race: Racing Outcomes
 
@@ -1178,7 +1285,7 @@ Table of Contents
       on <topic>:     wait for the next EVENT on the topic
       recv ch:        wait to receive one value from channel ch
       send v -> ch:   wait until ch can accept a send of v
-      after <dur>:    wait for dur seconds (a timeout arm)
+      after <dur>:    wait for the Duration dur (a timeout arm)
       default:        run immediately if no other arm is ready
 
    The arms are written as a block; each arm is a label followed by a
@@ -1193,7 +1300,7 @@ Table of Contents
          recv cmd_chan as cmd {
             handle(cmd)
          }
-         after 2.0 {
+         after 2s {
             retry()
          }
       }
@@ -1209,8 +1316,9 @@ Table of Contents
 
    In a send arm the value is computed and the send is performed when
    the arm is chosen, immediately before its block runs; an arm that is
-   not chosen sends nothing.  An after arm is a timer of the same kind
-   as sleep (Section 6.8), started when the select begins to wait.
+   not chosen sends nothing.  An after dur arm is a timer of the same
+   kind as sleep (Section 6.8), started when the select begins to wait;
+   dur is a Duration (Section 3.5) and nothing else.
 
    on in a select is a one-shot wait for a single event; the persistent
    subscription form is on (Section 6.7).  The event data is bound to
@@ -1245,14 +1353,14 @@ Table of Contents
    Section 6.5.2 defines: "device.+" matches one level, "device.#"
    matches every level beneath device.
 
-6.8.  Timing: sleep and wait
+6.8.  Timing: sleep, wait, delay and every
 
-   sleep dur suspends the current task for dur seconds, then yields
-   null.  dur is a number; fractional seconds are permitted.  sleep
-   never spins: the task is removed from the run queue for the
-   duration.
+   sleep dur suspends the current task for the interval dur, then
+   yields null.  dur is a Duration (Section 3.5) and nothing else; a
+   plain number in its place is a type error.  sleep never spins: the
+   task is removed from the run queue for the duration.
 
-      sleep 0.5          # pause half a second
+      sleep 500ms        # pause half a second
 
    wait topic suspends the current task until the next EVENT on topic
    arrives and yields its data; it is sugar for a one-arm select
@@ -1274,6 +1382,50 @@ Table of Contents
    that is given no way to end -- no event and no timeout -- suspends
    until one arrives; a bounded wait is written with the after arm of
    select or, for a future, with within (Section 6.3).
+
+   delay and every.  delay d { ... } runs its block once, after the
+   interval d has passed; every d { ... } runs its block once every
+   interval d and keeps doing so.  d is a Duration (Section 3.5) and
+   nothing else.  As written both are asynchronous: the statement
+   starts the work and the task goes on at once.
+
+      every 1s {
+         blink()
+      }
+
+      delay 5s {
+         log("warn", "arm did not answer")
+      }
+
+   Written with await, both run in the task that writes them and block
+   it: await delay d runs the block once d has passed and then goes on;
+   await every d runs the block every d and does not go on, so the
+   statements after it are reached only when the block breaks out.
+
+   every is a loop: break ends the repetition, and continue leaves what
+   is left of the block and waits for the next tick.  delay runs once,
+   so continue has no meaning in it and is not written; break in a
+   delay block cancels the pending run and the block does not happen.
+   The repetition of every and the wait of delay belong to the task
+   that wrote them and are cancelled with it (Section 6.9).
+
+   As a suffix.  every is also written after the body of a loop, in the
+   place of an until clause:
+
+      loop {
+         step()
+      } every 1s {
+         report()
+      }
+
+   The suffix is sugar for an until clause on an event the language
+   raises at that interval: an event with no topic and no payload, one
+   no program can subscribe to, so no as name follows it.  The block
+   obeys the rules of a suffix body (Section 6.1.6) and carries an
+   implicit continue: falling off its end returns to the body, so the
+   loop goes on.  after is the same suffix raised once: "loop { ... }
+   after 5s { ... }" runs the block when the interval has elapsed for
+   the first time and never again.
 
 6.9.  Cancellation
 
@@ -1658,8 +1810,11 @@ Table of Contents
    i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize, f32
    and f64 each take one value and yield that type; a conversion that
    does not fit panics with the kind OutOfRange (Section 2.8), so
-   i8(300) fails rather than truncates.  Three functions perform
-   simple line I/O: print writes each argument, formatted by Section
+   i8(300) fails rather than truncates.  A Duration is unboxed by
+   these constructors: the count of milliseconds is cut down to the
+   width of the target and does not panic (Section 3.5).  Three
+   functions perform simple line I/O: print writes each argument,
+   formatted by Section
    10.4 and separated by a space, to standard output followed by a
    newline; eprint does the same on standard error; input reads one
    line from standard input and yields it without the trailing
@@ -1721,6 +1876,12 @@ Table of Contents
    *  a dictionary is its entries, each written "key: value" with the
       key and the value in their own default forms, separated by ", "
       and enclosed in { }, and the empty dictionary is { };
+
+   *  a Duration is its standard form: the units d, h, m, s and ms in
+      that order, each with its value, a space between two sections
+      and none between a number and its unit, and no section of zero
+      at either end -- one that stands between sections that are
+      written is kept; the interval of no length is 0ms (Section 3.5);
 
    *  a value of any other kind -- a struct, a future, a channel, a
       function or a range -- is written by its fmt member when it has
@@ -1847,7 +2008,7 @@ Table of Contents
       # Race the gripper against a two-second status reply.
       let outcome = race {
          actuate("gripper", force = 20)
-         status() within 2.0
+         status() within 2s
       }
       if outcome == null {
          log("warn", "gripper slow; status won the race")
@@ -1864,7 +2025,7 @@ Table of Contents
             on "device.fault" {
                await actuate("drive", stop = true)
             }
-            after 30.0 {
+            after 30s {
                await actuate("led", blink = 1)
             }
          }
@@ -1883,8 +2044,8 @@ Table of Contents
       let st = wait "device.status"
       log("state", st.state)
 
-   The expression status() within 2.0 is sugar for race { status();
-   sleep 2.0 }; if the timeout arm wins, the result is null and the
+   The expression status() within 2s is sugar for race { status();
+   sleep 2s }; if the timeout arm wins, the result is null and the
    status future is cancelled.  on "device.fault" appears twice: once as
    a program-lifetime subscription and once inside select as a one-shot
    wait; both are legal and independent.
@@ -1963,15 +2124,17 @@ Appendix A. Collected Grammar (ABNF)
       stmt        = let-stmt / const-stmt / var-stmt / expr-stmt
                   / if-stmt / for-stmt / while-stmt / loop-stmt
                   / try-stmt / match-stmt / return-stmt / break-stmt
-                  / continue-stmt / panic-stmt / pass-stmt
+                  / continue-stmt / next-stmt / panic-stmt
+                  / pass-stmt
                   / spawn-stmt / race-stmt / par-stmt
                   / select-stmt / wait-stmt
+                  / every-stmt / delay-stmt
                   / assign-stmt / struct-def / fn-def
 
       expr        = send-expr / ternary
       send-expr   = ternary ( ( "<-" / "->" ) ternary )
       ternary     = within-expr [ "?" within-expr ":" within-expr ]
-      within-expr = or-expr [ "within" or-expr ]
+      within-expr = or-expr [ ( "within" / "@" ) or-expr ]
       or-expr     = and-expr *( "or" and-expr )
       and-expr    = not-expr *( "and" not-expr )
       not-expr    = "not" not-expr / cmp-expr
@@ -2010,27 +2173,39 @@ Appendix A. Collected Grammar (ABNF)
       chan        = postfix-expr
       # on yields a subscription handle; wait yields the event payload
       sleep-expr  = "sleep" expr
+      every-stmt  = [ "await" ] "every" expr block
+      delay-stmt  = [ "await" ] "delay" expr block
+      # await makes the statement blocking: it runs in this task
       cancel-stmt = "cancel" expr
 
       if-stmt     = "if" expr block *( "elif" expr block )
                   [ "else" block ]
-      while-stmt  = "while" expr block until-clause?
-      loop-stmt   = "loop" block until-clause?
-      do-stmt     = "do" block "while" expr until-clause?
-                  / "do" block until-clause "while" expr
+      while-stmt  = "while" expr block *( loop-suffix )
+      loop-stmt   = "loop" block *( loop-suffix )
       for-stmt    = for-iter / for-c
-      for-iter    = for-target "in" expr block until-clause?
+      for-iter    = for-target "in" expr block *( loop-suffix )
       for-c       = "for" "(" [ for-init ] ";" [ expr ] ";"
-                  [ expr ] ")" block until-clause?
+                  [ expr ] ")" block *( loop-suffix )
       for-init    = let-stmt / const-stmt / var-stmt / expr-stmt
       for-target  = name / pattern
+      loop-suffix = until-clause / every-clause / after-clause
+                  / while-clause
       until-clause= "until" topic [ "as" name ] block
-      # an until clause follows the loop body it gates
+      every-clause= "every" expr block
+      after-clause= "after" expr block
+      while-clause= "while" expr
+      # a suffix follows the loop body it gates, on the same line as
+      # its closing brace; until at most once, every and after without
+      # limit, and each is checked where it is written
       match-stmt  = "match" "(" expr ")" "{" 1*( case-arm ) "}"
       case-arm    = "case" pattern [ "if" expr ] block
       pattern     = literal / seq-pattern / name / "_"
       seq-pattern = "[" [ pattern *( "," pattern ) ] "]"
-      literal     = number / text / "true" / "false" / "null"
+      literal     = duration / number / text / "true" / "false" / "null"
+      duration    = 1*( section )
+      section     = number ( "ms" / "s" / "m" / "h" / "d" )
+      # a duration section is decimal, may carry _ separators and may
+      # be a fraction; sections may be separated by spaces
       text        = dq-string / sq-string
       template    = tpl-string
       ctor        = type "(" [ call-arg *( "," call-arg ) ] ")"
@@ -2040,6 +2215,7 @@ Appendix A. Collected Grammar (ABNF)
       # "..." and '...' are one-line strings and never interpolate;
       # `...` is a template string, may span lines, and interpolates
       # ${ident} / ${ident:spec} / ${(expr)} / ${(expr):spec}
+      next-stmt   = "next"
       pass-stmt   = "pass"
       let-stmt    = ( "let" / "const" / "var" ) name [ ":" type ]
                   [ "=" expr ]
