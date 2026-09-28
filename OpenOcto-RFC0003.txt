@@ -118,6 +118,13 @@ Table of Contents
      10.1. Operations on Values
      10.2. Standard Library Functions
      10.3. Modules
+       10.3.1. Module Declarations
+       10.3.2. Visibility and pub
+       10.3.3. Importing
+       10.3.4. Re-export
+       10.3.5. Module Objects
+       10.3.6. Loading Order and Load Errors
+     10.4. String Formatting
    11. Error Model and Diagnostics
    12. Complete Example
    13. Security Considerations
@@ -205,16 +212,18 @@ Table of Contents
    function after a keyword where the context is unambiguous
    (Section 10.2):
 
-      and      as       async    await    bool     break    case
-      catch    chan     char     const    continue default  delay
-      elif     else     every    f32      f64      false    finally
-      fn       for      from     globals  i128     i16      i32
-      i64      i8       if       import   in       isize    let
-      locals   loop     match    next     not      null     octo
-      on       or       panic    par      pass     race     return
-      select   sleep    spawn    str      struct   this     true
-      try      u128     u16      u32      u64      u8       usize
-      until    var      wait     when     while    with     within
+      and      as       async    await    bool     break
+      case     catch    chan     char     const    continue
+      default  delay    elif     else     every    f32
+      f64      false    finally  fn       for      from
+      globals  i128     i16      i32      i64      i8
+      if       import   in       isize    let      locals
+      loop     match    mod      next     not      null
+      octo     on       or       panic    par      pass
+      pub      race     return   select   sleep    spawn
+      str      struct   this     true     try      u128
+      u16      u32      u64      u8       until    usize
+      var      wait     when     while    with     within
 
    Keywords are read-only: using any keyword as an assignment target,
    including compound assignment, is a syntax
@@ -360,6 +369,12 @@ Table of Contents
    =>, <-, **, //, .., the assignment operators, the comparison
    operators, +, -, *, /, %, &, |, ^, &&, ||, <<, >>, <<=, >>=); or a
    backslash line continuation applies (Section 2.3).
+
+   A newline separates two statements and never joins them: nothing
+   written after a break belongs to the statement before it, which is
+   why a head that continues a block stays on the line of that
+   block's closing brace (Section 6.1), and why the opening brace of a
+   compound statement sits on the line of its head (Section 6.1).
 
 2.8.  Optional Type Annotations
 
@@ -619,7 +634,9 @@ Table of Contents
    parameter (Section 7.5), or by position in declaration order.  A
    field is read and written with the member syntax of Section 5.1.
    Structs are nominal: two structs are the same type only if they are
-   the same declaration.
+   the same declaration.  A field MAY be written with pub; without it
+   the field is read and written only where the struct is declared
+   (Section 10.3.2).
 
 3.10.  Event and Error
 
@@ -849,15 +866,54 @@ Table of Contents
 
    The compound statements if, elif, else, for, while, loop, try,
    catch, finally, match, race, select, par, delay, every, with and on
-   open a block; so do fn, a case arm, an until body, an every body and
-   the arrow body when it is a block.
+   open a block; so do fn, mod, a case arm, an until body, an every body
+   and the arrow body when it is a block.
 
-   A head that continues a block -- elif, else, until, every, after and
-   while -- is written on the same line as the closing brace of the
-   block it continues.  Written on a line of its own it does not belong
-   to that block: an else on the same line as the brace closes the if,
-   and one
-   at the start of the next line is not the else of that if.
+   A compound statement is one head and the block it opens, and the
+   block's opening brace MUST be on the same line as the head: if c {,
+   fn name() { and struct point { are each one unit, not a head on
+   one line and { } on the next.  The reason is that a newline is a
+   statement separator (Section 2.7): a break before the brace ends
+   the head as a statement of its own -- an if with no body, a fn
+   declared but never defined -- and the brace that follows begins a
+   block that belongs to nothing.  fn is no exception: it is a giant
+   compound statement, so its body's { MUST follow the header on the
+   same line.  What a head MAY span across lines is only its
+   parenthesised part (a condition, a parameter list); once the head's
+   closing token is written, every later token of the head and the {
+   must stay on that line.  The one place a brace MAY start its own
+   line is a statement block at statement position (the { } above): it
+   is a whole block, not the body of a head.
+
+   Continuing heads.  One compound statement MAY continue another, and
+   the head that does the continuing is written on the same line as the
+   closing brace of the block it continues:
+
+      if ok { proceed() } else { abort() }
+
+      loop { await step() } until "stop" { stop() }
+
+      try { grab() } catch Timeout { wait 1s } finally { release() }
+
+   The heads that continue a block are elif, else, catch, finally,
+   until, every, after and while.  The reason they are written this way
+   is that a newline separates statements (Section 2.7): written on a
+   line of its own, a continuing head is cut off from the statement it
+   belongs to, and what follows the break is read as a statement in its
+   own right.  An else or a catch beginning a line continues no block,
+   has no if or try to belong to, and cannot be understood.  The pieces
+   of such a statement are not statements themselves; they are parts of
+   one construct, and the whole of it is therefore written as one
+   statement -- an if / elif / else, a try / catch / finally, or a loop
+   and the suffixes that gate it (Section 6.1.6).
+
+   The statements whose braces hold a run of arms are the other way
+   round.  What match, select, par and race hold is not one construct
+   broken into pieces but several small compound statements, one to an
+   arm, none of which continues another; they are separated as
+   statements are, by line breaks, and an arm head begins a line.
+   Nothing is gained by crowding it against the brace before it, since
+   there is no statement there for it to complete.
 
    Conditions.  Every condition in this section -- those of if and
    elif, of while and of the counted for, of a while suffix
@@ -967,17 +1023,17 @@ Table of Contents
          step()
       }
 
-   "loop { ... }" repeats unconditionally: it has no condition, runs at
+   loop { ... } repeats unconditionally: it has no condition, runs at
    least once and is left only through break, return, a failure or a
    suffix written after its body.  It is the form for a cycle
-   whose end is decided inside the body; "while true { ... }" says the
+   whose end is decided inside the body; while true { ... } says the
    same thing and is equally legal.  With a while suffix it is the
-   do-while of other languages: "loop { ... } while <cond>" runs the
+   do-while of other languages: loop { ... } while <cond> runs the
    body once before the condition is tested for the first time.
 
 6.1.5.  for: Iterable and Counted
 
-   Iterable form.  "for t in coll { ... }" binds t to each element of
+   Iterable form.  for t in coll { ... } binds t to each element of
    coll in turn; coll MAY be a list, tuple, set, dictionary, range or
    any iterable, and it is evaluated once, before the first iteration.
    For a dictionary the loop variable is the key, or a k, v pair may be
@@ -1001,7 +1057,7 @@ Table of Contents
    loop runs is not defined by this document; a program MUST NOT rely
    on what such a loop sees.
 
-   Counted form.  "for (init; cond; update) { ... }" runs init once,
+   Counted form.  for (init; cond; update) { ... } runs init once,
    then repeats the body while cond is true, running update after each
    iteration; the parentheses are mandatory and all three clauses MAY
    be omitted, an omitted condition being taken as true:
@@ -1017,8 +1073,8 @@ Table of Contents
       }
 
    The initialiser MAY be a declaration or an assignment; a name it
-   declares is local to the whole loop, header and body alike.  "let"
-   is RECOMMENDED because "var" writes to the root scope, where a
+   declares is local to the whole loop, header and body alike.  let
+   is RECOMMENDED because var writes to the root scope, where a
    repeated declaration in the same scope is an error.  continue still
    executes the update clause before the next condition test; break
    leaves the loop.  Both forms MAY carry an until clause written after
@@ -1148,15 +1204,15 @@ Table of Contents
 
 6.1.7.  break, continue, next and pass
 
-   "break" leaves the innermost enclosing breakable construct: a loop,
+   break leaves the innermost enclosing breakable construct: a loop,
    or the match (Section 6.1.2) when the break stands in one of its
    case bodies.  The blocks of if and try and the arms of select do not
    trap break; it crosses them to reach that construct, so a break in a
-   select arm inside a loop leaves the loop.  "continue" starts the
+   select arm inside a loop leaves the loop.  continue starts the
    next iteration of the innermost enclosing loop: in the counted for
    it runs the update clause first, and in a loop it returns control
    to the body
-   (Section 6.1.6).  "next" passes control to the next suffix of that
+   (Section 6.1.6).  next passes control to the next suffix of that
    chain, or out of the loop from the last one; it is written only in a
    loop suffix, and there it is how a suffix hands the cycle on without
    running the rest of itself.  None of the three crosses a task
@@ -1165,7 +1221,7 @@ Table of Contents
    has nothing to leave and is a syntax error, as is any of them written
    outside a loop, a match or a loop suffix.
 
-   "pass" is a no-op statement: it does nothing, and exists so that a
+   pass is a no-op statement: it does nothing, and exists so that a
    branch which is meant to do nothing says so.  An empty block is
    likewise legal where a block is required.
 
@@ -1192,7 +1248,7 @@ Table of Contents
 
 6.1.9.  return
 
-   "return" with a value returns it; "return" without a value yields
+   return with a value returns it; return without a value yields
    null.  A return propagates out of any nesting of blocks, loops and
    try statements: a catch clause does not intercept it, while a
    finally clause still runs on the way out.  A return inside a finally
@@ -1246,14 +1302,25 @@ Table of Contents
    it in the same block do not run.  try { body } catch Kind as e {
    handler } finally { cleanup } catches a panic raised by body whose
    error's kind equals Kind, exactly; the optional as e binds the Error,
-   whose members are kind, message and cause.  A try MAY carry several
-   catch clauses, which are tried in textual order and of which at most
-   one runs; a bare catch catches any kind and, when present, SHOULD
-   come last, since a clause after it could never run.  A catch clause
-   does not catch a panic raised by another catch clause, and a panic
-   raised in finally supersedes the failure in flight.  finally runs
-   whether the body panicked or not, and also when the body is left by
-   return, break or continue.
+   whose members are kind, message and cause.  A try MAY carry any
+   number of catch clauses, chained without limit and tried in textual
+   order; of them at most one runs.  A bare catch catches any kind and,
+   when present, SHOULD come last, since a clause after it could never
+   run.  A catch clause does not catch a panic raised by another catch
+   clause, and a panic raised in finally supersedes the failure in
+   flight.  finally runs whether the body panicked or not, and when the
+   body is left by return, break or continue.
+
+   A catch clause and a finally clause continue the try, so each is
+   written on the line of the brace it continues (Section 6.1):
+
+      try {
+         await actuate("grip", force = 20)
+      } catch "HardwareError" as e {
+         log("grip", e.message)
+      } finally {
+         await actuate("grip", force = 0)
+      }
 
    A panic that no try catches propagates to the nearest enclosing task
    and fails its future (Section 6.3).  An uncaught panic in a handler
@@ -1562,6 +1629,19 @@ Table of Contents
    5.1).  A function returns the value of its last expression or of an
    explicit return; a function that falls off the end returns null.
 
+   A function head MUST keep its opening parenthesis on the same line as
+   fn and the function name: fn name( is one unit, not fn name on one
+   line and ( on the next.  The head MAY wrap to further lines, but the
+   only place a line break takes effect is inside the parameter
+   signature, because the parentheses delimit the signature and so
+   guarantee the whole head is still one statement (the newline is only
+   a separator, Section 2.7).  A break before the ( splits the name from
+   its signature; a break after the ) that opens a fresh line before
+   the return type or the body is likewise not a continuing head, because
+   fn is a giant compound statement: after the ) its return type (if any)
+   and the body's { MUST stay on the same line as the header, the {
+   never starting a line of its own (Section 6.1).
+
    An fn MAY be prefixed with async: an async function returns a future,
    not a value: calling it starts a task (as spawn would, Section 6.3)
    and yields a future that resolves with the function's return value or
@@ -1584,7 +1664,9 @@ Table of Contents
    runtime error to assign to.  var declares a binding in the
    top-level scope from anywhere (a global), matching the globals view
    of Section 5.6.  A name used before it is declared in its scope is a
-   runtime error, not a silent null.
+   runtime error, not a silent null.  A module body opens a scope of its
+   own, nested in the scope of the module enclosing it; what other
+   modules see of the names it holds is Section 10.3.
 
 7.4.  Argument Passing by Alias
 
@@ -1883,10 +1965,12 @@ Table of Contents
 9.9.  Name Resolution Order
 
    A name is resolved in this order: the current block scope; enclosing
-   function scopes outward; the top-level scope; the built-ins of
-   Sections 9.3 and 9.4; the meta object octo; then the host's native
-   functions.  A name that resolves nowhere is a runtime error, not a
-   silent null.
+   function scopes outward; enclosing module scopes outward; the
+   top-level scope; the built-ins of Sections 9.3 and 9.4; the meta
+   object octo; then the host's native functions.  A name that resolves
+   nowhere is a runtime error, not a silent null.  A name written after
+   a module path is resolved inside the module that the path names, not
+   here, and only when that module publishes it (Section 10.3.2).
 
 10. Library and External Objects
 
@@ -1933,10 +2017,101 @@ Table of Contents
 
 10.3. Modules
 
-   import name brings a module's bindings into scope; from name import
-   a, b brings named bindings.  A module is a separate compilation unit
-   the host loads; the language defines no module format, only the
-   import syntax.  A cyclic import is a load-time error.
+   A module is a named namespace holding declarations -- bindings,
+   functions, structs and other modules.  Every program has one unnamed
+   module, the root module, whose body is the program's top-level
+   statements; every other module is declared inside it, or inside a
+   module already declared, with mod.  Splitting a program into modules
+   does two things: a name is reached through a path of module names,
+   and it either stays inside its own module or is published by it.
+   mod and pub are the whole of the machinery; there is no separate
+   interface, header or declaration file.
+
+10.3.1.  Module Declarations
+
+   mod declares a module in one of two forms:
+
+      mod sensors                 # a unit the host resolves and loads
+
+      mod sensors {               # declared here, its body in braces
+         let rate = 20
+         pub fn read(port: i64) -> i64 { ... }
+      }
+
+   The name is one identifier.  The bodied form runs the statements it
+   holds where the declaration stands, top-down as any other statement
+   does, in a scope nested in the scope of the module enclosing them.
+   The body-less form asks the host for the unit of that name: the host
+   resolves it, loads it and runs it, and what it yields is the same
+   kind of namespace.  The forms differ only in where the body comes
+   from -- the names declared in them, the path that reaches them and
+   the rules of visibility are identical.  How a body is carried
+   between programs is not specified here.
+
+   A mod declaration MAY stand at the top level of a program or in the
+   body of another module, and nowhere else: written inside a function,
+   a block or any other statement it is a syntax error.  A module is
+   reached by a path: the names of the modules enclosing it, left to
+   right and separated by dots, then its own name, then the member --
+   sensors.probe.calibrate().  Nothing is declared into another
+   module's space from outside it; nesting is the only way in.  The
+   root module has no name of its own and no path reaches it, so what
+   it publishes matters only to a host that loads the program itself as
+   a module.
+
+10.3.2.  Visibility and pub
+
+   Every declaration has a visibility.  Without a marker it is private:
+   visible in the module that declares it and in every module nested
+   inside that one, and nowhere else.  With pub it is visible wherever
+   the module declaring it can be named.  pub is written before the
+   keyword it publishes:
+
+      pub let version = "1.2"
+      pub const retries = 3
+      pub var faults = 0
+      pub async fn home() { ... }
+      pub struct Pose {
+         pub x: f64
+         pub y: f64
+         roll: f64
+      }
+      pub mod driver { ... }
+
+   Visibility travels the whole path.  Writing sensors.driver.home()
+   needs three things at once: sensors visible where it is written,
+   driver written pub, and home written pub.  A private module in the
+   middle closes the path whatever it publishes further down, and a pub
+   that nothing outside can reach is not an error -- only unused.
+
+   The marker MAY stand before any module-level declaration: let,
+   const, var, fn, struct, a field of a struct, mod and an import.
+   Written anywhere else -- before a binding inside a function, before
+   a parameter, or on a declaration inside a block -- it is a syntax
+   error.  A field of a struct without pub is read and written only in
+   the module that declares the struct, even when the struct itself is
+   published (Section 3.9).
+
+   Using a name that is not visible where the name is written fails as
+   naming something that does not exist fails: reading it, assigning to
+   it or calling it through its module is a runtime error reported at
+   the point of use (Sections 9.9 and 11).  Visibility never becomes
+   null and never falls back to another name.  Within its own module
+   every name is reached by its bare name, published or not, and that
+   does not change.
+
+   Visibility governs the name, not the value.  A pub var is assigned
+   through its module from anywhere, as in sensors.faults = 0; a pub
+   let is not reassigned; assigning to a pub const is the runtime error
+   it always is (Section 7.3).  A private value handed out by a
+   published function -- returned, sent on a channel or stored in a
+   container -- travels with the call: whoever receives it holds the
+   value, and only the name stays its module's own.
+
+10.3.3.  Importing
+
+   import and from bring published names of another module into this
+   one.  The forms are:
 
       import mod
       import a.b.c
@@ -1945,12 +2120,75 @@ Table of Contents
       from mod import name
       from mod import name as other, second
 
-   A dotted module name first resolves to a source module; if none
-   exists, a library module supplied by the implementation is imported.
-   Importing binds the module object; a dotted name binds nested
-   namespaces so that "a.b.c.f()" is valid.  A name bound by import may
-   be reassigned like any other binding.  There is no wildcard import:
-   every imported name is written explicitly.
+   import binds a module object.  Without as it binds the leftmost name
+   of the path and, through it, the modules below it: import a.b.c
+   binds a, so that a.b.c.f() is valid.  With as it binds the module
+   named by the whole path, so that alias.f() is valid and a is not
+   bound at all.  from binds named members of one module into this
+   module's own scope, under their own names or under those the as
+   clauses give them.
+
+   An import executes where it stands and binds in its own module's
+   scope, so a name used before the import that binds it has run is a
+   runtime error, as it is for any declaration (Section 7.3).  A name
+   reached by from MUST be visible to the importing module; importing a
+   private name is a load error (Section 10.3.6).  There is no wildcard
+   import: every imported name is written explicitly.
+
+   A dotted name first resolves to a source module -- one declared with
+   mod in this program; if none exists, a library module supplied by
+   the implementation is imported.  A name bound by an import MAY be
+   reassigned like any other binding, and doing so changes that binding
+   alone and not the module it named.
+
+10.3.4.  Re-export
+
+   pub before an import publishes what the import binds, so that this
+   module offers those names as its own:
+
+      pub import geometry            # geometry is reachable from here
+      pub from geometry import area  # area is a member of this module
+
+   A re-export makes no second binding: a name reached through a module
+   that republishes it and the same name reached through the module
+   that declares it are one binding and one value.
+
+10.3.5.  Module Objects
+
+   A module is a value.  The object an import binds has members -- the
+   names visible to whoever reads it -- read and written with the
+   member syntax of Section 5.1.  A module object MAY be stored in a
+   container, passed to a function, returned from one and compared with
+   another; two bindings holding the same module hold the same value,
+   and nothing adds a member to a module or takes one away.  A struct
+   published by a module is a type through that module as well: with
+   pub struct Point declared in geometry, the annotation shape:
+   geometry.Point names that type after import geometry.  Nothing else
+   about a published value changes -- a function is called, a channel
+   is used and a struct is built as they are where they are declared.
+
+10.3.6.  Loading Order and Load Errors
+
+   A module is loaded once and runs once.  A bodied mod runs when its
+   declaration is reached; a body-less one runs when a reference first
+   reaches it, and that reference loads it; every later reference takes
+   the module it left behind and runs nothing again.  Loading therefore
+   follows execution: top-down, and outwards from the first reference.
+
+   Four things are load errors.  A cycle -- a module that, directly or
+   through the modules it loads, loads itself.  A module name that
+   resolves to no unit at all.  A from import naming something the
+   module does not publish.  A second declaration of one name in one
+   module.  A load error ends the program and is reported as the
+   syntactic class of Section 11 is: with a position and a message, and
+   nothing past it runs.  A cycle caught while the host resolves the
+   module graph stops everything before the first statement; met later,
+   while the program is running, it stops the program where it is met.
+
+   A failure raised by a module body is not a load error.  It is a
+   panic (Section 6.2) raised where the module was being loaded, and
+   nothing is undone: a module whose body failed part-way stays loaded,
+   holding the bindings it managed to make and missing the rest.
 
 10.4. String Formatting
 
@@ -2241,6 +2479,7 @@ Appendix A. Collected Grammar (ABNF)
                   / spawn-stmt / race-stmt / par-stmt
                   / select-stmt / wait-stmt
                   / every-stmt / delay-stmt
+                  / mod-stmt / import-stmt / from-import
                   / assign-stmt / struct-def / fn-def
 
       expr        = send-expr / ternary
@@ -2294,6 +2533,9 @@ Appendix A. Collected Grammar (ABNF)
       # expands to one copy of stmt per item, in the enclosing scope
       try-stmt    = "try" block *( catch-clause ) [ "finally" block ]
       catch-clause= "catch" [ expr ] [ "as" name ] block
+      # a catch clause and a finally clause continue the try, and are
+      # written on the same line as the brace that precedes them
+      # (Section 6.1)
       with-stmt   = "with" expr [ "as" name ] block
       if-stmt     = "if" expr block *( "elif" expr block )
                   [ "else" block ]
@@ -2334,14 +2576,27 @@ Appendix A. Collected Grammar (ABNF)
       # ${ident} / ${ident:spec} / ${(expr)} / ${(expr):spec}
       next-stmt   = "next"
       pass-stmt   = "pass"
-      let-stmt    = ( "let" / "const" / "var" ) name [ ":" type ]
-                  [ "=" expr ]
-      fn-def   = [ "async" ] "fn" name "(" [ param *( "," param ) ] ")"
-                  [ "->" type ] block
+      let-stmt    = [ "pub" ] ( "let" / "const" / "var" ) name
+                  [ ":" type ] [ "=" expr ]
+      fn-def      = [ "pub" ] [ "async" ] "fn" name
+                  "(" [ param *( "," param ) ] ")" [ "->" type ] block
       param       = name [ ":" type ] [ "=" expr ]
                   / "..." name [ ":" type ] / ":::" name [ ":" type ]
-      struct-def  = "struct" name "{" 1*( field ) "}"
-      field       = name ":" type
+      struct-def  = [ "pub" ] "struct" name "{" 1*( field ) "}"
+      field       = [ "pub" ] name ":" type
+      mod-stmt    = [ "pub" ] "mod" name [ block ]
+      import-stmt = [ "pub" ] "import" mod-item *( "," mod-item )
+      from-import = [ "pub" ] "from" mod-path "import"
+                  1*( mod-item *( "," mod-item ) )
+      mod-item    = mod-path [ "as" name ]
+      mod-path    = name *( "." name )
+      # a bodied mod runs its block where it stands and holds its own
+      # namespace; a body-less one asks the host for the unit of that
+      # name; both bind the name in the module enclosing them
+      # (Section 10.3.1); import a.b.c binds a, and written as alias it
+      # binds a.b.c itself
+      # fn name( must sit on one line; only the params (inside the
+      # parens) may wrap, since the parens keep the head one statement
       topic       = dq-string / "[" [ dq-string *( "," dq-string ) ] "]"
       # a string may hold OCP wildcards; array elements may mix them
       type        = name [ "<" type *( "," type ) ">" ]
