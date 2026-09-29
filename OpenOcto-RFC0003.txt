@@ -80,6 +80,8 @@ Table of Contents
      3.9.  struct: Composite Types
      3.10. Event and Error
    4.  Operators and Precedence
+     4.1. Type Promotion
+     4.2. Operators Beyond Arithmetic
    5.  Expressions
      5.1.  Member Access, Indexing, Slicing, Calling
      5.2.  Optional Chaining
@@ -89,7 +91,7 @@ Table of Contents
      5.6.  Scope Views: globals and locals
    6.  Statements, Control Flow and Concurrency
      6.1.  Separation, Blocks and Conditions
-     6.2.  Failure: panic, try and catch
+     6.2.  Failure: throw, try and catch
      6.3.  Tasks, spawn and await
      6.4.  par: Parallel Blocks
      6.5.  race: Racing Outcomes
@@ -101,7 +103,7 @@ Table of Contents
      7.1.  Definition and Call
      7.2.  Closures
      7.3.  Scope and Declaration
-     7.4.  Argument Passing by Alias
+     7.4.  Argument Passing
      7.5.  Defaults, Named Arguments and the Parameter Sink
    8.  Destructuring Assignment
    9.  Host Interface, OCP Binding and Hardware
@@ -117,6 +119,22 @@ Table of Contents
    10. Library and External Objects
      10.1. Operations on Values
      10.2. Standard Library Functions
+       10.2.1. Conversion Functions
+       10.2.2. Numbers: abs, min, max and sum
+       10.2.3. Sequences: len, range, sorted and reversed
+       10.2.4. Higher-Order Functions: map, filter, any and all
+       10.2.5. Dictionaries and Types: keys, values, items and type
+       10.2.6. Channels: chan, close, send and recv
+       10.2.7. Events: emit
+       10.2.8. Line I/O: print, eprint and input
+       10.2.9. Ending the Program: panic and exit
+       10.2.10. Text Members
+       10.2.11. Vec Members
+       10.2.12. Tuple Members
+       10.2.13. HashSet Members
+       10.2.14. HashMap Members
+       10.2.15. Range and Duration Members
+       10.2.16. Channel, Future, Event and Error Members
      10.3. Modules
        10.3.1. Module Declarations
        10.3.2. Visibility and pub
@@ -212,22 +230,54 @@ Table of Contents
    function after a keyword where the context is unambiguous
    (Section 10.2):
 
-      and      as       async    await    bool     break
-      case     catch    chan     char     const    continue
-      default  delay    elif     else     every    f32
-      f64      false    finally  fn       for      from
-      globals  i128     i16      i32      i64      i8
-      if       import   in       isize    let      locals
-      loop     match    mod      next     not      null
-      octo     on       or       panic    par      pass
-      pub      race     return   select   sleep    spawn
-      str      struct   this     true     try      u128
-      u16      u32      u64      u8       until    usize
-      var      wait     when     while    with     within
+      and      async    await    bool     break    case
+      catch    char     const    continue delay    elif
+      else     every    f32      f64      false    finally
+      fn       for      globals  i128     i16      i32
+      i64      i8       if       impl     import   in
+      isize    let      locals   loop     match    mod
+      next     not      null     octo     on       or
+      par      pass     pub      race     return   select
+      sleep    spawn    str      struct   throw    true
+      try      u128     u16      u32      u64      u8
+      usize    var      wait     while    with     within
 
-   Keywords are read-only: using any keyword as an assignment target,
-   including compound assignment, is a syntax
-   error.  Writing through a member or an index (octo.mock = true) is
+   A contextual keyword is recognised only in the position named below
+   and is an ordinary identifier everywhere else, so a program MAY
+   declare a binding, a member or a function of that name:
+
+   *  as: after the path of an import, the topic of on, wait or until,
+      the channel of a recv arm, the operand of with, or the pattern of
+      a catch; it names the binding that receives the value.
+
+   *  from: the first word of a from-import (Section 10.3.3).
+
+   *  default: the arm of a select that is taken when no other arm is
+      ready (Section 6.6).
+
+   *  until: the clause that follows the closing brace of a loop
+      (Section 6.9).
+
+   *  this: the first parameter of a method in an impl, and the
+      receiver inside its body (Section 3.9).
+
+   *  chan: the type of a channel in a type position, as in chan T and
+      chan T(n) (Section 3.7).
+
+   *  ref, and its sugar &: the mark of a by-reference parameter
+      (Section 7.4).
+
+   *  recv: the receive arm of a select (Section 6.6).
+
+   The word when is not reserved: no construct of this version uses it,
+   so it is an ordinary identifier.  The type names of the containers --
+   Vec, Tuple, HashSet, HashMap and Channel -- were never reserved and
+   remain ordinary identifiers.
+
+   The words of the grid are read-only: using one as an assignment
+   target, including compound assignment, is a syntax error.  A
+   contextual keyword is not read-only and MAY be assigned.  Writing
+   through a member or an index (octo.mock = true) is
    permitted and is not an assignment to the keyword.  octo is the
    reserved global meta object of Section 9.8; it MUST NOT be rebound,
    though its members and indices MAY be written.
@@ -387,11 +437,11 @@ Table of Contents
    are f64.  Where a name does carry one, the annotation is enforced:
    the value bound to that name -- by let, const, var, an assignment,
    a parameter or a return -- is stored and operated on at the
-   annotated width, and a value that does not fit it panics with an
+   annotated width, and a value that does not fit it throws with an
    Error of kind OutOfRange.  An annotation never converts a value;
    out-of-range value is an error, not a truncation.  The default
    width is enforced the same way: a value or result that does not
-   fit i32 or f64 panics with an Error of kind OutOfRange whether or
+   fit i32 or f64 throws with an Error of kind OutOfRange whether or
    not a name is
    annotated.
 
@@ -449,18 +499,25 @@ Table of Contents
    one; text is never silently coerced to a number and a number is
    never silently coerced to text.
 
-   Assignment, argument passing by alias (Section 7.4) and container
+   Assignment, argument passing (Section 7.4) and container
    membership bind a name or a slot to a value; they do not copy it.
    Mutation of a shared value is visible through every binding to it.
 
 3.2.  Vec, Tuple, HashSet
 
    A list is an ordered, mutable sequence written [a, b, c]; the empty
-   Vec is written [] or [,].  A tuple is an ordered, immutable sequence
-   written (a, b, c); a tuple of one element is written (a,) and the
-   empty tuple is written () or (,), which is also the unit type.  A
-   trailing comma is permitted in a Vec, tuple, HashSet or HashMap.  A
-   set is an unordered, mutable collection of distinct values written
+   Vec is written [] or [,].  A tuple is an ordered sequence written
+   (a, b, c) whose structure is fixed: the number of its slots and the
+   type of each slot are set where the tuple is written and MUST NOT
+   change, while the value in a slot MAY be replaced.  A slot holds any
+   type and the slots need not agree, so (1, "a", true) is one tuple.
+   A tuple of one element is written (a,) and the empty tuple is
+   written () or (,), which is also the unit type.  A trailing comma is
+   permitted in a Vec, tuple, HashSet or HashMap.  A tuple is read
+   and written by index exactly as a list is (Section 5.1) and takes
+   the members of Section 10.2.12, less those that would change its
+   structure: no member adds a slot, takes one away or reorders one.
+   A set is an unordered, mutable collection of distinct values written
    {a, b, c}.  Because {} is always an empty block, the empty HashSet
    is written {,}.
 
@@ -515,7 +572,7 @@ Table of Contents
    millisecond.  The writing is not examined for sense: 23h 60m 3600s
    3600000ms is written freely and is the interval 93_600_000ms, the
    same interval as 1d 2h.  A total that does not fit u32, or an
-   operation whose result does not, panics with an Error of kind
+   operation whose result does not, throws with an Error of kind
    (Section 2.8).
 
    Arithmetic.  A Duration is added to and subtracted from a Duration
@@ -533,7 +590,7 @@ Table of Contents
    operand of % is a Duration and only a Duration: d % n is not
    written.  A Duration is never an operand of the bitwise operators
    &, |, ^, ~, << and >>: a bit operation on an interval has no
-   meaning and is a type error.  A division or modulo by zero panics
+   meaning and is a type error.  A division or modulo by zero throws
    with an Error of kind DivideByZero.
 
    Text.  A Duration is written as text in the standard form: the units
@@ -547,9 +604,9 @@ Table of Contents
    interval prints as 0ms.
 
    Conversion.  The constructor of a primitive type unboxes a Duration
-   (Section 10.2): u32(d) is the millisecond count of d.  Unlike the
+   (Section 10.2.1): u32(d) is the millisecond count of d.  Unlike the
    conversions of Section 10.2 the count is cut down to the width of
-   the target and does not panic, so i8(1h) truncates rather than
+   the target and does not throw, so i8(1h) truncates rather than
    fails.  Duration(n) builds the interval of n milliseconds from a
    value of a primitive numeric kind; a fraction in n is rounded to a
    whole millisecond as above.  The timing statements of the language
@@ -568,7 +625,7 @@ Table of Contents
 
    *  resolved: the work produced a value; await yields that value.
 
-   *  failed: the work raised a panic; await re-raises it (Section
+   *  failed: the work raised a throw; await re-raises it (Section
       6.2) so the failure propagates to the awaiter.
 
    A future carries no method that reads its value without waiting; the
@@ -581,7 +638,7 @@ Table of Contents
    created with chan T for an unbuffered channel, or chan T(n) for a
    channel buffered with room for n values.  The element type T is
    enforced like any annotation (Section 2.8): a sent value that does
-   not fit T panics with an Error of kind OutOfRange.
+   not fit T throws with an Error of kind OutOfRange.
 
    *  Send: ch <- value, or the value-first form value -> ch, appends
       value to the channel.  On an unbuffered channel the sender
@@ -590,10 +647,10 @@ Table of Contents
 
    *  Receive: <-ch removes and yields the oldest value, suspending the
       receiver until a value is present.  Receiving from a closed
-      channel yields null once it is drained and then panics with an
+      channel yields null once it is drained and then throws with an
       Error of kind ChannelClosed.
 
-   *  close(ch) marks a channel closed; further sends panic with an
+   *  close(ch) marks a channel closed; further sends throw with an
       Error of kind ChannelClosed and further receives drain the buffer
       then yield null.
 
@@ -615,32 +672,241 @@ Table of Contents
 
 3.9.  struct: Composite Types
 
-   A struct declares a composite type: a named record of fields, each
-   field carrying a type.  A field type is a primitive or another
-   struct; the value is therefore a combination of primitives.  A
-   struct value may be stored in any container -- Vec<Point>,
-   HashMap<str, Point>, HashSet<Point> -- and the container rules of
-   Sections 3.2 and 3.3 then apply.
+   A struct declares a composite type.  Every struct is built on one
+   of two bodies, chosen by how it is declared: a record struct is
+   built on a HashMap (Section 3.3) and names its parts, and a tuple
+   struct is built on a tuple (Section 3.2) and numbers them.  A part
+   of either kind carries a type: a primitive or another struct; the
+   value is therefore a combination of primitives.  A struct value may
+   be stored in any container -- Vec<Point>, HashMap<str, Point>,
+   HashSet<Point> -- and the container rules of Sections 3.2 and 3.3
+   then apply.
 
-      struct Point {
+      struct Point {              # a record struct: named fields
          x: f64
          y: f64
       }
 
+      struct Reading(i64, str)    # a tuple struct: numbered slots
+
       let p: Point = Point(x = 1.0, y = 2.0)
+      let r: Reading = Reading(1712, "temp")
       let path: Vec<Point> = Vec<Point>([])
-      p.x = 3.0                        # a field is a member
+      p.x = 3.0                   # a field is a member
+      r[1] = "pressure"           # a slot is an index
+
+   A record struct is read and written by name with the member syntax
+   of Section 5.1, and its constructor binds a part by name as any
+   call binds a parameter (Section 7.5), or by position in declaration
+   order.  A tuple struct is read and written by index as a tuple is
+   (Section 3.2), counting from zero, and its constructor takes one
+   value per slot in order; it has no field names, so r.x is a
+   BadMember and p[0] is a type error.  A slot carries no pub: it is
+   as visible as the struct is (Section 10.3.2).  Either is
+   destructured as Section 8 defines.
+
+   The structure of either body is fixed: no part is added to a struct
+   value, taken away from it or retyped, and the number of parts
+   belongs to the type.  The values they hold are mutable, so p.x =
+   3.0 and r[1] = "pressure" each replace a value where it stands.
 
    A struct is a type name: it may annotate a name, a parameter or a
-   return, and it is the type of every value built by its
-   constructor.  The constructor is the type name followed by
-   arguments; a field is given by name, as any call may bind a
-   parameter (Section 7.5), or by position in declaration order.  A
-   field is read and written with the member syntax of Section 5.1.
+   return, and it is the type of every value built by its constructor.
    Structs are nominal: two structs are the same type only if they are
-   the same declaration.  A field MAY be written with pub; without it
-   the field is read and written only where the struct is declared
-   (Section 10.3.2).
+   the same declaration.  A field of a record struct MAY be written
+   with pub; without it the field is read and written only where the
+   struct is declared (Section 10.3.2).
+
+   impl attaches functions to a struct.  An impl block names one struct
+   and holds fn definitions:
+
+      impl Point {
+         fn norm(this) -> f64 {
+            return (this.x * this.x + this.y * this.y) ** 0.5
+         }
+
+         fn origin() -> Point {
+            return Point(x = 0.0, y = 0.0)
+         }
+      }
+
+      let p = Point(x = 3.0, y = 4.0)
+      p.norm()                 # 5.0
+      Point.origin()           # a Point at the origin
+
+   An fn whose first parameter is this is a method: this is bound to
+   the value on the left of the dot, typed as the struct, and p.norm()
+   passes p as this.  An fn with no such parameter is an associated
+   function, reached through the type and not through a value, so
+   Point.origin() is written and p.origin() is a BadMember.  this is a
+   contextual keyword (Section 2.4) and names the receiver and
+   nothing else; it MUST NOT be rebound.  A method MAY declare further
+   parameters, bound as any call binds them (Section 7.5), and it MAY
+   be async, in which case p.norm() yields a future.
+
+   A method is a member of the value, so it is read with the member
+   syntax of Section 5.1, which throws BadMember when the struct
+   declares no such method.  Read without a call -- let f = p.norm --
+   it yields a function with this already bound (Section 7.2).  A
+   method named enter or exit makes the struct a resource (Section
+   6.1.8); a method named after a conversion is not that conversion
+   (Section 10.2.1); and a program MUST NOT write impl for a built-in
+   type, whose members are fixed by this document.
+
+   Any number of impl blocks MAY name one struct, and every one of them
+   MUST stand in the module that declares it (Section 10.3.1).  An fn
+   inside an impl is published by pub exactly as any other is (Section
+   10.3.2); without it the method is visible only in that module.
+
+   A struct is built in one of two ways: the constructor written as a
+   call, Point(...), is a function and runs the functions below, and
+   the literal, Point { ... }, is not a call and runs none of them.
+   Three names in an impl are constructors, and one family of names
+   gives the struct a say in an operator.  Each is recognised by its
+   name alone; none of them is a keyword.
+
+   make is the regular constructor.  A struct that defines it takes
+   over its own construction: Point(...) runs make, and the
+   constructor of Section 3.9 is not used.  The constructor written as
+   a call is a function like any other: Point(...) runs the from_ that
+   matches its argument, or make when none does.  The takeover stops
+   at the impl that declares make, so inside that block Point(x = ...,
+   y = ...) still builds the value directly; a make that calls its own
+   struct's constructor from anywhere else does not terminate.
+
+      impl Point {
+         fn make(x: f64 = 0.0, y: f64 = 0.0) -> Point {
+            return Point(x = x, y = y)
+         }
+      }
+
+   from_T, for any type name T, is a constructor from one value of that
+   type, and it is mounted on the struct's own constructor: when
+   Point(v) is called and v is of a type the struct has a from_ for,
+   that from_ runs and make is skipped.  A struct with from_i32
+   therefore answers Point(1) with from_i32 and Point(1.0, 2.0) with
+   make.  from_T is an associated function -- it takes no this -- and
+   it yields the struct.  T MUST NOT be the struct itself.
+
+      impl Point {
+         fn from_i32(v: i32) -> Point {
+            return Point(x = f64(v), y = 0.0)
+         }
+      }
+
+   to_T is the other direction, and it is mounted on the constructor
+   of T: when T(v) is called and v is of the struct's type, the to_T
+   of that struct runs and the constructor T would have used is masked
+   -- the conversion of Section 10.2.1 for a primitive, the make or the
+   constructor of Section 3.9 for a struct.  to_T is a method, so it
+   takes this, and it yields a T: str(p), for a struct with to_str, is
+   p.to_str() and not the conversion of Section 10.2.1.  T MUST NOT be
+   the struct itself.  Either is an ordinary member as well and MAY be
+   called by name.
+
+   default is the fourth of these names, an associated function that
+   takes no this and yields the struct:
+
+      impl Point {
+         fn default() -> Point {
+            return Point(x = 0.0, y = 0.0)
+         }
+      }
+
+   The struct it yields SHOULD hold every part whose type is not
+   nullable and SHOULD leave none of that kind unset; a part whose type
+   is nullable it MAY set or leave alone.  A literal is filled from it:
+   a part the literal does not set takes the value default set for it,
+   and this is done without asking whether the part is nullable, so a
+   default that sets a nullable part fills that part too.  A part the
+   literal does set keeps the value the literal gave it.  A struct with
+   no default is filled from an empty struct, which sets nothing, and
+   a literal that then leaves a part of a non-nullable type unset is an
+   error, the value having no such part: a conforming implementation
+   MUST report it before the program runs where it can, and otherwise
+   throw with an Error of kind BadArgument.
+
+   The literal is the struct name and, on the line the name is
+   written on, a brace body holding the parts it sets.  The body is
+   written the way the HashMap of Section 3.3 is written, as name:
+   value pairs, and a trailing comma is permitted:
+
+      Point { x: 1.0, y: 2.0 }       # every part set
+      Point { x: 1.0 }               # the rest from default
+      Point { }                      # every part from default
+
+   The brace MUST stand on that line; one written on the next line is a
+   block (Section 6.1) and not a literal.  The body MAY be empty: after
+   a struct name the braces have no other reading, so Point { } needs
+   no marker of its own, the way a bare { } is always an empty block
+   (Section 3.2).  A literal is not a call: it puts the values it
+   names straight into the parts of the value and runs no constructor,
+   so neither make nor a from_ has a hand in it.  The one function a
+   literal runs is default, whose struct supplies what the literal
+   leaves out; every part it names is put in place without any
+   function being called.  Only a record struct has a literal, the
+   parts of a tuple struct having no names to write, so
+   Reading(1712, "temp") is the only way to write one.
+
+   A method named after a binary operator is called when that operator
+   is applied and one of its operands is of the struct's type:
+
+      impl Vec2 {
+         fn add_Vec2_Vec2(left: Vec2, right: Vec2) -> Vec2 {
+            return Vec2(x = left.x + right.x, y = left.y + right.y)
+         }
+
+         fn add_Vec2_i32(left: Vec2, right: i32) -> Vec2 {
+            return Vec2(x = left.x + right, y = left.y + right)
+         }
+
+         fn mul(left: Vec2, right: Vec2) -> Vec2 {
+            return Vec2(x = left.x * right.x, y = left.y * right.y)
+         }
+      }
+
+   The name is the operator's name from the list below on its own --
+   op(left, right) -- or followed by the two operand types --
+   op_T1_T2(left: T1, right: T2), the left operand's type first.  At
+   least one of T1 and T2 MUST be the struct itself, so a struct may
+   say what adding a Vec2 to an i32 means but not what adding two i32s
+   does.  The pair is matched exactly and with no promotion (Section
+   4.1): add_Vec2_i32 is not tried for a Vec2 and an i64, and it does
+   not answer i32 + Vec2, which wants add_i32_Vec2.  Where both forms
+   could run, the one that names the types runs.  Such a method takes
+   two parameters and no more, and it is reached through the operator
+   and through no other name.
+
+      The names, one for each binary operator:
+
+         **  pow        power
+         *   mul        multiplication
+         /   div        division
+         //  floordiv   floor division
+         %   modulo     modulo
+         &   bitand     bitwise and
+         <<  shl        shift left
+         >>  shr        shift right
+         +   add        addition, concatenation
+         -   sub        subtraction, difference
+         |   bitor      bitwise or, union
+         ^   bitxor     bitwise xor
+         ..  range      the range of two bounds
+         ==  eq         equal
+         !=  ne         not equal
+         <   lt         less than
+         >   gt         greater than
+         <=  le         less or equal
+         >=  ge         greater or equal
+         in  contains   membership
+
+   Only binary operators are hijacked.  The unary operators, and, or
+   and not, ? :, every assignment, <- and ->, within and @ and the
+   await and spawn prefixes keep the meaning Section 4 gives them, and
+   a program MUST NOT name one of them in an impl.  The name of in is
+   contains because in is a keyword.  A compound assignment follows
+   the operator it is written with: p += v runs the add of the left
+   operand and binds the result to it.
 
 3.10.  Event and Error
 
@@ -725,6 +991,93 @@ Table of Contents
    are evaluated left to right with the natural meaning.  Member access,
    indexing and calling (Section 5.1) bind tighter than precedence 1.
 
+4.1.  Type Promotion
+
+   Every number carries a width: an unannotated integer is i32, an
+   unannotated float is f64, and an annotated one is the width it names
+   (Section 2.8).  An arithmetic or bitwise operator given two operands
+   of different widths is computed at the wider of them:
+
+   *  integer with integer: the operation is computed at the wider
+      width and yields an integer of it.
+
+   *  integer with float: the integer is promoted to the float width,
+      which is f64 unless the float operand is annotated f32, and the
+      result is a float.
+
+   *  float with float: the operation is computed at f64 unless both
+      operands are f32, and yields a float of that width.
+
+   Promotion never widens a stored value.  A name, a field, a parameter
+   and a channel element keep the width they were declared with;
+   promotion decides only the width the operation is computed at and
+   the type it yields.  The result is then fitted to where it lands --
+   the annotation of the name, field, parameter or return it is bound
+   to, or the promoted width when there is none -- and a result that
+   does not fit throws with an Error of kind OutOfRange (Section 2.8).
+   No operation is wrapped, rounded or truncated to make a result fit.
+
+   / yields a float for two integers as for any other pair; // and %
+   yield an integer.  An integer raised to a negative power by **
+   throws OutOfRange, no integer being the result.  The unary minus
+   yields the negation at the operand's width, so a non-zero unsigned
+   integer has none and throws OutOfRange, while -0 is 0.  The bitwise
+   operators &, |, ^, ~, << and >> take integers and only integers; a
+   float operand is a type error.  The comparisons ==, !=, <, >, <=
+   and >= promote as above and never throw OutOfRange: they compare the
+   promoted values and yield a bool.
+
+      let a: i8 = 100
+      a + a          # throws OutOfRange: 200 does not fit i8
+      i64(a) + a     # 200, an i64
+      a / 2          # 50.0, a float
+      a // 2         # 50, an integer
+      a ** -1        # throws OutOfRange
+
+4.2.  Operators Beyond Arithmetic
+
+   A few operators are written with the signs of arithmetic but do no
+   arithmetic.  Each is defined for the pair of kinds below and is a
+   type error for every other pair; no value is coerced to make a pair
+   fit.
+
+   *  text + text is concatenation and yields a text.  text * n, for an
+      integer n, is n copies of the text; n of zero or less is the
+      empty text.
+
+   *  Vec + Vec is concatenation and yields a new list.  Vec * n, for
+      an integer n, is n copies of its items; n of zero or less is the
+      empty list.
+
+   *  HashSet | HashSet is the union, & the intersection, - the
+      difference and ^ the symmetric difference; each yields a new set.
+
+   *  a Duration takes +, -, *, /, // and % as Section 3.5 defines, and
+      never a bitwise operator.
+
+   *  in is membership, not arithmetic: x in coll yields true when coll
+      holds x.  For a HashMap it tests the keys, for a text it tests a
+      substring and for a Range it tests the positions.
+
+   *  == and != compare by value: two numbers when their promoted
+      values are the same, two texts when their characters are, and a
+      Vec, tuple, HashSet or HashMap when its elements, compared the
+      same way, are the same.  Two struct values are equal only when
+      they are of one declaration (Section 3.9) and their parts, field
+      by field or slot by slot, are equal.  A
+      function, a Future and a Channel are compared by identity: two
+      are equal only when they are the same one.
+
+   *  <, >, <= and >= order numbers, texts and Durations: a text by its
+      characters and a Duration by its length.  On a Vec, HashSet,
+      HashMap, struct, function, Future or Channel they are a type
+      error.
+
+   The compound assignments +=, -=, *=, /= and the rest apply the
+   operator to the two operands and bind the result to the left, so
+   xs += [4] is xs = xs + [4]; the width of the target still governs
+   the result, so a: i8 += 200 throws OutOfRange.
+
 5.  Expressions
 
 5.1.  Member Access, Indexing, Slicing, Calling
@@ -733,11 +1086,16 @@ Table of Contents
    or dictionary; negative indices count from the end.  expr(args) calls
    a function or invokes a native procedure.  The three may be chained:
    device.status().state.  A member read on a value that has no such
-   member, or a method call on a non-callable, panics with an Error of
-   kind BadMember; an index that names no element panics with OutOfRange
-   (Section 2.8); a dictionary lookup with an absent key panics with an
-   Error of kind BadKey; a member or index through a null value panics
-   with NullDeref.
+   member throws with an Error of kind BadMember; a call of a value that
+   is not callable -- not a function, not a closure and not a native
+   procedure -- throws with NotCallable; an index that names no element
+   throws with OutOfRange (Section 2.8); a dictionary lookup with an
+   absent key throws with an Error of kind BadKey; a member or index
+   through a null value throws with NullDeref.  A call that supplies a
+   number of arguments no signature accepts throws with BadArity, and an
+   argument a signature refuses throws with BadArgument.  Where the
+   member names a method of the struct of expr (Section 3.9), the call
+   passes expr to it as this.
 
    A call argument is bound by position (a value) or by name (name:
    value).  A position and a name MAY appear in one call; positions
@@ -799,9 +1157,9 @@ Table of Contents
    start MUST name an element or the boundary n; a stop MAY name an
    element or either boundary.  A position that is none of these --
    xs[11], xs[-13] or xs[0..12] on the list above -- names nothing and
-   panics with an Error of kind OutOfRange (Section 2.8).  On an empty
+   throws with an Error of kind OutOfRange (Section 2.8).  On an empty
    subject no position names an element: xs[..] is the empty list and
-   xs[0..] is a panic.
+   xs[0..] throws.
 
    Only a list and a text are sliced.  A tuple is indexed but not
    sliced: its elements differ in type, so a slice of it would have no
@@ -1210,7 +1568,7 @@ Table of Contents
    own condition; the loop may also be left through that condition,
    return, break or a failure.  The subscription behind an until suffix,
    and the timer behind an every or an after suffix, belongs to the
-   loop's task and is therefore cancelled with it (Section 6.9); a panic
+   loop's task and is therefore cancelled with it (Section 6.9); a throw
    inside a suffix propagates to the loop's task.
 
 6.1.7.  break, continue, next and pass
@@ -1247,12 +1605,12 @@ Table of Contents
    once; written with as name, name is bound to what the value's enter
    member yields, and without as the value itself is the resource.
    When the block is left -- by falling off its end, by break,
-   continue, next, return or a panic -- the resource's exit member is
+   continue, next, return or a throw -- the resource's exit member is
    called.  enter and exit are ordinary members read by the member
    syntax of Section 5.1, so a struct that declares them is a resource;
    a value that supplies neither is a type error.
 
-   exit runs exactly once, and a panic raised in it supersedes the
+   exit runs exactly once, and a throw raised in it supersedes the
    failure in flight, as one raised in finally does (Section 6.2).  A
    return in the body runs exit before it returns.  The name bound by
    as is local to the block.
@@ -1302,24 +1660,24 @@ Table of Contents
       {{ for c in chans spawn drain(c) }}
       {{ for t in topics on t as ev { log("event", ev.name) } }}
 
-6.2.  Failure: panic, try and catch
+6.2.  Failure: throw, try and catch
 
-   panic raises a failure carrying an Error (Section 3.10) and nothing
+   throw raises a failure carrying an Error (Section 3.10) and nothing
    else:
 
-      panic Error("HardwareError", "motor stalled")
+      throw Error("HardwareError", "motor stalled")
 
-   A panic abandons the statement that raised it: the statements after
+   A throw abandons the statement that raised it: the statements after
    it in the same block do not run.  try { body } catch Kind as e {
-   handler } finally { cleanup } catches a panic raised by body whose
+   handler } finally { cleanup } catches a throw raised by body whose
    error's kind equals Kind, exactly; the optional as e binds the Error,
    whose members are kind, message and cause.  A try MAY carry any
    number of catch clauses, chained without limit and tried in textual
    order; of them at most one runs.  A bare catch catches any kind and,
    when present, SHOULD come last, since a clause after it could never
-   run.  A catch clause does not catch a panic raised by another catch
-   clause, and a panic raised in finally supersedes the failure in
-   flight.  finally runs whether the body panicked or not, and when the
+   run.  A catch clause does not catch a throw raised by another catch
+   clause, and a throw raised in finally supersedes the failure in
+   flight.  finally runs whether the body threw or not, and when the
    body is left by return, break or continue.
 
    A catch clause and a finally clause continue the try, so each is
@@ -1333,17 +1691,27 @@ Table of Contents
          await actuate("grip", force = 0)
       }
 
-   A panic that no try catches propagates to the nearest enclosing task
-   and fails its future (Section 6.3).  An uncaught panic in a handler
+   A throw that no try catches propagates to the nearest enclosing task
+   and fails its future (Section 6.3).  An uncaught throw in a handler
    started by on (Section 6.7) is reported on the runtime topic
    core.error [RFC0004], Section 9.2.1, and the subscription survives.
-   An uncaught panic in the top-level task ends the program and is
+   An uncaught throw in the top-level task ends the program and is
    reported on core.error.
 
    The kinds a program MUST be prepared to catch are the OCP error-code
    names of Section 9.5 and the built-in error kinds OutOfRange
    (Section 2.8), BadMatch (Section 8), Cancel (Section 6.9), Timeout
    (Section 6.2) and ChannelClosed (Section 3.7).
+
+   panic is the fatal failure (Section 10.2.9).  panic("jammed"), or
+   panic() with no argument, ends the program where it stands with
+   status 101: the argument, or a text of the host's choosing when it
+   is omitted, is written to standard error first.  It is not caught:
+   no try catches it, no catch or finally clause runs, and the failure
+   is not reported on core.error.  exit(code = 0) is not a failure but
+   a system-level exit: it ends the program where it stands with the
+   status code names.  A program MUST NOT use panic where a throw
+   would let a caller decide.
 
 6.3.  Tasks, spawn and await
 
@@ -1356,18 +1724,18 @@ Table of Contents
    (Section 3.6) immediately; the caller's task is not suspended.  The
    operand is normally a call: its arguments are evaluated in the
    current task and the call itself runs in the new one.  The future
-   resolves with the task's result or fails with its panic.  Discarding
+   resolves with the task's result or fails with its throw.  Discarding
    the future does not cancel the task.
 
    await suspends the current task until a future resolves, then yields
-   its value or re-raises its panic:
+   its value or re-raises its throw:
 
       let result = await f
       let temp = await sense("temp")      # a device call is a future
 
    A future keeps its outcome: awaiting one that has already resolved
    yields the same value again, and awaiting one that has already
-   failed re-raises the same panic.  await may appear in any task,
+   failed re-raises the same throw.  await may appear in any task,
    including the top-level one.  A task that awaits several futures
    does so one at a time; to await them together, spawn each and race
    (Section 6.5) or select (Section 6.6) over the futures, or run them
@@ -1393,7 +1761,7 @@ Table of Contents
    finish.  Each top-level statement in a par block starts as its own
    task, concurrently with the others and with the enclosing task; par
    then suspends the enclosing task until every branch has resolved,
-   panicked or been cancelled:
+   thrown or been cancelled:
 
       par {
          move_arm("home")
@@ -1416,10 +1784,10 @@ Table of Contents
    likewise a data race.
 
    par joins all branches: it does not return until the last has
-   resolved.  If a branch panics, the other branches are cancelled
-   (Section 6.9) and par re-raises the panic of the branch that appears
-   first in the block among those that panicked.  A panic in a branch
-   reaches the enclosing task as if the branch had run there.
+   resolved.  If a branch throws, the other branches are cancelled
+   (Section 6.9) and par re-raises the throw of the branch that
+   appears first in the block among those that threw.  A throw in a
+   branch reaches the enclosing task as if the branch had run there.
 
    If the enclosing task is cancelled while par waits, par cancels
    every branch and the cancellation surfaces as a Cancel failure in
@@ -1443,7 +1811,7 @@ Table of Contents
    are cancelled (Section 6.9).  A branch that is a statement with no
    value resolves with null, and null is then a value that can win the
    race; a timeout arm expressed as sleep d wins the same way.  If
-   every branch fails, race re-raises the panic of the branch that
+   every branch fails, race re-raises the throw of the branch that
    appears first in the block among those that failed.
 
    race is the construct for the common robotic question "which of
@@ -1514,10 +1882,9 @@ Table of Contents
    Each arriving EVENT for a matching topic starts a new task running
    the handler; handler tasks run concurrently with the main flow and
    with one another.  The handler names the Event with as ev; without
-   as the Event is discarded.  If the handler panics, the panic
-   is reported on the
-   runtime topic core.error [RFC0004], Section 9.2.1, and the
-   subscription survives.
+   as the Event is discarded.  If the handler throws, the throw is
+   reported on the runtime topic core.error [RFC0004], Section 9.2.1,
+   and the subscription survives.
 
    on is an expression: it yields a subscription handle, which a
    program SHOULD bind so that it can cancel the subscription later.
@@ -1645,9 +2012,10 @@ Table of Contents
 
    A function is defined with fn name(params) { body } or as an arrow
    (Section 5.5).  Parameters are names; a parameter MAY carry a
-   default.  A call binds arguments by position or by name (Section
-   5.1).  A function returns the value of its last expression or of an
-   explicit return; a function that falls off the end returns null.
+   default and MAY be marked ref (Section 7.4).  A call binds arguments
+   by position or by name (Section 5.1).  A function returns the value
+   of its last expression or of an explicit return; a function that
+   falls off the end returns null.
 
    A function head MUST keep its opening parenthesis on the same line as
    fn and the function name: fn name( is one unit, not fn name on one
@@ -1665,7 +2033,7 @@ Table of Contents
    An fn MAY be prefixed with async: an async function returns a future,
    not a value: calling it starts a task (as spawn would, Section 6.3)
    and yields a future that resolves with the function's return value or
-   fails with its panic.  The future is observed with await, race or
+   fails with its throw.  The future is observed with await, race or
    select exactly as any other, and is cancelled with the same
    cooperative mechanism (Section 6.9).
 
@@ -1688,13 +2056,35 @@ Table of Contents
    own, nested in the scope of the module enclosing it; what other
    modules see of the names it holds is Section 10.3.
 
-7.4.  Argument Passing by Alias
+7.4.  Argument Passing
 
-   Arguments are passed by alias: the parameter names the same value
-   the caller passed, so a mutation the function makes is visible to the
-   caller.  Reassigning the parameter to a new value does not change the
-   caller's binding; to return a changed container the function returns
-   it.
+   A parameter is passed by value unless its signature marks it
+   otherwise.  A by-value parameter is read-only: it binds the value the
+   caller passed and MUST NOT be assigned to, and an assignment to it
+   throws with an Error of kind Immutable.  The value itself is shared
+   (Section 3.1), so a mutation of a container reached through the
+   parameter is visible to the caller; what is forbidden is rebinding the
+   parameter to another value.
+
+   A parameter written ref name, or &name, is passed by reference: the
+   parameter names the same binding the caller passed, so an assignment
+   to it is visible to the caller.  ref and & are one mark, & being sugar
+   for ref, and the mark appears only in the parameter signature: a call
+   passes the argument bare and the body uses the parameter bare, with no
+   operator at either end.  ref is a contextual keyword: it is recognised
+   only in a parameter list and is not reserved elsewhere, so it remains
+   a usable identifier.
+
+      fn add_up(items, ref sum) {
+         for it in items { sum = sum + it }   # visible to the caller
+         items = []                           # Immutable
+      }
+
+   Writing to a const binding (Section 7.3) is the same error.  Where the
+   write is visible when the unit is loaded it is the load-time
+   diagnostic BadConst; a write that is not visible until the program
+   runs, such as one through a binding resolved at run time, is the
+   runtime kind Immutable.
 
 7.5.  Defaults, Named Arguments and the Parameter Sink
 
@@ -1703,7 +2093,10 @@ Table of Contents
    sink parameter ...rest collects the positional arguments not bound
    by a named parameter into a list, and :::kw collects the named
    arguments not bound by a parameter into a dictionary.  The token
-   ::: appears only in a parameter list.
+   ::: appears only in a parameter list.  A named argument that matches
+   no parameter, and is not collected by :::kw, throws with an Error of
+   kind UnknownArgument; a parameter bound both by position and by name
+   throws with DuplicateArgument.
 
       fn log(level = "info", ...rest) { ... }
       fn conf(host, ...opts, :::kw) { ... }
@@ -1718,7 +2111,7 @@ Table of Contents
 
    Destructuring works in let, const, var, the for variable, the
    parameter list.  A failed match -- too few
-   elements, a missing key -- panics with an Error of kind BadMatch.
+   elements, a missing key -- throws with an Error of kind BadMatch.
    A key
    absent from the source dictionary may be given a default with name =
    expr in the pattern.
@@ -1777,7 +2170,7 @@ Table of Contents
    capabilities and, for a secured scheme, the members that [RFC0009]
    or [RFC0010] require, and waits for WELCOME.  If the security mode
    the caller required is not confirmed by WELCOME, connect() closes
-   the session and panics with an Error of the kind it reports (for
+   the session and throws with an Error of the kind it reports (for
    example Unauthorized or Unsupported); an Air peer [RFC0011] silently
    closes a secured session, which the host surfaces as SessionExpired.
 
@@ -1914,7 +2307,7 @@ Table of Contents
       each a most-preferred-first list, and requests the "ext" header.
       A primitive is switched on only when WELCOME confirms a name the
       host offered; silence never switches one on.  If the host requires
-      a primitive WELCOME does not confirm, connect() panics
+      a primitive WELCOME does not confirm, connect() throws
       Unsupported and closes, as [RFC0009], Section 9 directs.  F_ENC is
       session scope; F_ITG and F_ZTR are per-frame and are applied by
       the host, not by the program.
@@ -1944,7 +2337,7 @@ Table of Contents
 
    *  Air's max_payload is at most 1024 octets ([RFC0011], Section 10).
       A program SHOULD keep each call's arguments and each event's data
-      small; the host panics PayloadTooLarge if it would exceed the
+      small; the host throws PayloadTooLarge if it would exceed the
       peer's limit.
 
    *  The error codes 0x0000 to 0x000F are reused unchanged
@@ -2010,36 +2403,471 @@ Table of Contents
    The standard library has a core and an extension; only the core is
    defined here, and an extension part MAY be added later.  Only the
    core library MAY name a function after a keyword where the context
-   is unambiguous; a program MUST NOT.  The core library is small and
-   pure; the only functions that do I/O are the three at the end.  The
-   pure part is: abs, min, max, sum, len, range, sorted, reversed,
-   zip, enumerate, map, filter, any, all, type, keys, values, items,
-   emit,
-   and the channel primitives chan, close, send, recv.  Every
-   primitive type but () names a conversion function: bool, char, str,
-   i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize, f32
-   and f64 each take one value and yield that type; a conversion that
-   does not fit panics with an Error of kind OutOfRange (Section
-   2.8), so
-   i8(300) fails rather than truncates.  A conversion whose input cannot
-   be read as the target -- i64("abc") -- panics with an Error of kind
-   BadParse; a conversion that reads but cannot yield the target type
-   panics with BadCast; str() on bytes that are not valid UTF-8 panics
-   with BadUTF8.  A Duration is unboxed by
-   these constructors: the count of milliseconds is cut down to the
-   width of the target and does not panic (Section 3.5).  emit(name,
-   payload) raises an Event named name with that payload for the
-   subscriptions of this program: the handlers of on, the wait that is
-   waiting on it, and the until and select arms whose topic matches the
-   name.  It yields null, and a name that holds a wildcard matches
-   nothing.  publish (Section 9.4) carries the same Event to the peer
-   over the PubSub pipe and raises nothing here.  Three functions
-   perform simple line I/O: print writes each argument, formatted by
-   Section 10.4 and separated by a space, to standard output followed
-   by a newline; eprint does the same on standard error; input reads one
-   line from standard input and yields it without the trailing
-   newline, or null at end of input.  A host MAY add more but MUST
-   NOT remove or rename these.
+   is unambiguous; a program MUST NOT.  A host MAY add more but MUST
+   NOT remove or rename any of the functions below.
+
+   The core library is: the conversion functions of Section 10.2.1;
+   abs, min, max and sum (Section 10.2.2); len, range, sorted,
+   reversed, zip and enumerate (Section 10.2.3); map, filter, any and
+   all (Section 10.2.4); keys, values, items and type (Section
+   10.2.5); the channel primitives chan, close, send and recv (Section
+   10.2.6); emit (Section 10.2.7); print, eprint and input (Section
+   10.2.8); and panic and exit (Section 10.2.9).  All but emit, print,
+   eprint, input, panic and exit are pure: they read their arguments,
+   yield a value and change nothing else.  The members of the built-in
+   types, Sections 10.2.10 to 10.2.16, are part of the core library in
+   the same way.
+
+   A core function is called as any other is (Section 5.1): its
+   arguments are bound by position or by name, and a call that passes
+   the wrong number of arguments throws with an Error of kind BadArity,
+   while a value of a type the function does not accept throws with
+   BadArgument.  Where an iterable is wanted, a list, tuple, set,
+   dictionary, range or any other iterable is accepted (Section 6.1.5).
+   A function that yields a container yields a new one and leaves its
+   argument alone.  The functions that act on a value are also members
+   of that value, so len(xs) and xs.len() are one call, as are items(d)
+   and d.items().
+
+10.2.1.  Conversion Functions
+
+      bool(v) -> bool              char(v) -> char
+      str(v) -> str
+      i8(v) -> i8     i16(v) -> i16      i32(v) -> i32
+      i64(v) -> i64   i128(v) -> i128    isize(v) -> isize
+      u8(v) -> u8     u16(v) -> u16      u32(v) -> u32
+      u64(v) -> u64   u128(v) -> u128    usize(v) -> usize
+      f32(v) -> f32   f64(v) -> f64
+      Duration(v) -> Duration
+
+   Every primitive type but () names a conversion function of the same
+   name.  Each takes exactly one value and either yields a value of
+   that type or throws: a conversion never yields a value of another
+   type, and never widens, rounds or wraps one to make it fit.  Three
+   things can go wrong:
+
+   *  A value that does not fit the target -- an integer outside the
+      width named, a fraction asked of an integer -- throws with an
+      Error of kind OutOfRange (Section 2.8).
+
+   *  A value that cannot be read as the target at all -- i64("abc")
+      -- throws with an Error of kind BadParse.
+
+   *  A value that is read but cannot yield the target type throws
+      with an Error of kind BadCast.  str() on bytes that are not
+      valid UTF-8 throws with BadUTF8.
+
+   bool(v) is false for false, for the numbers 0 and 0.0, for the
+   empty text and the empty container, and for null; it is true for
+   every other value.  char(v) takes a text of exactly one character,
+   and a text of any other length throws OutOfRange.  str(v) is the
+   default form of Section 10.4, so str(1h 30m) is "1h 30m".
+
+   A Duration is unboxed by these constructors: u32(d) is the
+   millisecond count of d, cut down to the width of the target, so
+   i8(1h) truncates rather than fails (Section 3.5).  Duration(n)
+   goes the other way: it builds the interval of n milliseconds from a
+   value of a primitive numeric kind, rounding a fraction to a whole
+   millisecond.
+
+      i8(300)         # throws OutOfRange; it never truncates
+      i64("abc")      # throws BadParse
+      f64("2.5")      # 2.5
+      str(1h 30m)     # "1h 30m"
+      u32(2s)         # 2000
+      Duration(1500)  # 1s 500ms
+
+10.2.2.  Numbers: abs, min, max and sum
+
+      abs(x) -> number
+      min(items) -> value           max(items) -> value
+      min(a, b, ...) -> value       max(a, b, ...) -> value
+      sum(items) -> number
+      sum(items, start) -> number
+
+   abs(x) yields x without its sign, of the same kind as x; a Duration
+   is already a magnitude and comes back unchanged.  min and max take
+   either one iterable or two or more values and yield the least and
+   the greatest of them under < and > (Section 4); the values MUST be
+   comparable with one another, and comparing two kinds that do not
+   compare is a type error.  An empty iterable throws with an Error of
+   kind OutOfRange, there being no least and no greatest of nothing.
+   sum(items) adds the items from left to right and yields the total,
+   starting from start when it is given and from 0 when it is not, so
+   the sum of an empty iterable is 0.  A sum of Durations is a
+   Duration (Section 3.5), and a total that does not fit its width
+   throws OutOfRange.
+
+      abs(-3)                # 3
+      min([4, 1, 7])         # 1
+      max(2, 9, 5)           # 9
+      sum([1, 2, 3])         # 6
+      sum([500ms, 1s], 0s)   # 1s 500ms
+
+10.2.3.  Sequences: len, range, sorted and reversed
+
+      len(x) -> i32
+      range(stop) -> Range
+      range(start, stop) -> Range
+      range(start, stop, step) -> Range
+      sorted(items, key = null, reverse = false) -> Vec<T>
+      reversed(items) -> Vec<T>
+      zip(a, b, ...) -> Vec<Tuple>
+      enumerate(items, start = 0) -> Vec<Tuple<i32, T>>
+
+   Six functions act on sequences.  len(x) yields the number of
+   elements of a list, tuple, set or dictionary, or the number of
+   characters of a text.  range builds the Range (Section 3.4) of the
+   positions from start up to stop, stepping by step: range(5) is
+   0..5, range(2, 6) is 2..6 and range(0, 10, 2) is 0..10..2.  A step
+   of zero, or a direction that contradicts the bounds, is the empty
+   range and not an error.
+
+   sorted yields a new list holding the items in ascending order and
+   leaves its argument alone; key is a function of one argument whose
+   result is compared in place of the item, and reverse = true turns
+   the order round.  reversed yields a new list holding the items in
+   the opposite order, and on a text it yields a text.  zip yields a
+   list of tuples, one per position, stopping at the end of the
+   shortest argument, so zip([1, 2], ["a"]) is [(1, "a")].  enumerate
+   yields a list of (index, item) tuples counting from start, the
+   shape a for loop destructures (Section 6.1.5).
+
+      len("arm")                      # 3
+      sorted([3, 1, 2])               # [1, 2, 3]
+      sorted(names, key = |n| len(n)) # shortest name first
+      reversed([1, 2, 3])             # [3, 2, 1]
+      zip([1, 2], ["a", "b"])         # [(1, "a"), (2, "b")]
+      enumerate(["a", "b"])           # [(0, "a"), (1, "b")]
+
+      for i, v in enumerate(readings) {
+         log(i, v)
+      }
+
+10.2.4.  Higher-Order Functions: map, filter, any and all
+
+      map(f, items) -> Vec<T>
+      filter(f, items) -> Vec<T>
+      any(items) -> bool          all(items) -> bool
+      any(f, items) -> bool       all(f, items) -> bool
+
+   map yields a new list of f(item), one per item and in order;
+   filter yields a new list of the items for which f(item) is true, in
+   the same order.  f takes one argument, and in filter its result is
+   read as a boolean.  A throw inside f abandons the whole call and
+   propagates to the caller.  Both are more often written as a
+   comprehension (Section 5.4): [f(x) for x in items] is map(f,
+   items), and [x for x in items if f(x)] is filter(f, items).
+
+   any yields true when at least one item is true, and all when every
+   one is; of an empty iterable any yields false and all yields true,
+   and both stop at the first item that settles the answer.  With a
+   function as the first argument they test f(item) in place of the
+   item, so any(|x| x > 0, xs) asks whether any item is positive.
+
+      map(|x| x * 2, [1, 2, 3])      # [2, 4, 6]
+      filter(|x| x > 1, [1, 2, 3])   # [2, 3]
+      any([false, true])             # true
+      all([x > 0 for x in readings]) # every reading positive
+
+10.2.5.  Dictionaries and Types: keys, values, items and type
+
+      keys(d) -> Vec<K>            d.keys()
+      values(d) -> Vec<V>          d.values()
+      items(d) -> Vec<Tuple<K, V>> d.items()
+      type(x) -> str
+
+   keys, values and items yield the keys, the values and the (key,
+   value) pairs of a dictionary, as lists in the order the dictionary
+   iterates (Section 6.1.5); a program MUST NOT rely on that order.
+   Each is also a member of the dictionary it acts on, so d.items() is
+   items(d), the form a for loop usually uses:
+
+      for k, v in table.items() {
+         log(k, v)
+      }
+
+   type(x) yields the name of the type of x as a text, written the way
+   an annotation is written (Section 2.8): type(1) is "i32",
+   type(1.0) is "f64", type("a") is "str", type([1]) is "Vec<i32>",
+   type(2s) is "Duration" and type(chan i32) is "Channel<i32>".  It is
+   a name for a log or for a person, and a program MUST NOT parse it:
+   the text of a type is not part of the interface of this document.
+
+10.2.6.  Channels: chan, close, send and recv
+
+      chan T -> Channel<T>          chan T(n) -> Channel<T>
+      send(ch, v) -> null
+      recv(ch) -> T?
+      close(ch) -> null
+
+   chan T builds an unbuffered channel whose element type is T, and
+   chan T(n) one buffered with room for n values; n is a non-negative
+   integer, so chan T(0) is the unbuffered form.  The element type is
+   enforced like any annotation (Section 2.8).
+
+   send(ch, v) is the send of Section 3.7 written as a call: v -> ch
+   and ch <- v are the same thing.  It appends v and yields null,
+   suspending the caller until a receiver is ready on an unbuffered
+   channel, or until room appears on a full one.
+
+   recv(ch) removes and yields the oldest value, suspending the caller
+   until one is present.  On a closed channel it drains what is
+   buffered, then yields null once, and a further receive throws with
+   an Error of kind ChannelClosed.
+
+   close(ch) marks ch closed: further sends throw with ChannelClosed,
+   and further receives drain the buffer and then yield null.  Closing
+   a channel that is already closed does nothing.  None of the three
+   suspends once the channel is closed and empty.
+
+   recv and send are also the labels of a select arm (Section 6.6),
+   where they are written without parentheses -- recv ch as v -- and
+   do not call these functions.
+
+      let ch = chan i32(4)
+      send(ch, 7)
+      let v = recv(ch)     # 7
+      close(ch)
+
+10.2.7.  Events: emit
+
+      emit(name, payload = null) -> null
+
+   emit raises an Event named name carrying payload for the
+   subscriptions of this program: the handlers of on (Section 6.7),
+   the wait that is waiting on it, and the until and select arms whose
+   topic matches the name.  It yields null, and a name that holds a
+   wildcard matches nothing.  A handler receives an Event (Section
+   3.10) whose name is name and whose payload is payload, or null when
+   it is omitted.  A handler runs in its own task (Section 6.7), so
+   emit returns before the handlers have finished, and a throw inside
+   one is reported on core.error rather than reaching the caller.  The
+   Event is raised inside this program only: publish (Section 9.4)
+   carries one to a peer over the PubSub pipe and raises nothing here.
+
+      emit("arm.done", {"id": 3})
+
+10.2.8.  Line I/O: print, eprint and input
+
+      print(args...) -> null
+      eprint(args...) -> null
+      input() -> str?
+
+   print writes each of its arguments, formatted by Section 10.4 and
+   separated by a space, to standard output, followed by a newline;
+   eprint does the same on standard error.  Both take any number of
+   arguments, including none, in which case they write the newline
+   alone, and both yield null.  input reads one line from standard
+   input and yields it without the trailing newline, or null at end of
+   input.  A read or a write that fails -- a stream that is closed, a
+   device that does not answer -- throws with an Error of kind IOError
+   (Appendix C).
+
+      print("pos", 3)      # "pos 3" then a newline
+      eprint("jammed")     # the same on standard error
+      let line = input()   # one line, or null at end of input
+
+10.2.9.  Ending the Program: panic and exit
+
+      panic(msg = null)
+      exit(code = 0)
+
+   panic is the fatal failure: it ends the program where it stands
+   with status 101, writing msg -- or a text of the host's choosing
+   when msg is omitted -- to standard error first.  No try catches it,
+   no catch or finally clause runs, and nothing is reported on
+   core.error (Section 6.2).  A program calls it where continuing is
+   meaningless -- an invariant that does not hold, state that cannot
+   be recovered -- and MUST NOT call it where a throw would let a
+   caller decide.
+
+   exit is not a failure but a system-level exit: it ends the program
+   where it stands with the status code names.  A code of 0 is the
+   normal end and any other is what the program chooses, so a
+   supervisor can tell a program that chose exit(2) from one that
+   panicked.  Neither function returns and neither is caught by try.
+
+      exit(0)              # end the program, status 0
+      panic("jammed")      # end the program, status 101
+10.2.10.  Text Members
+
+      s.len() -> i32
+      s.upper() -> str            s.lower() -> str
+      s.trim() -> str
+      s.split(sep = " ") -> Vec<str>
+      s.starts_with(p) -> bool    s.ends_with(p) -> bool
+      s.contains(p) -> bool
+      s.find(p) -> i32?
+      s.replace(old, new) -> str
+      s.chars() -> Vec<str>
+
+   A text is immutable: every one of these yields a new text and leaves
+   the subject alone.  len is the number of characters and not the
+   number of bytes.  upper and lower fold the case of the characters,
+   and trim takes away the whitespace at either end and leaves the
+   inside alone.  split cuts the text at every occurrence of sep and
+   yields the pieces without it; a text with no sep in it yields one
+   piece, the text itself, and an empty sep throws with an Error of
+   kind BadArgument.  starts_with, ends_with and contains test a
+   substring; find yields the position of the first occurrence of p, or
+   null when there is none; replace yields a new text with every
+   occurrence of old rewritten to new.  chars yields the characters as
+   a list of one-character texts.  A text is also indexed and sliced
+   (Section 5.1), iterated, repeated with * and concatenated with + as
+   Section 4.2 defines.
+
+      "arm-2".split("-")        # ["arm", "2"]
+      " Grip ".trim()           # "Grip"
+      "a.b".replace(".", "_")   # "a_b"
+      "arm".find("m")           # 2
+
+10.2.11.  Vec Members
+
+      xs.len() -> i32
+      xs.push(v)                   xs.pop() -> T
+      xs.insert(i, v)              xs.remove(i) -> T
+      xs.extend(items)
+      xs.contains(v) -> bool       xs.index(v) -> i32?
+      xs.first() -> T?             xs.last() -> T?
+      xs.sort(key = null, reverse = false)
+      xs.reverse()
+      xs.copy() -> Vec<T>
+      xs.clear()
+      xs.join(sep = "") -> str
+
+   A list is mutable: push, insert, remove, extend, sort, reverse and
+   clear change the list itself.  pop takes the last element and
+   remove the one at i, and each yields the value taken out; either on
+   an empty list, or at a position that names no element, throws with
+   an Error of kind OutOfRange.  push, insert and extend yield null.
+   contains is the in of Section 4.2; index yields the position of the
+   first element equal to v, or null when there is none; first and
+   last yield the elements at the ends, or null on an empty list.
+   sort orders the list in place, taking the key and reverse of
+   Section 10.2.3, and reverse turns it round in place; the copy-making
+   sorted and reversed of that section are there for when the argument
+   must survive.  copy yields a new list holding the same elements and
+   clear empties this one.  join writes the elements as text with sep
+   between them and throws with BadArgument unless every element is a
+   text.
+
+      let xs = [3, 1, 2]
+      xs.sort()               # xs is [1, 2, 3]
+      xs.push(4)              # xs is [1, 2, 3, 4]
+      xs.pop()                # 4
+      ["a", "b"].join("-")    # "a-b"
+
+10.2.12.  Tuple Members
+
+      t.len() -> i32
+      t.contains(v) -> bool       t.index(v) -> i32?
+      t.first() -> Any?           t.last() -> Any?
+      t.copy() -> Tuple
+      t.to_vec() -> Vec<Any>
+
+   A tuple is read and written by index exactly as a list is, and it
+   takes the members above; what it does not take is any member that
+   would change its structure, so there is no push, insert, remove,
+   extend, clear, sort or reverse: the number of its slots and the
+   type of each are fixed where the tuple is written (Section 3.2).  A
+   slot is written with t[i] = v, which throws with an Error of kind
+   OutOfRange at a position that names no slot, and BadArgument at a
+   value that does not fit the type of that slot.  len is the number
+   of slots; contains is the in of Section 4.2 and index the position
+   of the first slot equal to v, or null; first and last yield the
+   value in an end slot, typed as Any because the slots need not
+   agree, or null on the empty tuple.  copy yields a new tuple holding
+   the same values and to_vec yields them as a list.
+
+      let t = (1, "a")
+      t[0] = 2             # t is (2, "a")
+      t[1] = 3             # throws BadArgument: slot 1 holds a text
+      t.len()              # 2
+
+10.2.13.  HashSet Members
+
+      st.len() -> i32
+      st.add(v)                    st.remove(v) -> bool
+      st.contains(v) -> bool
+      st.copy() -> HashSet<T>
+      st.clear()
+
+   A set is mutable and holds distinct values.  add puts v in and
+   remove takes it out; remove yields true when v was there and false
+   when it was not, and add on a value the set already holds does
+   nothing.  contains is the in of Section 4.2.  copy yields a new set
+   and clear empties this one.  The operators |, &, - and ^ of Section
+   4.2 yield a new set and leave both operands alone.  A set is
+   iterated in no defined order, and a program MUST NOT rely on the
+   order its elements come out in.
+
+10.2.14.  HashMap Members
+
+      d.len() -> i32
+      d.get(k) -> V?               d.insert(k, v)
+      d.remove(k) -> V?            d.contains(k) -> bool
+      d.copy() -> HashMap<K, V>
+      d.clear()
+
+   A dictionary is mutable.  get yields the value at k, or null when
+   there is none, so it never throws where the index d[k] throws with
+   an Error of kind BadKey (Section 5.1); insert binds k to v whether
+   k was there or not and yields null; remove takes k out and yields
+   the value it held, or null when k was not there.  contains tests a
+   key and not a value.  keys, values and items are the functions of
+   Section 10.2.5 written as members.  copy yields a new dictionary and
+   clear empties this one.  A dictionary is iterated in no defined
+   order.
+
+10.2.15.  Range and Duration Members
+
+      r.start -> i32               r.stop -> i32
+      r.step -> i32
+      r.len() -> i32               r.contains(v) -> bool
+
+   A range is immutable: start, stop and step are the three parts of
+   Section 3.4 read as members, and they MUST NOT be written.  len is
+   the number of positions it holds, 0 for a range of no position, and
+   contains is the in of Section 4.2.  A range is iterated and takes
+   part in a slice as Section 3.4 defines.
+
+      (0..10..2).len()       # 5
+      (0..10).contains(5)    # true
+
+      d.ms() -> u32
+      d.secs() -> f64
+
+   A Duration is immutable.  ms yields the count of milliseconds it
+   holds, the same count the constructors of Section 10.2.1 unbox;
+   secs yields the interval as a number of seconds, so (90m).secs() is
+   5400.0.  The arithmetic of a Duration is Section 3.5 and its text
+   form is Section 10.4.
+
+10.2.16.  Channel, Future, Event and Error Members
+
+      ch.send(v)                   ch.recv() -> T?
+      ch.close()
+      ch.len() -> i32              ch.is_closed() -> bool
+
+   The three calls of Section 10.2.6 are members of the channel as
+   well: ch.send(v) is send(ch, v), ch.recv() is recv(ch) and
+   ch.close() is close(ch), with the behaviour written there.  len is
+   the number of values buffered, 0 on an unbuffered channel, and
+   is_closed is whether close has been called on it.
+
+      f.done() -> bool
+      f.cancel() -> Future
+
+   A future is read with await and not otherwise (Section 3.6): it
+   carries no member that yields its value.  done is whether it has
+   settled, resolved or failed, and does not wait; cancel is the
+   cancel of Section 6.9, so f.cancel() is cancel(f).
+
+   An Event and an Error are the structs of Section 3.10, and their
+   members are the fields written there: name and payload, and kind,
+   message and cause.  They are immutable and carry no method; str(e)
+   writes an Error as Section 3.10 defines.
 
 10.3. Modules
 
@@ -2212,7 +3040,7 @@ Table of Contents
    while the program is running, it stops the program where it is met.
 
    A failure raised by a module body is not a load error.  It is a
-   panic (Section 6.2) raised where the module was being loaded, and
+   throw (Section 6.2) raised where the module was being loaded, and
    nothing is undone: a module whose body failed part-way stays loaded,
    holding the bindings it managed to make and missing the rest.
 
@@ -2333,7 +3161,7 @@ Table of Contents
    error.  Numbers default to right alignment and text to left; the
    default fill is a space, the default sign -, and the default is no
    #, no zero padding, no width, no precision and no type.  A spec
-   that does not match the grammar above panics with an Error of kind
+   that does not match the grammar above throws with an Error of kind
    BadFormat (Section 11).
    Examples:
 
@@ -2350,18 +3178,18 @@ Table of Contents
 11. Error Model and Diagnostics
 
    Diagnostics fall into three classes: lexical (Section 2), syntactic
-   (this document's grammar) and runtime (a panic, Section 6.2).  A
+   (this document's grammar) and runtime (a throw, Section 6.2).  A
    lexical or syntactic error MUST stop the program before any
-   statement runs.  A runtime error is a panic carrying an Error,
+   statement runs.  A runtime error is a throw carrying an Error,
    whose kind and message say what failed.  The built-in error kinds --
-   the runtime kinds a program MAY catch and the compile-time diagnostic
+   the runtime kinds a program MAY catch and the load-time diagnostic
    kinds -- are listed in Appendix C; all are reserved and a program
    MUST NOT reuse any of their names (Section 9.5).
 
    A conforming implementation reports each diagnostic with a position
    (line and column) and a message in English.  It MUST NOT proceed past
    a lexical or syntactic error by guessing, and it MUST NOT suppress a
-   panic it cannot attribute.
+   throw it cannot attribute.
 
 12. Complete Example
 
@@ -2437,8 +3265,8 @@ Table of Contents
    uses ocp-fls:// [RFC0009] or ocps:// [RFC0010]; the language selects
    these by URI only and never downgrades a required protection.
 
-   A panic in an event handler does not tear down the subscription, but
-   an uncaught panic in the top-level task ends the program; a host
+   A throw in an event handler does not tear down the subscription, but
+   an uncaught throw in the top-level task ends the program; a host
    SHOULD run a supervisor that re-establishes the session on
    SessionExpired rather than leaving the machine uncommanded.  A task
    that ignores cancellation (Section 6.9) cannot be stopped; a program
@@ -2503,13 +3331,13 @@ Appendix A. Collected Grammar (ABNF)
                   / if-stmt / for-stmt / while-stmt / loop-stmt
                   / try-stmt / with-stmt / match-stmt / return-stmt
                   / break-stmt / comp-stmt
-                  / continue-stmt / next-stmt / panic-stmt
+                  / continue-stmt / next-stmt / throw-stmt
                   / pass-stmt
                   / spawn-stmt / race-stmt / par-stmt
                   / select-stmt / wait-stmt
                   / every-stmt / delay-stmt
                   / mod-stmt / import-stmt / from-import
-                  / assign-stmt / struct-def / fn-def
+                  / assign-stmt / struct-def / fn-def / impl-def
 
       expr        = send-expr / ternary
       send-expr   = ternary ( ( "<-" / "->" ) ternary )
@@ -2605,14 +3433,26 @@ Appendix A. Collected Grammar (ABNF)
       # ${ident} / ${ident:spec} / ${(expr)} / ${(expr):spec}
       next-stmt   = "next"
       pass-stmt   = "pass"
+      throw-stmt  = "throw" expr
       let-stmt    = [ "pub" ] ( "let" / "const" / "var" ) name
                   [ ":" type ] [ "=" expr ]
       fn-def      = [ "pub" ] [ "async" ] "fn" name
                   "(" [ param *( "," param ) ] ")" [ "->" type ] block
-      param       = name [ ":" type ] [ "=" expr ]
+      param       = [ "ref" / "&" ] name [ ":" type ] [ "=" expr ]
                   / "..." name [ ":" type ] / ":::" name [ ":" type ]
-      struct-def  = [ "pub" ] "struct" name "{" 1*( field ) "}"
+      # ref and & are one mark: a parameter so marked is passed by
+      # reference (Section 7.4); & is sugar for ref, and neither appears
+      # at the call site or in the body
+      struct-def  = [ "pub" ] "struct" name ( struct-body
+                  / tuple-body )
+      struct-body = "{" 1*( field ) "}"
+      tuple-body  = "(" [ type *( "," type ) ] ")"
+      # a record struct names its parts, a tuple struct numbers them
+      # (Section 3.9)
       field       = [ "pub" ] name ":" type
+      impl-def    = "impl" name "{" *( fn-def ) "}"
+      # an fn in an impl whose first parameter is this is a method;
+      # one without it is an associated function (Section 3.9)
       mod-stmt    = [ "pub" ] "mod" name [ block ]
       import-stmt = [ "pub" ] "import" mod-item *( "," mod-item )
       from-import = [ "pub" ] "from" mod-path "import"
@@ -2634,6 +3474,12 @@ Appendix A. Collected Grammar (ABNF)
 
       primary     = literal / name / tuple / vec-lit / map-lit / set-lit
                   / on-expr / wait-expr / template / ctor
+                  / struct-lit
+      struct-lit  = type "{" [ name ":" expr *( "," name ":" expr ) ]
+                  [ "," ] "}"
+      # the body is written as a HashMap is; the brace stands on the
+      # line the type name is written on, and only a record struct has
+      # a literal (Section 3.9)
       tuple       = "(" [ expr *( "," expr ) [ "," ] ] ")" / "(,)"
       vec-lit     = "[" [ expr *( "," expr ) [ "," ] ] "]" / "[,]"
       map-lit     = "{" [ expr ":" expr *( "," expr ":" expr ) ]
@@ -2680,11 +3526,11 @@ Appendix C. Built-in Error Kinds
    a catch clause matches it by equality (Section 6.2), so the names
    below are the exact strings a program writes.  All are reserved: a
    program MUST NOT define an application error of the same name.  The
-   kinds split into runtime kinds a program MAY catch and compile-time
-   diagnostic kinds that stop the program before any statement runs
-   (Section 11).
+   kinds split into runtime kinds a program MAY catch and load-time
+   diagnostic kinds, raised while a unit is loaded and parsed and
+   stopping it before any statement runs (Section 11).
 
-   Table C.1 lists the runtime kinds; Table C.2 the compile-time
+   Table C.1 lists the runtime kinds; Table C.2 the load-time
    diagnostic kinds; Table C.3 the core OCP protocol kinds of Table 4
    (Section 9.5), each carrying the OCP ERROR code it maps from.  Table
    C.4 lists the protocol kinds added by [RFC0009], in force only when
@@ -2692,56 +3538,107 @@ Appendix C. Built-in Error Kinds
 
    Table C.1: Runtime built-in kinds
 
-      +--------------+----------------------------------+---------+
-      |Kind         |Meaning                          |Section |
-      +--------------+----------------------------------+---------+
-      |OutOfRange   |value does not fit its width;    |§2.8    |
-      |             |bad index; Duration overflow     |        |
-      |DivideByZero |division or modulo by zero       |§3.5    |
-      |BadKey       |dictionary key not present       |§5.1    |
-      |BadMember    |no such member on the value      |§5.1    |
-      |NullDeref    |member or index through null     |§5.1    |
-      |TypeError     |operation on an unsupported type |§5.1    |
-      |BadCast      |conversion cannot yield target type|§10.2   |
-      |BadParse     |a runtime string parse failed    |§10.2   |
-      |BadUTF8      |bytes are not valid UTF-8        |§10.2   |
-      |BadFormat    |malformed format spec in template|§10.4   |
-      |BadMatch     |pattern or destructuring failed  |§8      |
-      |Cancel       |the task was cancelled           |§6.9    |
-      |Timeout      |select after or await expired    |§6.2    |
-      |ChannelClosed|send or receive on a closed      |§3.7    |
-      |             |channel                          |        |
-      |IOError      |input or output operation failed |§10     |
-      |AccessDenied |a resource may not be accessed   |§10     |
-      |NotFound     |a named resource does not exist  |§10     |
-      |StackOverflow |the call stack was exhausted     |§3.10   |
-      |OutOfMemory  |the runtime could not allocate   |§3.10   |
-      |ResourceBusy |a resource is held or unavailable|§3.10   |
-      |Deadlock     |a select can never make progress |§6.6    |
-      |BadArgument  |wrong argument count or type     |§5.1    |
-      +--------------+----------------------------------+---------+
+      +------------------+----------------------------------+---------+
+      |Kind              |Meaning                           |Section  |
+      +------------------+----------------------------------+---------+
+      |OutOfRange        |value does not fit its width;     |§2.8     |
+      |                  |bad index; Duration overflow      |         |
+      |DivideByZero      |division or modulo by zero        |§3.5     |
+      |TypeError         |operation on an unsupported type  |§5.1     |
+      |BadCast           |conversion cannot yield the type   |§10.2    |
+      |BadParse          |a runtime string parse failed       |§10.2    |
+      |BadUTF8           |bytes are not valid UTF-8          |§10.2    |
+      |BadFormat         |malformed format spec in template  |§10.4    |
+      |BadKey            |dictionary key not present        |§5.1     |
+      |BadMember         |no such member on the value        |§5.1     |
+      |NullDeref         |member or index through null        |§5.1     |
+      |NotIterable       |value cannot be iterated            |§6.1.5   |
+      |BadMatch          |pattern or destructuring failed     |§8       |
+      |NotCallable       |callee is not a function           |§5.1     |
+      |BadArity          |wrong number of arguments          |§5.1     |
+      |BadArgument       |argument value or type refused     |§5.1     |
+      |UnknownArgument   |named argument has no parameter     |§7.5     |
+      |DuplicateArgument |one parameter bound twice          |§7.5     |
+      |Immutable         |write to a read-only binding       |§7.4     |
+      |Cancel            |the task was cancelled             |§6.9     |
+      |Timeout           |select after or await expired       |§6.2     |
+      |NotAwaitable      |await of a non-future              |§6.3     |
+      |ChannelClosed     |send or receive on a closed        |§3.7     |
+      |                  |channel                            |         |
+      |Deadlock          |a select can never make progress    |§6.6     |
+      |NotConnected      |no session is open                 |§9.2     |
+      |BadUri            |URI is malformed                   |§9.2     |
+      |BadTopic          |topic name is malformed            |§6.7     |
+      |IOError           |input or output operation failed   |§10      |
+      |AccessDenied      |a resource may not be accessed     |§10      |
+      |NotFound          |a named resource does not exist    |§10      |
+      |AlreadyExists     |resource already exists            |§10      |
+      |StackOverflow     |the call stack was exhausted       |§3.10    |
+      |OutOfMemory       |the runtime could not allocate     |§3.10    |
+      |ResourceBusy      |a resource is held or unavailable  |§3.10    |
+      +------------------+----------------------------------+---------+
 
                      Table C.1: Runtime built-in kinds
 
-   Table C.2: Compile-time built-in kinds
+   The runtime kinds are listed in seven groups, in the order of the
+   table:
+
+   *  values and types: OutOfRange to BadFormat;
+
+   *  containers, members, indices and patterns: BadKey to BadMatch;
+
+   *  calls, arguments and bindings: NotCallable to Immutable;
+
+   *  concurrency and time: Cancel to Deadlock;
+
+   *  sessions and addressing: NotConnected to BadTopic;
+
+   *  host resources and I/O: IOError to AlreadyExists;
+
+   *  runtime limits: StackOverflow to ResourceBusy.
+
+   Immutable is the runtime half of a write to a binding that cannot be
+   written: a by-value parameter (Section 7.4) or a const.  Where the
+   write is visible when the unit is loaded it is the load-time
+   diagnostic BadConst (Table C.2); a write that is not visible until
+   the program runs is Immutable.
+
+   Table C.2: Load-time built-in kinds
 
       +----------------+----------------------------------------+
       |Kind            |Meaning                                 |
       +----------------+----------------------------------------+
       |BadLex          |illegal character or malformed literal  |
       |BadSyntax       |the source does not follow the grammar  |
-      |TypeError        |wrong type used where another is required|
+      |TypeError       |wrong type used where another is required|
       |BadAnnotation   |unknown or malformed type annotation    |
       |UnknownName     |name used before it is declared         |
-      |BadImport       |import or from-import unresolved        |
-      |CircularImport  |a module imports itself in a cycle     |
+      |ReservedName    |a reserved name is defined              |
       |DuplicateDef    |name declared twice in one scope        |
+      |DuplicateParam  |one parameter named twice               |
+      |BadSignature    |malformed parameter signature           |
       |BadConst        |assignment to a const or closed binding |
       |ConstantOverflow|constant expression overflows its type  |
       |BadRange        |a range bound is not an integer         |
+      |BadImport       |import or from-import unresolved        |
+      |CircularImport  |a module imports itself in a cycle     |
+      |ModuleNotFound  |an imported module cannot be loaded    |
       +----------------+----------------------------------------+
 
-                     Table C.2: Compile-time built-in kinds
+                     Table C.2: Load-time built-in kinds
+
+   The load-time kinds are listed in four groups, in the order of the
+   table:
+
+   *  lexical and syntax: BadLex and BadSyntax;
+
+   *  names, types and annotations: TypeError to ReservedName;
+
+   *  declarations and signatures: DuplicateDef to BadRange, a bad
+      signature covering a sink that is not last and a ref mark in the
+      wrong place (Section 7.4);
+
+   *  modules: BadImport to ModuleNotFound.
 
    Table C.3: Core OCP protocol error codes
 
