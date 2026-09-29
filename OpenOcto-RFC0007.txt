@@ -8,10 +8,14 @@ Category: Standards Track                                 September 2026
 
 Abstract
 
-   Three tools make up the user-visible surface of the ecosystem: the
-   interpreter that runs programs, the daemon that owns buses, and the
-   formatter that rewrites source text.  This document specifies all
-   three interfaces, the files and environment variables they read, the
+   OctoScript ships as several binaries behind one entry, octo.  The
+   interpreter (octoexec), formatter (octofmt) and checker (octolint)
+   are reached through octo subcommands -- "octo run" (alias "exec"),
+   "octo fmt" (alias "format"), "octo lint" (alias "check") -- and the
+   package manager (tentacle) through "octo grab" and "octo drop".  The
+   daemon (octod) and language server (octolsp) are separate products
+   and are not entered through octo.  This document specifies all three
+   interfaces, the files and environment variables they read, the
    behaviour of the interactive mode, the policy that governs connecting
    to and starting a daemon, and the exact formatting rules.
 
@@ -46,7 +50,7 @@ Table of Contents
    1. Introduction
    2. Conventions
    3. The Interpreter Command
-   4. Interactive Mode
+   4. The REPL
    5. Connection and Start-Up Policy
      5.1.  Target Resolution
      5.2.  Loopback Detection
@@ -56,19 +60,27 @@ Table of Contents
    7. The Daemon Command
    8. Descriptor Utilities
    9. The Formatter Command
-   10. Formatting Rules
-   11. Launcher Scripts
-   12. Security Considerations
-   13. IANA Considerations
-   14. References
-     14.1. Normative References
-     14.2. Informative References
+   10. The Checker Command
+   11. Formatting Rules
+   12. Launcher Scripts
+   13. Security Considerations
+   14. IANA Considerations
+     15.1. Normative References
+     15.2. Informative References
    Appendix A. Environment Variables
    Appendix B. Exit Statuses
    Appendix C. Conformance Notes
    Authors' Addresses
 
 1.  Introduction
+
+   OctoScript is several binaries behind one entry point, octo, which is
+   a wrapper that dispatches subcommands.  octoexec runs programs and
+   serves the REPL; tentacle is the package manager; octofmt formats
+   source; octolint checks it.  A subcommand is a verb -- "run", "fmt",
+   "lint", "grab", "drop" -- and some have aliases: "run" is "exec",
+   "format" is "fmt", "check" is "lint".  octod (daemon) and octolsp
+   (language server) are separate products, not under octo.
 
    The tools are specified here as observable interfaces: command-line
    arguments, files read, output produced, exit status, and side
@@ -77,13 +89,17 @@ Table of Contents
 2.  Conventions
 
    The key words of [IETF-RFC2119] and [IETF-RFC8174] apply.
-   "<command>" means the interpreter, the daemon or the formatter.
+   "<command>" means a subcommand of octo, or octod or octolsp.
    Options MAY be written before or after positional arguments.  A path
    that is not absolute is resolved against the working directory.
 
 3.  The Interpreter Command
 
-      octo [options] [script ...]
+   The interpreter is the octoexec binary, entered through "octo run" or
+   its alias is "octo exec"; it starts no REPL when given no script;
+   the REPL is "octo repl" (Section 4).
+
+      octo run [options] [script ...]
 
       Operand / option     Argument      Meaning
       +=====================+==============+===========================+
@@ -136,13 +152,15 @@ Table of Contents
    missing, when lexing, parsing or evaluation fails, and when a usage
    error is detected (Section 5.4 and Appendix B).
 
-4.  Interactive Mode
+4.  The REPL
 
-   With no program file the interpreter reads statements from the
-   standard input.  Interactive mode requires a terminal; when no
+   The REPL is entered through "octo repl"; it is a subcommand of octo
+   and is not a fallback of "octo run": when given no program
+   file it is a usage error, not an entry to the REPL.  The REPL reads
+   statements from the standard input and requires a terminal; when no
    terminal is attached (for example when the terminal type is "dumb" or
-   the input is not a terminal) the command refuses to run and exits
-   with a non-zero status rather than reading input blindly.
+   the input is not a terminal) it refuses to run and exits with
+   a non-zero status rather than reading input blindly.
 
    1.  The prompt is shown; a continuation prompt is shown while a
        statement is incomplete.
@@ -280,7 +298,10 @@ Table of Contents
 
 9.  The Formatter Command
 
-      octofmt [options] [file ...]
+   The formatter is octofmt binary, entered through "octo fmt" or its
+   alias "octo format".
+
+      octo fmt [options] [file ...]
 
       Option       Meaning
       +=============+==================================================+
@@ -302,7 +323,20 @@ Table of Contents
    Because the tool reads and writes through the given paths, symbolic
    links are followed and the target file is rewritten.
 
-10. Formatting Rules
+10. The Checker Command
+
+   The checker is octolint binary, entered through "octo lint" or its
+   alias "octo check".  It reports problems in source text without
+   changing it, and exits non-zero when any problem is found.
+
+      octo lint [options] [file ...]
+
+   With no file, or with "-", the standard input is read.  A file that
+   cannot be read, a source text that cannot be lexed and check failure
+   are reported and produce the error status; processing stops at the
+   first such error.  The exit status is zero when no problem is found.
+
+11. Formatting Rules
 
    Formatting is lossless at the token level: every token's text is
    preserved, including string contents, numeric literal spellings, and
@@ -347,14 +381,14 @@ Table of Contents
    Applying the formatter to already formatted text MUST produce
    identical text.
 
-11. Launcher Scripts
+12. Launcher Scripts
 
    Each tool has a launcher script that resolves its own location
    through the symbolic-link chain before importing the implementation,
    so that a launcher MAY be linked into a directory on the search path.
    A launcher forwards all arguments and the exit status of the tool.
 
-12. Security Considerations
+13. Security Considerations
 
    *  The interpreter evaluates the program text it is given and MAY
       read its environment.  Only trusted programs SHOULD be run.
@@ -366,13 +400,13 @@ Table of Contents
    *  Utility subcommands write files.  They refuse to overwrite the
       packaged default descriptor, and they report the path they wrote.
 
-13. IANA Considerations
+14. IANA Considerations
 
    This document registers no names with IANA.
 
-14. References
+15. References
 
-14.1. Normative References
+15.1. Normative References
 
    [RFC0005]  Yang, S., "The OpenOcto Device Descriptor Format",
              RFC 0005,
@@ -386,7 +420,7 @@ Table of Contents
 
    [TOML]  "TOML: Tom's Obvious, Minimal Language", version 1.0.
 
-14.2. Informative References
+15.2. Informative References
 
    [RFC0002]  Yang, S., "OpenOcto Ecosystem Architecture", RFC 0002,
              September 2026.

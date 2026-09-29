@@ -159,11 +159,11 @@ Table of Contents
    OctoScript is a statically typed, Turing-complete language intended
    for controlling machines over a network.  It combines a compact
    expression syntax with brace-delimited, indentation independent
-   blocks, and it is designed to be embedded in a host
-   environment that supplies the machine-facing operations by speaking
-   OCP [RFC0004] on its behalf.  The value model, the operator set, the
-   concurrency model and the library are defined by this document; they
-   do not depend on the language in which an implementation is written.
+   blocks, and it is designed to be embedded in a host environment that
+   supplies the machine-facing operations by speaking OCP [RFC0004] on
+   its behalf.  The value model, the operator set, the concurrency model
+   and the library are defined by this document; they do not depend on
+   the language in which an implementation is written.
 
    A program is a sequence of statements executed as a single top-level
    task.  Execution is top-down; the last statement of a program need
@@ -250,7 +250,7 @@ Table of Contents
       the channel of a recv arm, the operand of with, or the pattern of
       a catch; it names the binding that receives the value.
 
-   *  from: the first word of a from-import (Section 10.3.3).
+   *  from: the source of an import (Section 10.3.3).
 
    *  default: the arm of a select that is taken when no other arm is
       ready (Section 6.6).
@@ -258,8 +258,8 @@ Table of Contents
    *  until: the clause that follows the closing brace of a loop
       (Section 6.9).
 
-   *  this: the first parameter of a method in an impl, and the
-      receiver inside its body (Section 3.9).
+   *  this: the first parameter of a method in an impl, and the receiver
+      inside its body (Section 3.9).
 
    *  chan: the type of a channel in a type position, as in chan T and
       chan T(n) (Section 3.7).
@@ -763,7 +763,14 @@ Table of Contents
    the literal, Point { ... }, is not a call and runs none of them.
    Three names in an impl are constructors, and one family of names
    gives the struct a say in an operator.  Each is recognised by its
-   name alone; none of them is a keyword.
+   name alone; none of them is a keyword.  They are the magic
+   functions, and the name of one MUST NOT be written as a member of a
+   struct.  One name is a magic member instead, declared in the struct
+   definition itself, and it MUST NOT be written as an fn in an impl.
+   Either is the load-time diagnostic ReservedName (Appendix C).  A
+   magic name whose type part names no type is not a magic name: the fn
+   is an ordinary function, is mounted on nothing and is called only by
+   its name.
 
    make is the regular constructor.  A struct that defines it takes
    over its own construction: Point(...) runs make, and the
@@ -780,13 +787,17 @@ Table of Contents
          }
       }
 
-   from_T, for any type name T, is a constructor from one value of that
-   type, and it is mounted on the struct's own constructor: when
+   from_T, where T is a type name, is a constructor from one value of
+   that type, and it is mounted on the struct's own constructor: when
    Point(v) is called and v is of a type the struct has a from_ for,
    that from_ runs and make is skipped.  A struct with from_i32
    therefore answers Point(1) with from_i32 and Point(1.0, 2.0) with
    make.  from_T is an associated function -- it takes no this -- and
-   it yields the struct.  T MUST NOT be the struct itself.
+   it yields the struct.  The T is looked up where the name is
+   declared: one that names no type leaves an ordinary function, which
+   is not mounted and is called only by its name.  Where T does name a
+   type, T MUST NOT be the struct itself, which is the load-time
+   diagnostic ReservedName (Appendix C).
 
       impl Point {
          fn from_i32(v: i32) -> Point {
@@ -794,37 +805,48 @@ Table of Contents
          }
       }
 
-   to_T is the other direction, and it is mounted on the constructor
-   of T: when T(v) is called and v is of the struct's type, the to_T
-   of that struct runs and the constructor T would have used is masked
-   -- the conversion of Section 10.2.1 for a primitive, the make or the
-   constructor of Section 3.9 for a struct.  to_T is a method, so it
-   takes this, and it yields a T: str(p), for a struct with to_str, is
-   p.to_str() and not the conversion of Section 10.2.1.  T MUST NOT be
-   the struct itself.  Either is an ordinary member as well and MAY be
-   called by name.
+   to_T, where T is a type name, is the other direction, and it is
+   mounted on the constructor of T: when T(v) is called and v is of
+   the struct's type, the to_T of that struct runs and the constructor
+   T would have used is masked -- the conversion of Section 10.2.1 for
+   a primitive, the make or the constructor of Section 3.9 for a
+   struct.  to_T is a method, so it takes this, and it yields a T:
+   str(p), for a struct with to_str, is p.to_str() and not the
+   conversion of Section 10.2.1.  As with from_, the T is looked up:
+   one that names no type leaves an ordinary method, which is mounted
+   on nothing and is called only by its name.  Where T does name a
+   type, T MUST NOT be the struct itself, ReservedName again (Appendix
+   C).  Either is an ordinary member as well and MAY be called by name.
 
-   default is the fourth of these names, an associated function that
-   takes no this and yields the struct:
+   default is the one magic member.  It is declared in the struct
+   definition, in the position a part is declared in, as the name
+   default, a colon and a HashMap literal:
 
-      impl Point {
-         fn default() -> Point {
-            return Point(x = 0.0, y = 0.0)
-         }
+      struct Point {
+         x: f64
+         y: f64
+         default: { x: 0.0, y: 0.0 }
       }
 
-   The struct it yields SHOULD hold every part whose type is not
-   nullable and SHOULD leave none of that kind unset; a part whose type
-   is nullable it MAY set or leave alone.  A literal is filled from it:
-   a part the literal does not set takes the value default set for it,
-   and this is done without asking whether the part is nullable, so a
-   default that sets a nullable part fills that part too.  A part the
-   literal does set keeps the value the literal gave it.  A struct with
-   no default is filled from an empty struct, which sets nothing, and
-   a literal that then leaves a part of a non-nullable type unset is an
-   error, the value having no such part: a conforming implementation
-   MUST report it before the program runs where it can, and otherwise
-   throw with an Error of kind BadArgument.
+   Its type is a HashMap and only a HashMap: the keys are the names of
+   parts of the struct and the values are what those parts are to
+   hold.  It is not a part of the struct and takes no place in the
+   value: it is not counted, not iterated, not compared and MUST NOT be
+   written.  Every instance reads it through the same pseudo-member, so
+   p.default yields that HashMap and is read-only; the name is reached
+   on an instance and not on the type, so Point.default is a BadMember.
+   What it holds SHOULD be every part whose type is not nullable, and
+   it SHOULD leave none of that kind unset; a part whose type is
+   nullable it MAY hold or leave out.
+
+   A default whose structure is wrong is an error where the struct is
+   declared and not where a value is made from it: what stands after
+   the colon that is not a HashMap literal throws with an Error of kind
+   TypeError, a key that names no part of the struct with BadKey, and a
+   value that does not fit the part its key names with BadArgument
+   (Appendix C).  A conforming implementation throws there, while the
+   struct is being declared, and SHOULD report it before the program
+   runs where it can.
 
    The literal is the struct name and, on the line the name is
    written on, a brace body holding the parts it sets.  The body is
@@ -839,14 +861,22 @@ Table of Contents
    block (Section 6.1) and not a literal.  The body MAY be empty: after
    a struct name the braces have no other reading, so Point { } needs
    no marker of its own, the way a bare { } is always an empty block
-   (Section 3.2).  A literal is not a call: it puts the values it
-   names straight into the parts of the value and runs no constructor,
-   so neither make nor a from_ has a hand in it.  The one function a
-   literal runs is default, whose struct supplies what the literal
-   leaves out; every part it names is put in place without any
-   function being called.  Only a record struct has a literal, the
-   parts of a tuple struct having no names to write, so
-   Reading(1712, "temp") is the only way to write one.
+   (Section 3.2).  A literal is not a call: it puts the values it names
+   straight into the parts of the value and runs no constructor, so
+   neither make nor a from_ has a hand in it.  The one thing it reads
+   besides its own body is the default member, and it reads it without
+   calling anything: a part the body does not set takes the value
+   default holds for it, and this is done without asking whether the
+   part is nullable, so a default that holds a nullable part fills that
+   part too.  A part the body does set keeps the value the body gave
+   it.  A struct with no default is filled from an empty HashMap, which
+   sets nothing, and a literal that then leaves a part of a
+   non-nullable type unset is an error, the value having no such part:
+   a conforming implementation MUST report it before the program runs
+   where it can, and otherwise throw with an Error of kind BadArgument.
+   Only a record struct has a literal, the parts of a tuple struct
+   having no names to write, so Reading(1712, "temp") is the only way
+   to write one.
 
    A method named after a binary operator is called when that operator
    is applied and one of its operands is of the struct's type:
@@ -874,8 +904,12 @@ Table of Contents
    4.1): add_Vec2_i32 is not tried for a Vec2 and an i64, and it does
    not answer i32 + Vec2, which wants add_i32_Vec2.  Where both forms
    could run, the one that names the types runs.  Such a method takes
-   two parameters and no more, and it is reached through the operator
-   and through no other name.
+   two parameters and no more, and at least one of the types its name
+   carries MUST be the struct; either rule broken is the load-time
+   diagnostic BadSignature (Appendix C).  The types are looked up, so
+   a name whose T1 or T2 names no type is an ordinary method, which
+   hijacks nothing and is called only by its name.  A method so named
+   is reached through the operator and through no other name.
 
       The names, one for each binary operator:
 
@@ -903,10 +937,11 @@ Table of Contents
    Only binary operators are hijacked.  The unary operators, and, or
    and not, ? :, every assignment, <- and ->, within and @ and the
    await and spawn prefixes keep the meaning Section 4 gives them, and
-   a program MUST NOT name one of them in an impl.  The name of in is
-   contains because in is a keyword.  A compound assignment follows
-   the operator it is written with: p += v runs the add of the left
-   operand and binds the result to it.
+   a program MUST NOT name one of them in an impl: none of them is an
+   identifier, so the diagnostic is BadSyntax (Appendix C).  The name
+   of in is contains because in is a keyword.  A compound assignment
+   follows the operator it is written with: p += v runs the add of the
+   left operand and binds the result to it.
 
 3.10.  Event and Error
 
@@ -2872,18 +2907,22 @@ Table of Contents
 10.3. Modules
 
    A module is a named namespace holding declarations -- bindings,
-   functions, structs and other modules.  Every program has one unnamed
-   module, the root module, whose body is the program's top-level
-   statements; every other module is declared inside it, or inside a
-   module already declared, with mod.  Splitting a program into modules
-   does two things: a name is reached through a path of module names,
-   and it either stays inside its own module or is published by it.
-   mod and pub are the whole of the machinery; there is no separate
-   interface, header or declaration file.
+   functions, structs and other modules.  Every file of a program is
+   one, with no declaration needed: it is reached by its path
+   (Section 10.3.3).  Every program has one unnamed module, the root
+   module, whose body is the program's top-level statements; every
+   other module is a file, or is declared inside one with mod.
+   Splitting a program into modules does two things: a name is reached
+   through a path of module names, and it either stays inside its own
+   module or is published by it.  mod, an import path and pub are the
+   whole of the machinery; there is no separate interface, header or
+   declaration file.
 
 10.3.1.  Module Declarations
 
-   mod declares a module in one of two forms:
+   A file needs no declaration to be a module: it is one, named by its
+   path, and an import reaches it by that path (Section 10.3.3).  mod
+   declares a module inside a file, in one of two forms:
 
       mod sensors                 # a unit the host resolves and loads
 
@@ -2901,6 +2940,11 @@ Table of Contents
    from -- the names declared in them, the path that reaches them and
    the rules of visibility are identical.  How a body is carried
    between programs is not specified here.
+
+   The name default is set aside.  mod default declares the default
+   export of the module it stands in: import name from a path binds
+   that module (Section 10.3.3).  A module declares at most one, and
+   one that declares none has no default to import.
 
    A mod declaration MAY stand at the top level of a program or in the
    body of another module, and nowhere else: written inside a function,
@@ -2964,44 +3008,79 @@ Table of Contents
 
 10.3.3.  Importing
 
-   import and from bring published names of another module into this
-   one.  The forms are:
+   import brings published names of another module into this one.  The
+   module is named by a path, and the forms are:
 
-      import mod
-      import a.b.c
-      import a.b.c as alias
-      import m1, m2 as other
-      from mod import name
-      from mod import name as other, second
+      import "./boot"                        # runs it, binds nothing
+      import { read, rate } from "./sensors"
+      import { read as sample } from "./sensors"
+      import * as s from "./sensors"
+      import drive from "./drive"              # the default export
+      import { area } from "@/geometry".shapes
+      import { log } from "@octo/logging:1"    # a package
 
-   import binds a module object.  Without as it binds the leftmost name
-   of the path and, through it, the modules below it: import a.b.c
-   binds a, so that a.b.c.f() is valid.  With as it binds the module
-   named by the whole path, so that alias.f() is valid and a is not
-   bound at all.  from binds named members of one module into this
+   The path is a text: a bare name in the place of a path is a syntax
+   error.  A path names a file, and it begins in one of four places:
+
+   *  "./sensors" and "../lib/util" are relative to the file that
+      writes them.
+
+   *  "/arm/drive" is absolute.
+
+   *  "@/" is the workspace root, so "@/geometry" names the same file
+      from anywhere in the program.
+
+   *  "~/" is the home directory of the user the program runs as, so
+      "~/lib/arm" reaches outside the workspace.
+
+   A path written @<publisher>/<package>:<version> is not a file but a
+   package: the publisher that published it, the name of the package
+   and the version asked for.  The package manager is [RFC0013].  The
+   publisher @octo is reserved for the packages that extend the
+   standard library ([RFC0012]): a program MUST NOT publish under it,
+   and an implementation MUST resolve it to the extensions it ships.
+   The version MAY be left out, and the path then asks for latest
+   ([RFC0013], Section 4).
+
+   A path MAY be followed by a dot and a chain of submodule names,
+   which selects a module declared inside that file with mod:
+   "./geometry".shapes is the shapes module of that file, and a chain
+   whose first name is not declared there is a load error (Section
+   10.3.6).
+
+   A bare import -- import "./boot" -- loads the module and runs it, and
+   binds nothing: it is written for what the module does, not for what
+   it names.  import * as s binds the module object as s and binds
+   nothing else.  The braced form binds named members into this
    module's own scope, under their own names or under those the as
-   clauses give them.
+   clauses give them, and every name in it MUST be one the module
+   publishes.
+
+   The unbraced form with a from clause -- import drive from "./drive"
+   -- binds the default export, the module the file declares with mod
+   default (Section 10.3.1); a file that declares none has no default,
+   and importing one is a load error.
 
    An import executes where it stands and binds in its own module's
    scope, so a name used before the import that binds it has run is a
    runtime error, as it is for any declaration (Section 7.3).  A name
-   reached by from MUST be visible to the importing module; importing a
-   private name is a load error (Section 10.3.6).  There is no wildcard
-   import: every imported name is written explicitly.
+   reached by the braced form MUST be visible to the importing module;
+   importing a private name is a load error (Section 10.3.6).  There
+   is no wildcard import: every imported name is written explicitly.
 
-   A dotted name first resolves to a source module -- one declared with
-   mod in this program; if none exists, a library module supplied by
-   the implementation is imported.  A name bound by an import MAY be
-   reassigned like any other binding, and doing so changes that binding
-   alone and not the module it named.
+   A path that names no file of this program is given to the host,
+   which MAY resolve it to a unit of its own; one the host does not
+   resolve either is a load error.  A name bound by an import MAY be
+   reassigned like any other binding, and doing so changes that
+   binding alone and not the module it named.
 
 10.3.4.  Re-export
 
    pub before an import publishes what the import binds, so that this
    module offers those names as its own:
 
-      pub import geometry            # geometry is reachable from here
-      pub from geometry import area  # area is a member of this module
+      pub import * as geometry from "./geometry"
+      pub import { area } from "./geometry"   # area is a member here
 
    A re-export makes no second binding: a name reached through a module
    that republishes it and the same name reached through the module
@@ -3017,23 +3096,28 @@ Table of Contents
    and nothing adds a member to a module or takes one away.  A struct
    published by a module is a type through that module as well: with
    pub struct Point declared in geometry, the annotation shape:
-   geometry.Point names that type after import geometry.  Nothing else
-   about a published value changes -- a function is called, a channel
-   is used and a struct is built as they are where they are declared.
+   geometry.Point names that type once geometry is imported from
+   "./geometry".  Nothing else about a published value changes -- a
+   function is called, a channel is used and a struct is built as they
+   are where they are declared.
 
 10.3.6.  Loading Order and Load Errors
 
    A module is loaded once and runs once.  A bodied mod runs when its
-   declaration is reached; a body-less one runs when a reference first
-   reaches it, and that reference loads it; every later reference takes
-   the module it left behind and runs nothing again.  Loading therefore
-   follows execution: top-down, and outwards from the first reference.
+   declaration is reached; a file, and a body-less mod, run when a
+   reference first reaches them, and that reference loads them; every
+   later reference takes the module it left behind and runs nothing
+   again.  Loading therefore follows execution: top-down, and outwards
+   from the first reference.
 
-   Four things are load errors.  A cycle -- a module that, directly or
-   through the modules it loads, loads itself.  A module name that
-   resolves to no unit at all.  A from import naming something the
-   module does not publish.  A second declaration of one name in one
-   module.  A load error ends the program and is reported as the
+   Five things are load errors.  A cycle -- a module that, directly or
+   through the modules it loads, loads itself.  A path that names no
+   file of this program and no unit of the host.  A submodule the
+   chain after a path names that the file does not declare.  An import
+   naming something the module does not publish, or a default it has
+   not declared.  A second declaration of one name in one module.  A
+   load error ends the program and is
+   reported as the
    syntactic class of Section 11 is: with a position and a message, and
    nothing past it runs.  A cycle caught while the host resolves the
    module graph stops everything before the first statement; met later,
@@ -3316,6 +3400,12 @@ Table of Contents
 
 15.2. Informative References
 
+   [RFC0012]  Yang, S., "Standard Library Extensions: the @octo
+              Publisher", RFC 0012, September 2026.
+
+   [RFC0013]  Yang, S., "The OctoScript Package Manager", RFC 0013,
+              September 2026.
+
    [IETF-RFC7301]  Friedl, A., Popov, A. and A. Hada, "Transport Layer
               Security (TLS) Application-Layer Protocol Negotiation
               Extension", IETF RFC 7301, July 2014.
@@ -3336,7 +3426,7 @@ Appendix A. Collected Grammar (ABNF)
                   / spawn-stmt / race-stmt / par-stmt
                   / select-stmt / wait-stmt
                   / every-stmt / delay-stmt
-                  / mod-stmt / import-stmt / from-import
+                  / mod-stmt / import-stmt
                   / assign-stmt / struct-def / fn-def / impl-def
 
       expr        = send-expr / ternary
@@ -3445,7 +3535,8 @@ Appendix A. Collected Grammar (ABNF)
       # at the call site or in the body
       struct-def  = [ "pub" ] "struct" name ( struct-body
                   / tuple-body )
-      struct-body = "{" 1*( field ) "}"
+      struct-body = "{" 1*( field / default-member ) "}"
+      default-member = "default" ":" map-lit
       tuple-body  = "(" [ type *( "," type ) ] ")"
       # a record struct names its parts, a tuple struct numbers them
       # (Section 3.9)
@@ -3454,11 +3545,14 @@ Appendix A. Collected Grammar (ABNF)
       # an fn in an impl whose first parameter is this is a method;
       # one without it is an associated function (Section 3.9)
       mod-stmt    = [ "pub" ] "mod" name [ block ]
-      import-stmt = [ "pub" ] "import" mod-item *( "," mod-item )
-      from-import = [ "pub" ] "from" mod-path "import"
-                  1*( mod-item *( "," mod-item ) )
-      mod-item    = mod-path [ "as" name ]
-      mod-path    = name *( "." name )
+      import-stmt = [ "pub" ] "import" import-clause
+      import-clause = import-path
+                   / import-items "from" import-path
+                   / "*" "as" name "from" import-path
+                   / name "from" import-path
+      import-path  = text *( "." name )
+      import-items = "{" import-item *( "," import-item ) "}"
+      import-item  = name [ "as" name ]
       # a bodied mod runs its block where it stands and holds its own
       # namespace; a body-less one asks the host for the unit of that
       # name; both bind the name in the module enclosing them
@@ -3620,7 +3714,7 @@ Appendix C. Built-in Error Kinds
       |BadConst        |assignment to a const or closed binding |
       |ConstantOverflow|constant expression overflows its type  |
       |BadRange        |a range bound is not an integer         |
-      |BadImport       |import or from-import unresolved        |
+      |BadImport       |an import resolves to no module         |
       |CircularImport  |a module imports itself in a cycle     |
       |ModuleNotFound  |an imported module cannot be loaded    |
       +----------------+----------------------------------------+
@@ -3632,7 +3726,10 @@ Appendix C. Built-in Error Kinds
 
    *  lexical and syntax: BadLex and BadSyntax;
 
-   *  names, types and annotations: TypeError to ReservedName;
+   *  names, types and annotations: TypeError to ReservedName, the
+      reserved name being one this document claims for itself -- an
+      error kind a program defines again, or a magic name written where
+      Section 3.9 reserves it;
 
    *  declarations and signatures: DuplicateDef to BadRange, a bad
       signature covering a sink that is not last and a ref mark in the

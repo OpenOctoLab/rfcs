@@ -1,0 +1,219 @@
+
+
+
+
+OpenOcto Standards Group (OOSG)                                  S. Yang
+Request for Comments: 0013                                          HFUT
+Category: Informational                                   September 2026
+
+
+                     The OctoScript Package Manager
+
+Abstract
+
+   This document specifies the package manager of OctoScript
+   [RFC0003]: how a package is named, how a version is written, how an
+   import path of the form @<publisher>/<package>:<version> resolves
+   to one, and what a host does to fetch, build and install it.  A
+   package is a unit of distribution, not a unit of the language: the
+   language sees only the module an import binds.
+
+   Section 4 is written.  The rest of this document is a skeleton: its
+   scope and its section names are fixed so that [RFC0003] and
+   [RFC0012] can refer to them; the substance of each is to be
+   written.
+
+Status of This Memo
+
+   This document is not an Internet Standards Track specification; it
+   is published for informational purposes.
+
+   This document is a product of the OpenOcto Standards Group (OOSG).
+   It has been approved for publication by the OOSG.  Not all
+   documents approved by the OOSG are candidates for any level of
+   OpenOcto Standard.
+
+   Information about the current status of this document, any errata,
+   and how to provide feedback on it may be obtained from the OOSG.
+
+Copyright Notice
+
+   Copyright (c) 2026 OOSG and the persons identified as the document
+   authors.  All rights reserved.
+
+   This document is distributed under the MIT License: permission is
+   granted, free of charge, to use, copy, modify, merge, publish,
+   distribute, sublicense and/or sell copies of this document, subject
+   to the inclusion of the above notice in all such copies.  The
+   document is provided without warranty of any kind.  Code Components
+   extracted from this document are subject to the same terms.
+
+Table of Contents
+
+   1.  Introduction
+   2.  Conventions
+   3.  Package Identity
+   4.  Versions
+   5.  The Manifest
+   6.  Resolution and the Lock File
+   7.  Registry and Distribution
+   8.  Build and Install
+   9.  Conformance
+   10. Security Considerations
+   11. IANA Considerations
+   12. References
+
+1.  Introduction
+
+   Tentacle is the package manager of OctoScript; its binary is
+   tentacle, reached through the unified entry, octo, as "octo grab"
+   (install dependencies) and "octo drop" (remove them), or directly as
+   tentacle.  This section will say what a package is, what it carries,
+   and how it differs from the file modules and the host units that
+   [RFC0003], Section 10.3 already reaches.
+
+2.  Conventions
+
+   To be written.  This section will fix the meaning of the key words
+   and the terms publisher, package and version.
+
+3.  Package Identity
+
+   To be written.  This section will fix the form
+   @<publisher>/<package>:<version>, the characters each part may
+   hold, and how a publisher name is claimed.  It will reserve @octo
+   for [RFC0012].  The version after the colon is Section 4.
+
+4.  Versions
+
+   A package is asked for by the version identifier written after the
+   colon of its import path: @<publisher>/<package>:<version>.  An
+   identifier is one of three kinds -- a standard version, a wildcard
+   and a pointer -- and which it is decides whether it can move.
+
+   A standard version is written in the dotted notation of SemVer
+   [SEMVER]: three non-negative integers separated by dots, with the
+   pre-release and build parts of that notation where the package
+   wants them.  A standard version is immutable: what it names is
+   fixed when the package is published, and a registry MUST NOT move
+   it afterwards.  An import that names one therefore always resolves
+   to the same content, and two programs that name the same one agree.
+
+   A wildcard is a pattern written in the dotted SemVer notation.  It
+   follows the same grammar as a standard version, but a component may
+   be a wildcard and the notation may carry a range operator; the
+   resolver matches it against the immutable standard versions and
+   chooses the highest that satisfies it.  A wildcard may take any of
+   the forms below.
+
+   *  A component written *, x or X, or omitted from the right, is a
+      wildcard component: 1, 1.2, 1.*.*, 1.x and 1.2.X each match every
+      version that agrees to the left.
+
+   *  A caret, ^<version>, allows changes that do not alter the left-
+      most non-zero component: ^1.2.3 means >=1.2.3 <2.0.0, ^0.2.3 means
+      >=0.2.3 <0.3.0, ^0.0.3 means exactly 0.0.3.
+
+   *  A tilde, ~<version>, allows the right-most named component to
+      change: ~1.2.3 means >=1.2.3 <1.3.0, ~1 means >=1.0.0 <2.0.0.
+
+   *  A hyphen range, <a> - <b>, matches versions from a through b
+      inclusive; an end of * is open (a - * means at or above a).
+
+   *  A comparison, > >= < <= or =, before a version restricts the
+      match to one side of it; several forms may be joined by ||,
+      which matches any of them.
+
+   A pre-release in the wildcard limits the match to pre-release
+   versions at or above that mark; without one, a wildcard matches
+   only releases.  A wildcard that matches no version resolves to
+   nothing, and importing it is an error.
+
+   A pointer is any other identifier -- an identifier of [RFC0003],
+   Section 2.4, chosen by the publisher.  A pointer stands for one of
+   the versions of the package and MAY be moved to another at any
+   time, so an import that names one resolves to whatever it stands
+   for when the import is resolved, and two resolutions of the same
+   pointer MAY disagree.  Three pointers are conventional:
+
+   *  latest -- the version the publisher recommends.
+
+   *  nightly -- the newest build, made and published on the schedule
+      the publisher keeps.
+
+   *  lts -- the oldest version the publisher still supports.
+
+   A publisher MAY define further pointers of its own and MAY leave
+   any of the three above undefined, so a pointer is nothing but an
+   agreement between a publisher and whoever writes the import.  One
+   that stands for no version resolves to nothing, and importing it is
+   an error.
+
+   The version MAY be left out of an import path, and the path then
+   asks for latest.
+
+5.  The Manifest
+
+   To be written.  This section will specify the manifest a package
+   carries: its name, its version, its dependencies and what it
+   publishes.
+
+6.  Resolution and the Lock File
+
+   To be written.  This section will specify how a set of version
+   requirements is resolved to a set of packages, how a pointer and a
+   wildcard are each followed to a standard version in the course of
+   that, and what the
+   lock file records so that a later resolution agrees with an earlier
+   one.
+
+7.  Registry and Distribution
+
+   To be written.  This section will specify how a host finds a
+   package, how a package is fetched and how its integrity is checked.
+
+8.  Build and Install
+
+   To be written.  This section will specify what a host does with a
+   package once it is fetched, and where the result is placed so that
+   an import path of [RFC0003] reaches it.
+
+9.  Conformance
+
+   To be written.  This section will state what a host MUST do to
+   claim support for the package manager.
+
+10. Security Considerations
+
+   To be written.
+
+11. IANA Considerations
+
+   This document requests no IANA action.
+
+12. References
+
+12.1.  Normative References
+
+   [IETF-RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", IETF BCP 14, IETF RFC 2119,
+              March 1997.
+
+   [SEMVER]  Preston-Werner, T., "Semantic Versioning 2.0.0",
+             semver.org, June 2013.
+
+12.2.  Informative References
+
+   [RFC0003]  Yang, S., "The OctoScript Language", RFC 0003, September
+              2026.
+
+   [RFC0007]  Yang, S., "OpenOcto Command-Line Tools and Interfaces",
+              RFC 0007, September 2026.
+
+   [RFC0012]  Yang, S., "Standard Library Extensions: the @octo
+              Publisher", RFC 0012, September 2026.
+
+Authors' Addresses
+
+   Shining Yang
+   HFUT

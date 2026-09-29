@@ -1,0 +1,126 @@
+
+
+
+
+OpenOcto Standards Group (OOSG)                                  S. Yang
+Request for Comments: 0012                                          HFUT
+Category: Informational                                   September 2026
+
+
+                   Standard Library Extensions: the @octo Publisher
+
+Abstract
+
+   This document reserves one publisher name in the package namespace
+   of [RFC0013]: @octo, whose packages extend the standard library of
+   OctoScript [RFC0003].  An @octo package is reached by the same
+   import path as any other package, and what it publishes joins the
+   core library of Section 10.2 of [RFC0003] without replacing any of
+   it.
+
+   This document is a skeleton.  Its scope and its section names are
+   fixed so that [RFC0003] and [RFC0013] can refer to it; the
+   substance of each section is to be written.
+
+Status of This Memo
+
+   This document is not an Internet Standards Track specification; it
+   is published for informational purposes.
+
+   This document is a product of the OpenOcto Standards Group (OOSG).
+   It has been approved for publication by the OOSG.  Not all
+   documents approved by the OOSG are candidates for any level of
+   OpenOcto Standard.
+
+   Information about the current status of this document, any errata,
+   and how to provide feedback on it may be obtained from the OOSG.
+
+Copyright Notice
+
+   Copyright (c) 2026 OOSG and the persons identified as the document
+   authors.  All rights reserved.
+
+   This document is distributed under the MIT License: permission is
+   granted, free of charge, to use, copy, modify, merge, publish,
+   distribute, sublicense and/or sell copies of this document, subject
+   to the inclusion of the above notice in all such copies.  The
+   document is provided without warranty of any kind.  Code Components
+   extracted from this document are subject to the same terms.
+
+Table of Contents
+
+   1.  Introduction
+   2.  Conventions
+   3.  The Reserved Name @octo
+   4.  What an Extension May Add
+   5.  Naming and Versioning
+   6.  Conformance
+   7.  Security Considerations
+   8.  IANA Considerations
+   9.  References
+
+1.  Introduction
+
+   To be written.  This section will say what an extension of the
+   standard library is for, why it travels as a package rather than as
+   part of the language document, and how it differs from the
+   extension part of the library that [RFC0003], Section 10.2 leaves
+   open.
+
+2.  Conventions
+
+   To be written.  This section will fix the meaning of the key words
+   and will say how a name of this document is written inside an
+   import path of [RFC0003].
+
+3.  The Reserved Name @octo
+
+   To be written.  This section will reserve @octo as a publisher name
+   of [RFC0013], will say who MAY publish under it, and will say what
+   an implementation MUST do with a package that claims it.
+
+4.  What an Extension May Add
+
+   To be written.  This section will bound what an @octo package
+   publishes -- functions, structs and members -- and what it MUST
+   NOT: no new syntax, no new operator, and no change to a name the
+   core library already holds.
+
+5.  Naming and Versioning
+
+   To be written.  This section will fix the form of an @octo package
+   name and the version rule its import path carries.
+
+6.  Conformance
+
+   To be written.  This section will state what a host MUST do to
+   claim support for @octo packages.
+
+7.  Security Considerations
+
+   To be written.
+
+8.  IANA Considerations
+
+   This document requests no IANA action.
+
+9.  References
+
+9.1.  Normative References
+
+   [IETF-RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", IETF BCP 14, IETF RFC 2119,
+              March 1997.
+
+9.2.  Informative References
+
+   [RFC0003]  Yang, S., "The OctoScript Language", RFC 0003, September
+              2026.
+
+   [RFC0013]  Yang, S., "The OctoScript Package Manager", RFC 0013,
+              September 2026.
+
+Authors' Addresses
+
+   Shining Yang
+   HFUT
