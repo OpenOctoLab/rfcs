@@ -481,10 +481,14 @@ Table of Contents
 
    A receiver tracks the highest epoch it has accepted and accepts
    frames whose "key_id" lies within a window of it, so that reordered
-   and in-flight frames of the previous epoch still decrypt; the
-   RECOMMENDED window is the last accepted epoch and the next four.  A
-   frame whose epoch is older than the window, or far in the future, is
-   rejected with E_DECRYPT.
+   and in-flight frames of the previous epoch still decrypt.  The
+   RECOMMENDED window is the highest epoch accepted, the one before it,
+   and the next four.  The one before is what makes the sentence above
+   true: a frame of the epoch the sender has just left arrives after the
+   first frame of its new one, and the two numbers are one apart.  A
+   frame whose epoch is older than that lower bound, or beyond the upper
+   one, is rejected with E_DECRYPT.  Only a frame that passed its checks
+   moves the window, so that a forgery cannot push either boundary.
 
    Rotation is what gives a session forward secrecy: a key that is
    compromised exposes the traffic of its epoch and of the epochs behind

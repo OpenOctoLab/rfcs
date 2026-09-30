@@ -213,7 +213,12 @@ Table of Contents
    *  TUNDATA (0x08) and TUNSTAT (0x09) are OPTIONAL.  The blob tunnel
       needs a sliding-window buffer and retransmission state that an MCU
       may not afford; see Section 10.  An Air device that omits it
-      simply does not advertise "blobtun" and never opens a tunnel.
+      simply does not advertise "blobtun" and never opens a tunnel.  A
+      tunnel frame that arrives anyway, from a peer that ignored the
+      capabilities or read the absence of "blobtun" for a fault, is
+      answered with E_UNSUPPORTED (0x0008): it is not processed, and not
+      discarded silently either.  The device defines no tunnel, so there
+      is none to name, which is also why 0x000C has no use here.
 
    *  ERROR and the error registry are kept.  Air reuses the codes
       0x0000 to 0x000E of [RFC0004] Appendix A and defines none of its

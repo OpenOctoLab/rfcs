@@ -322,11 +322,14 @@ Table of Contents
    2^32.  Two numbers lie within one window of each other when the
    distance between them is less than 2^31, taken with the serial number
    arithmetic below.  A sender MUST NOT reuse a number while any number
-   it has already sent in that session still lies within one window of
-   it; an endpoint that is about to send the 2^31st frame of a session
-   MUST close that session with BYE and open a new one rather than wrap
-   around, since that is the point at which the numbers of the session
-   meet again.
+   it.  The numbers a session may use are therefore 0 to 2^31 - 1 and no
+   more, and an endpoint that would send the frame numbered 2^31 MUST
+   NOT send it: it closes the session with BYE instead, under the last
+   number it is still allowed to use, and opens a new one, since 2^31 is
+   the point at which the numbers of the session meet again.  A frame
+   that was asked for when the space is spent is replaced by that close,
+   and the caller is told the session is over rather than left to wait
+   for an answer that cannot come.
 
    Sequence numbers are compared with the serial number arithmetic of
    [IETF-RFC1982], which is defined for exactly this space: a number is
@@ -1535,6 +1538,20 @@ Table of Contents
       The namespaces are listed in Section 9.2; a wildcard filter is
       accepted even when it currently matches no assigned topic.
 
+   *  A filter with a "#" level that is not the last level is not well
+      formed: "#" MUST be the last level and the only character in that
+      level.  Such a filter is a form of arguments SUBSCRIBE does not
+      accept, so it is answered with RESULT, "ok" false and an error
+      whose "kind" is "BadFilter", as Section 6.4.2 directs: the
+      subscription is not made and no retained message is replayed.
+      Everything else is accepted, including a filter that names no
+      assigned topic and one that matches nothing at all.
+
+   *  A refusal is not silent.  An answer reaches the subscriber the
+      same way the answer of a call reaches its caller (Section 6.4.3),
+      so a subscriber that is refused learns of it there and not only by
+      the absence of events.
+
 6.5.3.  Delivery
 
    *  An event is delivered only to sessions that hold a filter matching
@@ -1548,7 +1565,12 @@ Table of Contents
       subscription is answered, the publisher immediately delivers the
       retained message of every concrete topic the new filter matches,
       before any later publication; a pseudo-topic (Section 9.2.1)
-      carries no retained message (Section 9.2.1).
+      carries no retained message (Section 9.2.1).  A replayed event
+      carries "retain" true, as the publication that stored it did, so
+      that a subscriber which keeps what it receives keeps holding the
+      retained message.  A subscription that repeats one the session
+      already holds (Section 6.5.2) is answered but replays nothing: that
+      subscriber has already been given the message.
 
    *  On a reliable transport the events of one topic are delivered in
       the order they were published.  The events of different topics MAY
@@ -1642,7 +1664,11 @@ Table of Contents
    since the sender that the zero stopped sends nothing and nothing else
    would prompt the receiver to speak again: the two would otherwise
    wait for each other.  At any other time updates MAY be coalesced into
-   one frame.
+   one frame.  A receiver whose buffer is never exhausted MAY advertise
+   a constant window and need not speak as its own consumption advances:
+   the rule above binds the receiver that has advertised zero, and no
+   other one.  What no receiver may do is advertise more than it can
+   hold.
 
    Sending.  The sender slices the stream; the RECOMMENDED slice size is
    8192 octets (Table 18).  It transmits slices whose offset lies in the
@@ -1671,6 +1697,11 @@ Table of Contents
    sender MUST resend from "off" while it still holds the data, and MUST
    answer E_TUNNEL_RESET when the requested octets have already been
    released.  A receiver SHOULD throttle gap notifications (Table 18).
+   One request per gap is enough: a receiver that has asked for the
+   octets from an offset gains nothing by asking again for that same
+   offset sooner than the 0.2 s of Table 18, and that repetition is what
+   the throttle is for.  Asking again for a gap that has moved, or for a
+   new one, is not a repetition.
 
    Resumption.  A receiver that restarts MAY open a tunnel with "off"
    set to the octets it already holds; the sender continues from there.
