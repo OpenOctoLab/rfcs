@@ -1704,7 +1704,9 @@ Table of Contents
    octets from an offset gains nothing by asking again for that same
    offset sooner than the 0.2 s of Table 18, and that repetition is what
    the throttle is for.  Asking again for a gap that has moved, or for a
-   new one, is not a repetition.
+   new one, is not a repetition.  A request that never arrived is a lost
+   request, though, so a receiver that knows the time repeats it once the
+   interval has passed and the gap still stands.
 
    Resumption.  A receiver that restarts MAY open a tunnel with "off"
    set to the octets it already holds; the sender continues from there.
