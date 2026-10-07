@@ -984,13 +984,14 @@ Table of Contents
 
       {"id": 12, "topic": "device.+"}
 
-   The identifier shares the numbering space of CALL identifiers, and
-   the responder correlates its RESULT by that identifier.  Using the
-   frame sequence number instead is not permitted, because the two
-   numbering spaces are independent and a subscription answer could be
-   mistaken for the answer of an outstanding call.  If a request omits
-   the identifier, the responder MAY echo the frame sequence number; a
-   requester SHOULD NOT rely on that form.
+   The identifier is REQUIRED.  It shares the numbering space of CALL
+   identifiers, and the responder correlates its RESULT by that
+   identifier.  Using the frame sequence number instead is not permitted,
+   because the two numbering spaces are independent and a subscription
+   answer could be mistaken for the answer of an outstanding call.  A
+   SUBSCRIBE that omits the identifier is a member missing where one is
+   REQUIRED, so it is answered with ERROR E_BAD_PAYLOAD (Section 5.11)
+   and the subscription is not made.
 
    A topic filter is matched by the wildcards of Section 6.5.2, and
    subscribing to the same filter twice is idempotent.  The answer
@@ -1001,7 +1002,7 @@ Table of Contents
    +============+==============+=======================================+
    |Field       |Type          |Meaning                                |
    +============+==============+=======================================+
-   |id          |unsigned      |OPTIONAL.  Correlates the answer, from |
+   |id          |unsigned      |REQUIRED.  Correlates the answer, from |
    |            |              |the numbering space of calls (Section  |
    |            |              |5.6).                                  |
    +------------+--------------+---------------------------------------+
@@ -1023,7 +1024,7 @@ Table of Contents
    +============+==============+=======================================+
    |Field       |Type          |Meaning                                |
    +============+==============+=======================================+
-   |id          |unsigned      |OPTIONAL.  Correlates the answer, from |
+   |id          |unsigned      |REQUIRED.  Correlates the answer, from |
    |            |              |the numbering space of calls (Section  |
    |            |              |5.6).                                  |
    +------------+--------------+---------------------------------------+
@@ -1486,8 +1487,10 @@ Table of Contents
 
                 Figure 4: A subscription and its events
 
-   1.  A subscriber sends SUBSCRIBE with the topic name and OPTIONALLY
-       an identifier from the space it uses for calls.
+   1.  A subscriber sends SUBSCRIBE with the topic name and an
+       identifier from the space it uses for calls.  The identifier is
+       REQUIRED (Section 5.6), and it is what the answer is correlated
+       by.
 
    2.  The publisher adds the topic to the session and answers with
        RESULT, "ok" set to true and no value.
@@ -1760,7 +1763,12 @@ Table of Contents
               "value": {"t": 1726723200.125, "time": 1726723200.126}}
 
    The "t" member echoes the request and "time" is the responder's wall
-   clock.  Either endpoint MAY originate a heartbeat, and a receiver
+   clock.  The time is a float in the example above and MAY be carried as
+   an integer number of seconds instead: an endpoint that does not accept
+   floats (RFC 0011) sends an integer, and a responder answers in the
+   form it was asked in, so that an integer request is answered with an
+   integer "time" and the exchange needs no float in either direction.
+   Either endpoint MAY originate a heartbeat, and a receiver
    MUST answer a ping call.  A RECOMMENDED interval is five seconds,
    with a liveness timeout of fifteen seconds (Table 18); both are
    application policy.  An endpoint that detects liveness failure closes

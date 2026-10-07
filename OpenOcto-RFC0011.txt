@@ -178,7 +178,13 @@ Table of Contents
       integers or fixed-point; an Air device that omits floats answers
       E_BAD_PAYLOAD to a float item.  An Air device that accepts floats
       decodes the binary64 (double) form, as [RFC0004] Section 4.4
-      recommends.
+      recommends.  A device that omits floats MUST NOT be sent one, and
+      one thing follows for the heartbeat of [RFC0004] Section 6.7: it
+      carries the time as a whole number of seconds, and a responder
+      answers in the form it was asked in, so a heartbeat between two
+      such devices needs no float in either direction.  A device that has
+      no clock to report answers with the echoed time alone, because a
+      clock cannot be invented.
 
    *  Numeric width: Air uses the same default widths as [RFC0004]
       Section 4.4 -- integers at 32-bit signed and floats at [IEEE754]
