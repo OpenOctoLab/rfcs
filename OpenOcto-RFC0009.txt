@@ -498,9 +498,9 @@ Table of Contents
 
    How often is deployment policy, because it trades two things against
    each other: the exposure a compromise buys, and the work a new epoch
-   costs.  The following are the defaults this document RECOMMENDS, and a
-   deployment that has better information than this document should use
-   it:
+   costs.  The following are the defaults this document RECOMMENDS, and
+   a deployment that has better information than this document should
+   use it:
 
    *  Rotate at the start of every session.  A new session derives new
       keys from a new master secret, so this is the cheapest rotation
@@ -508,9 +508,10 @@ Table of Contents
       behind to rotate away.
 
    *  Within a long-lived session, rotate at least hourly, and sooner on
-      any signal that the key may have been exposed: a failed frame-layer
-      check (Section 7.4), a rekey of the transport beneath (Section 5.4
-      of [RFC0010]), or the loss of a device that held the key.
+      any signal that the key may have been exposed: a failed
+      frame-layer check (Section 7.4), a rekey of the transport beneath
+      (Section 5.4 of [RFC0010]), or the loss of a device that held the
+      key.
 
    *  Keep epochs of an abandoned device out of the accepted window: a
       peer that was factory-reset is easier to replace than to reason
