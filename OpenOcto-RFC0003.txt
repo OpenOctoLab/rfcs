@@ -114,6 +114,7 @@ Table of Contents
        6.10. Resource Limits, Traps and Liveness
      7.  Functions, Scope and Arguments
        7.1.  Definition and Call
+       7.1.1.  Remote Functions
        7.2.  Closures
        7.3.  Scope and Declaration
        7.4.  Argument Passing
@@ -140,7 +141,7 @@ Table of Contents
          10.2.5. Dictionaries and Types: keys, values, items and type
          10.2.6. Channels: chan, close, send and recv
          10.2.7. Events: emit
-         10.2.8. Line I/O: print, eprint and input
+         10.2.8. Line I/O: print, println, eprint, eprintln and input
          10.2.9. Ending the Program: panic and exit
          10.2.10. Text Members
          10.2.11. Vec Members
@@ -257,6 +258,12 @@ Table of Contents
    with letters, digits and underscores.  Identifiers are case
    sensitive.
 
+   The dollar sign is NOT an identifier character: it never begins or
+   continues an identifier, and a name containing one is not a name.  It
+   is the sigil that marks a remote function (Section 7.1), where `$foo`
+   is this sigil followed by the identifier `foo` and is never the
+   identifier `$foo`.
+
    The following words are keywords and MUST NOT be used as identifiers
    or binding targets, and a program MUST NOT use one as a function
    name.  The core standard library is the one exception: it MAY name a
@@ -270,11 +277,11 @@ Table of Contents
       i64      i8       if       impl     import   in
       isize    let      locals   loop     match    mod
       next     not      null     octo     on       or
-      par      pass     pub      race     return   select
-      sleep    spawn    str      struct   throw    true
-      try      u128     u16      u32      u64      u8
-      usize    var      wait     while    with     within
-      bytes    function  byte
+      par      pass     pub      race     remote   return
+      select   sleep    spawn    str      struct   throw
+      true     try      u128     u16      u32      u64
+      u8       usize    var      wait     while    with
+      within   bytes    function  byte
 
    A contextual keyword is recognised only in the position named below
    and is an ordinary identifier everywhere else, so a program MAY
@@ -348,6 +355,7 @@ Table of Contents
          ==  !=  <=  >=            comparison
          &&  ||                   logical and / or
          +=  -=  *=  /=  &=  |=  ^=           assignment (augmented)
+         %=  //=                                assignment (augmented)
          **  //                   power and floor division
          ..  ?.                   range and optional member
          ->  =>  <-               arrows and channel send/receive
@@ -361,6 +369,7 @@ Table of Contents
          <  >                     comparison
          ?  :                     conditional
          @                        timeout (within, Section 6.3)
+         $                        remote function marker (Section 7.1)
 
    The characters (, ), {, }, [, ], ,, ; and . are punctuation tokens
    and are not operators.  Two braces written next to each other, {{ and
@@ -1419,7 +1428,7 @@ Table of Contents
       | 10.5       | within  @ (timeout)          | left               |
       +------------+------------------------------+--------------------+
       | 11         | =  +=  -=  *=  /=  &=  |=  ^=| right (chained)    |
-      |            |    <<=  >=                   |                    |
+      |            |    %=  //=  <<=  >>=         |                    |
       +------------+------------------------------+--------------------+
       | 12 (lowest | <-  -> (send)                | left               |
       +------------+------------------------------+--------------------+
@@ -3139,7 +3148,77 @@ Table of Contents
    select exactly as any other, and is cancelled with the same
    cooperative mechanism (Section 6.9).
 
-7.2.  Closures
+7.1.1.  Remote Functions
+
+   A remote function is one whose body lives on a peer.  A program does
+   not define it; it REGISTERS it, giving the name and the signature the
+   peer implements.  The registration is written either with the remote
+   keyword or with the `$` sigil, which is sugar for it:
+
+      fn $read_sensor(name: str) -> f64          # sigil form
+      remote fn read_sensor(name: str) -> f64    # keyword form
+
+   Both spellings are normative and declare the same thing; neither is
+   reported and neither is an error.  A program MAY use either, and MAY
+   use both in one unit.
+
+      fn $read_sensor(name: str) -> f64     # register
+      let v = $read_sensor("temp")           # call it
+
+   The `$` is part of the call, not of the name: `$read_sensor(...)`
+   calls the remote registration, and `read_sensor(...)` -- with no `$` --
+   is a call to a local function and NEVER to the remote one.  A call
+   that is written without the `$` is resolved in the ordinary way, and a
+   program that means the peer has to say so.
+
+   The two kinds do not share a namespace.  A local `fn read_sensor` and
+   a registered `$read_sensor` may both exist, in either order, and each
+   call form reaches its own:
+
+      fn $read_sensor(name: str) -> f64 { ... }   # on the peer
+      fn read_sensor(name: str) -> f64 { ... }    # local
+      let a = read_sensor("temp")   # the local one
+      let b = $read_sensor("temp")  # the peer
+
+   A registration has no body.  Writing one is the load-time diagnostic
+   BadSignature, because the result would be a function that is neither
+   local nor remote: the body written here could never run, since the
+   call is dispatched to the peer.
+
+      fn $f(a: i32) { return a }      # BadSignature
+
+   A call to a `$name` that has no registration anywhere in the unit is a
+   WARNING, not an error: what is wrong is the missing declaration rather
+   than the call, and a registration is visible throughout the block that
+   declares it by the hoisting rule of Section 7.3, so the call may be
+   written above it.  A warning is the right level because the call is
+   still unambiguous -- it names the remote namespace and nothing else --
+   and the program is one registration away from correct.
+
+      $read_sensor("temp")      # no registration anywhere: a warning
+
+   Once a registration IS found, the call is checked against it and every
+   way the argument list can be wrong is an ERROR, never a warning and
+   never a silent null: a wrong argument count, or an argument of a shape
+   the registered signature does not admit.
+
+      fn $p(a: i32) -> i32
+      $p(1, 2)      # Error: the registered signature takes one argument
+
+   A remote function is dispatched over the session of Section 9.2, so
+   it may not take a writable reference parameter, nor an async function
+   (Section 7.1): a reference names a place in the caller's frame, and
+   neither a peer nor a task that may outlive the frame can be handed one
+   to write through.  Such a parameter is the load-time diagnostic
+   BadSignature.
+
+      fn $bad(ref x: i32) -> i32      # BadSignature
+
+   A remote call needs a session to travel on.  With no session bound it
+   is a runtime error naming the registration that could not be
+   dispatched, never a silent null.
+
+7.2.  Closures</new_string>
 
    A function closes over the lexical bindings visible where it is
    defined.  A mutation of a closed binding is visible to every closure
@@ -3176,7 +3255,10 @@ Table of Contents
    calls a function before the line that defines it and a struct whose
    fields mention one another cannot be written otherwise.  An impl
    names a struct and does not declare a name of its own, so it is found
-   the same way a struct is.
+   the same way a struct is.  A remote registration (Section 7.1.1) is
+   hoisted the same way, so a `$name(...)` call written above the
+   registration that declares it still resolves; a registration is not a
+   binding and shares no namespace with the local one.
 
    A name MAY shadow one declared in an enclosing scope, and does so
    for the rest of the block that declares it: the inner binding is what
@@ -3219,6 +3301,12 @@ Table of Contents
    with no operator at either end.  ref is a contextual keyword: it is
    only in a parameter list and is not reserved elsewhere, so it remains
    a usable identifier.
+
+   A remote function (Section 7.1.1) and an async function (Section 7.1)
+   may not carry the mark at all: a reference names a place in the
+   caller's frame, and neither a peer nor a task that may outlive that
+   frame can be handed one to write through.  One such parameter is the
+   load-time diagnostic BadSignature.
 
       fn add_up(items, ref sum) {
          for it in items { sum = sum + it }   # visible to the caller
@@ -4154,20 +4242,31 @@ Table of Contents
 
       emit("arm.done", {"id": 3})
 
-10.2.8.  Line I/O: print, eprint and input
+10.2.8.  Line I/O: print, println, eprint, eprintln and input
 
       print(args...) -> null
+      println(args...) -> null
       eprint(args...) -> null
+      eprintln(args...) -> null
       input() -> str?
 
    print writes each of its arguments, formatted by Section 10.4 and
-   separated by a space, to standard output, followed by a newline;
-   eprint does the same on standard error.  Both take any number of
-   arguments, including none, in which case they write the newline
-   alone, and both yield null.  The trailing newline is written by the
-   call and may be omitted by writing "\n" as the last argument, which
-   is why they never take one of their own.  A value that is a list of
-   arguments to print is spread, not printed as a list: print(...xs).
+   separated by a space, to standard output; eprint does the same on
+   standard error.  println and eprintln write the same line and add a
+   trailing newline, on standard output and standard error
+   respectively.  All four take any number of arguments, including none
+   -- in which case println and eprintln write the newline alone and
+   print and eprint write nothing at all -- and all four yield null.
+
+   The newline belongs to the call that writes it and is never taken as
+   an argument of its own: a program that wants one either ends its
+   argument list with "\n" and uses print, or uses println.  A value
+   that is a list of arguments to print is spread, not printed as a
+   list: print(...xs).
+
+      print("a", "b")        # ab, no newline
+      println("a", "b")      # ab and a newline
+      eprintln("jammed")     # the same on standard error
 
    input reads one line from standard
    input and yields it without the trailing newline, or null at end of
@@ -4183,8 +4282,6 @@ Table of Contents
    device that does not answer -- throws with an Error of kind IOError
    (Appendix C).
 
-      print("pos", 3)      # "pos 3" then a newline
-      eprint("jammed")     # the same on standard error
       let line = input()   # one line, or null at end of input
 
 10.2.9.  Ending the Program: panic and exit
