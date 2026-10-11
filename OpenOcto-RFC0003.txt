@@ -281,7 +281,7 @@ Table of Contents
       select   sleep    spawn    str      struct   throw
       true     try      u128     u16      u32      u64
       u8       usize    var      wait     while    with
-      within   bytes    function  byte
+      within   bytes    function  byte     destroy
 
    A contextual keyword is recognised only in the position named below
    and is an ordinary identifier everywhere else, so a program MAY
@@ -305,7 +305,7 @@ Table of Contents
    *  chan: the type of a channel in a type position, as in chan T and
       chan T(n) (Section 3.7).
 
-   *  ref, and its sugar &: the mark of a by-reference parameter
+   *  mut, and its sugar $: the mark of a by-mutable-reference parameter
       (Section 7.4).
 
    *  recv: the receive arm of a select (Section 6.6).
@@ -1448,7 +1448,7 @@ Table of Contents
    of on, wait, until or a select arm, after the channel of a recv
    arm, after the value of a with, after a catch, and in an import's
    as clause -- and it means nothing anywhere else.  The same is true of
-   this, ref, chan, recv, from, default and until: each is an ordinary
+   this, mut, chan, recv, from, default and until: each is an ordinary
    identifier outside its own position.
 
 4.1.  Type Promotion
@@ -3106,7 +3106,7 @@ Table of Contents
 
    A function is defined with fn name(params) { body } or as an arrow
    (Section 5.5).  Parameters are names; a parameter MAY carry a
-   default and MAY be marked ref (Section 7.4).  A call binds arguments
+   default and MAY be marked mut (Section 7.4).  A call binds arguments
    by position or by name (Section 5.1).  A function returns the value
    of its last expression or of an explicit return; a function that
    falls off the end returns null (Section 5.7).
@@ -3206,13 +3206,14 @@ Table of Contents
       $p(1, 2)      # Error: the registered signature takes one argument
 
    A remote function is dispatched over the session of Section 9.2, so
-   it may not take a writable reference parameter, nor an async function
-   (Section 7.1): a reference names a place in the caller's frame, and
-   neither a peer nor a task that may outlive the frame can be handed one
-   to write through.  Such a parameter is the load-time diagnostic
-   BadSignature.
+   it may not take a mutable reference parameter, nor an async function
+   (Section 7.1), nor may a task started with spawn (Section 6.3): a
+   mutable reference names a place in the caller's frame, and neither a
+   peer nor a task that may outlive the frame can be handed one to write
+   through.  Such a parameter is the load-time diagnostic BadSignature.
 
-      fn $bad(ref x: i32) -> i32      # BadSignature
+      fn $bad(mut x: i32) -> i32      # BadSignature
+      # sugar:  fn $bad($x: i32) -> i32   # $x == mut x, also BadSignature
 
    A remote call needs a session to travel on.  With no session bound it
    is a runtime error naming the registration that could not be
@@ -3290,37 +3291,59 @@ Table of Contents
    parameter is visible to the caller; what is forbidden is rebinding
    the parameter to another value.  This is the whole of by-value: a
    function that wants to give a container back changed passes it by
-   reference or lets the caller read the shared container, and does not
+   mutable reference or lets the caller read the shared container, and does not
    ask for the parameter to be writable.
 
-   A parameter written ref name, or &name, is passed by reference: the
-   parameter names the same binding the caller passed, so an assignment
-   to it is visible to the caller.  ref and & are one mark, & being
-   sugar for ref, and the mark appears only in the parameter signature:
-   a call passes the argument bare and the body uses the parameter bare,
-   with no operator at either end.  ref is a contextual keyword: it is
-   only in a parameter list and is not reserved elsewhere, so it remains
-   a usable identifier.
+   A parameter written mut name, or $name, is passed by mutable
+   reference: the parameter names the same binding the caller passed, so
+   an assignment to it is visible to the caller.  mut and $ are one mark,
+   $ being sugar for mut, and the mark appears only in the parameter
+   signature: a call passes the argument bare and the body uses the
+   parameter bare, with no operator at either end.  mut is a contextual
+   keyword: it is only in a parameter list and is not reserved elsewhere,
+   so it remains a usable identifier.  (Older drafts used ref with &name
+   sugar; both are removed.)
 
-   A remote function (Section 7.1.1) and an async function (Section 7.1)
-   may not carry the mark at all: a reference names a place in the
-   caller's frame, and neither a peer nor a task that may outlive that
-   frame can be handed one to write through.  One such parameter is the
+   A remote function (Section 7.1.1), an async function (Section 7.1) and
+   a task started with spawn (Section 6.3) may not carry the mark at all:
+   a mutable reference names a place in the caller's frame, and neither a
+   peer nor a task that may outlive that frame can be handed one to write
+   through.  The concurrency primitives are:
+
+     - spawn e                  start the future e as a task (Section 6.3)
+     - async fn                 a function returning a future (Section 7.1)
+     - await e                  wait for the future e to resolve (Section 6.3)
+     - race fs                  resolve with the first of the futures fs (Section 6.5)
+     - chan T / chan T(n)       a channel of value type T (Section 3.7)
+     - ch <- v / v -> ch        send v on the channel ch (Section 3.7)
+     - <-ch / recv ch           receive from ch (Section 3.7, 6.6)
+     - select ...               select over receives and time (Section 6.6)
+     - cancel t                 cancel the task t (Section 6.9)
+     - remote fn / $name        a call across the host boundary (Section 7.1.1)
+
+   Of these, spawn, async fn and remote fn/$name take arguments; they take
+   them by value -- a copy of a scalar, a shared binding of a container --
+   never by mutable reference.  A value sent on a channel (ch <- v) is
+   likewise copied/shared, not referenced, and the sender keeps its own
+   binding.  The rest operate on futures and channels, not on a caller's
+   mutable variables, so the reference mark does not apply to them.  One
+   such parameter on a remote, async or spawned entry point is the
    load-time diagnostic BadSignature.
 
-      fn add_up(items, ref sum) {
+      fn add_up(items, mut sum) {
          for it in items { sum = sum + it }   # visible to the caller
          items = []                           # Immutable
       }
+      # sugar:  fn add_up(items, $sum) { ... }   # $sum == mut sum
 
-   What may be marked is a place (Section 3.1), not only a name: ref x,
-   ref p.x and ref xs[0] are all legal, and each binds the same place
+   What may be marked is a place (Section 3.1), not only a name: mut x,
+   mut p.x and mut xs[0] are all legal, and each binds the same place
    the caller wrote.  A mark on anything that is not a place -- a
    literal, a call, an arithmetic expression, a value read through an
    optional chain (Section 5.2) -- is the load-time diagnostic
    TypeError, because there would be nothing for the parameter to name.
    A call passes the argument bare whatever the mark says, so a by-value
-   parameter may be given where a ref one is wanted: the value is bound
+   parameter may be given where a mut one is wanted: the value is bound
    to the parameter and the caller sees nothing, and where the two types
    do not agree that is BadArgument.
 
@@ -3328,7 +3351,7 @@ Table of Contents
    the write is visible when the unit is loaded it is the load-time
    diagnostic BadConst; a write that is not visible until the program
    runs, such as one through a binding resolved at run time, is the
-   runtime kind Immutable.  A ref parameter may not be given a default
+   runtime kind Immutable.  A mut parameter may not be given a default
    (Section 7.5), there being no value for it when the caller supplies
    none, and marking it is BadSignature.
 
@@ -3380,6 +3403,51 @@ Table of Contents
    its own parameter is the load-time diagnostic BadSignature.  A
    default is evaluated once per call, whatever the parameter is then
    used for, and not at the point of the call site.
+
+7.6.  Explicit Lifetimes (`destroy`)
+
+   A binding lives until its scope is left, after which the garbage
+   collector reclaims the value it held.  `destroy target` ends that
+   lifetime early and explicitly: it REMOVES `target` so that, afterwards,
+   it is as if `target` had never existed.  A name is unbound from the
+   scope that declares it (Section 7.3); a map field or a list/map element
+   is dropped from its container.  The value it held is released at once --
+   so any resource it owned is freed now, not at the next collection -- and
+   the slot it occupied is gone.
+
+      let buf = open_buffer()      # a resource-owning value
+      ... use buf ...
+      destroy buf                  # release it now; `buf` is gone
+
+   After a `destroy`, `target` is simply undefined: reading it (a load, or
+   its use as a value) is the same "undefined name" error as for a name
+   never declared, and writing it is the same "cannot assign to undefined
+   name" error.  There is no separate "destroyed" state to recover from;
+   the name may be bound again with `let`/`var`/`const` in the same scope,
+   which creates a fresh, unrelated binding.  `destroy` of a name that is
+   not bound is the runtime error that names the undefined name.
+
+   The target is a place (Section 3.1): a name, a map field (`m.k`) or a
+   list/map element (`a[i]`).  A field may be removed only from a map; an
+   element only from a list or map.  Removing a field from a non-map, or
+   an element from a non-list/non-map, is a runtime error.  `destroy` of a
+   literal or a non-place expression (e.g. `destroy 1 + 2`) is a load-time
+   error: "destroy target must be a name, map field or list/map element".
+   What is released is whatever `target` held: a container, a closure, a
+   session or a task handle (Sections 3, 7.1, 9.2).  The release is the
+   operation's only effect; the value is not returned and the binding is
+   not re-created by `destroy` itself.     For a session handle this means the
+   device BYE is sent now through `Host::close_session` -- the same teardown
+   a `with dev = connect(...) { }` block exit performs (Section 9.2) -- and
+   the session is dropped from the active-session stack, so later calls in
+   the scope no longer route to it.  The release recurses into a container or
+   tuple the target holds, so a list or map of sessions is torn down as a
+   unit; it does so only when that container has no other live bindings (its
+   reference count is one), so a container shared with another binding is left
+   intact and its sessions are not closed from under it.  A `close_session`
+   should therefore be idempotent: `destroy dev` inside an open `with dev = ...`
+   block closes the session, and the block's own exit then finds it already
+   closed.
 
 8.  Destructuring Assignment
 
@@ -5396,6 +5464,9 @@ Appendix A. Collected Grammar (ABNF)
            # ${ident} / ${ident:spec} / ${(expr)} / ${(expr):spec}
            next-stmt   = "next"
            pass-stmt   = "pass"
+           destroy-stmt = "destroy" place
+           # place = name / member / index: `destroy` removes a name, a map
+           # field (m.k) or a list/map element (a[i]); see Section 7.6.
            break-stmt  = "break"
            continue-stmt = "continue"
            return-stmt = "return" [ expr ]
@@ -5410,14 +5481,14 @@ Appendix A. Collected Grammar (ABNF)
            fn-def      = [ "pub" ] [ "async" ] "fn" name
                        "(" [ param *( "," param ) ] ")" [ "->" type ]
                        block
-           param       = [ "ref" / "&" ] bind-target [ ":" type ]
-                       [ "=" expr ]
-                       / "..." bind-target [ ":" type ]
-                       / ":::" bind-target [ ":" type ]
-           # ref and & are one mark: a parameter so marked is passed by
-           # reference (Section 7.4); & is sugar for ref, and neither
-           # appears
-           # at the call site or in the body.  A ref parameter takes no
+           param       = [ "mut" / "$" ] bind-target [ ":" type ]
+                      [ "=" expr ]
+                      / "..." bind-target [ ":" type ]
+                      / ":::" bind-target [ ":" type ]
+           # mut and $ are one mark: a parameter so marked is passed by
+           # mutable reference (Section 7.4); $ is sugar for mut, and
+           # neither appears
+           # at the call site or in the body.  A mut parameter takes no
            # default, ...rest follows every ordinary parameter and :::kw
            # is
            # last of all (Section 7.5)
@@ -5762,8 +5833,8 @@ Appendix C. Built-in Error Kinds
       where Section 3.9 reserves it;
 
    *  declarations and signatures: DuplicateDef to BadDefault, a bad
-      signature covering a ref mark in the wrong place, a default on a
-      ref parameter, a sink in the wrong place (Section 7.5), and a
+      signature covering a mut mark in the wrong place, a default on a
+      mut parameter, a sink in the wrong place (Section 7.5), and a
       struct default that is not a HashMap of the struct's own parts
       (Section 3.9);
 
