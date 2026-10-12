@@ -104,6 +104,7 @@ Table of Contents
          6.1.9.  return
          6.1.10.  Statement Comprehensions
        6.2.  Failure: throw, try and catch
+         6.2.1.  assert
        6.3.  Tasks, spawn and await
        6.4.  par: Parallel Blocks
        6.5.  race: Racing Outcomes
@@ -150,6 +151,7 @@ Table of Contents
          10.2.14. HashMap Members
          10.2.15. Range and Duration Members
          10.2.16. Channel, Future, Event and Error Members
+         10.2.17. assert
        10.3. Modules
          10.3.1. Module Declarations
          10.3.2. Visibility and pub
@@ -260,9 +262,12 @@ Table of Contents
 
    The dollar sign is NOT an identifier character: it never begins or
    continues an identifier, and a name containing one is not a name.  It
-   is the sigil that marks a remote function (Section 7.1), where `$foo`
+   is the sigil that marks a remote function (Section 7.1.1), where `$foo`
    is this sigil followed by the identifier `foo` and is never the
-   identifier `$foo`.
+   identifier `$foo`.  The sigil is mandatory: every call to a function
+   whose body lives on a peer -- the Core Profile of Section 9.3 included
+   -- is written with it, and a call written without it names a local
+   function and never the peer's.
 
    The following words are keywords and MUST NOT be used as identifiers
    or binding targets, and a program MUST NOT use one as a function
@@ -278,9 +283,9 @@ Table of Contents
       isize    let      locals   loop     match    mod
       next     not      null     octo     on       or
       par      pass     pub      race     remote   return
-      select   sleep    spawn    str      struct   throw
-      true     try      u128     u16      u32      u64
-      u8       usize    var      wait     while    with
+      session  select   sleep    spawn    str      struct
+      throw    true     try      u128     u16      u32
+      u64      u8       usize    var      wait     while    with
       within   bytes    function  byte     destroy
 
    A contextual keyword is recognised only in the position named below
@@ -368,8 +373,9 @@ Table of Contents
          =                         assignment
          <  >                     comparison
          ?  :                     conditional
-         @                        timeout (within, Section 6.3)
-         $                        remote function marker (Section 7.1)
+         @                        session prefix (Section 7.1.1),
+                                 timeout between operands (Section 6.3)
+         $                        remote function marker (Section 7.1.1)
 
    The characters (, ), {, }, [, ], ,, ; and . are punctuation tokens
    and are not operators.  Two braces written next to each other, {{ and
@@ -382,10 +388,15 @@ Table of Contents
    so v -> ch is the same send as ch <- v.  The token -> also gives a
    function its return type (Section 7.1); context separates the two.
 
-   The at sign is the timeout operator: between two operands a @ d is
-   the same as a within d (Section 6.3); before a name it is the session
-   prefix of Section 9.3, as in sense("temp", @dev), and context
-   separates the two.  The token ? is the null test of Section 5.2 and
+   The at sign has two readings and context separates them.  Before a
+   name it is the session prefix of Section 7.1.1: `@sess$name(...)` calls
+   the remote function `name` on the session the variable `sess` holds,
+   where the marker, the session name and the `$` sigil MAY be written
+   apart (`@ sess $ name`) or tight (`@sess$name`); a conforming
+   formatter normalises them to the tight spelling, and the prefix
+   qualifies a remote function only -- it never stands alone.  Between
+   two operands a @ d is the timeout operator, the same as a within d
+   (Section 6.3).  The token ? is the null test of Section 5.2 and
    the first half of the ternary of Section 5.3; written immediately
    before a name, an index bracket or an opening parenthesis it is the
    optional chain of Section 5.2, so ?., ?[ and ?( are single tokens and
@@ -1352,8 +1363,8 @@ Table of Contents
 
    A value has type Any when it comes from a source whose shape is not
    known where it is written: the payload of an Event (Section 3.10),
-   the reading a sense call resolves with, the RESULT value of a device
-   call, the five arrays metadata() yields (Section 9.3), and any host
+   the reading a $sense call resolves with, the RESULT value of a device
+   call, the five arrays $metadata() yields (Section 9.3), and any host
    value a native function returns (Section 9.1).  A name MAY be
    annotated Any to declare that it holds such a value, and MAY NOT be
    annotated Any to avoid a type error the annotation would otherwise
@@ -1391,10 +1402,10 @@ Table of Contents
    Any, and an implementation that skips it is not conforming.
 
    An implementation MAY expose the shape of a device reading as a
-   declared struct, so that sense("temp") may resolve with a Reading and
+   declared struct, so that $sense("temp") may resolve with a Reading and
    not with an Any; where it does, the value is of that struct and
    everything above holds of it unchanged.  A program MUST NOT depend
-   on which of the two a host chooses, and SHOULD re-read metadata()
+   on which of the two a host chooses, and SHOULD re-read $metadata()
    (Section 9.3) rather than assume either.
 
 4.  Operators and Precedence
@@ -1583,7 +1594,7 @@ Table of Contents
    byte string or dictionary; negative indices count from the end.
    expr(args) calls
    a function or invokes a native procedure.  The three may be chained:
-   device.status().state.  A member read on a value that has no such
+   stats["temp"].round().  A member read on a value that has no such
    member throws with an Error of kind BadMember; a call of a value that
    is not callable -- not a function, not a closure and not a native
    procedure -- throws with NotCallable; an index that names no element
@@ -1817,7 +1828,7 @@ Table of Contents
    An arrow function is not async: it runs where it is called, in the
    caller's task, and it holds that task for as long as its body runs.
    A function that must await is written with async and a block body,
-   as in async x => await sense(x), and it yields a future like any
+   as in async x => await $sense(x), and it yields a future like any
    other async function (Section 7.1).
 
 5.6.  Scope Views: globals and locals
@@ -2434,7 +2445,7 @@ Table of Contents
       {{ for m in motors spawn move(m, 10) }}
 
       {{ for d in devices if d.ready {
-         spawn sense(d.name)
+         spawn $sense(d.name)
       } }}
 
    A statement comprehension stands where a statement stands and
@@ -2500,11 +2511,11 @@ Table of Contents
    written on the line of the brace it continues (Section 6.1):
 
       try {
-         await actuate("grip", force = 20)
+         await $actuate("grip", force = 20)
       } catch "HardwareError" as e {
          log("grip", e.message)
       } finally {
-         await actuate("grip", force = 0)
+         await $actuate("grip", force = 0)
       }
 
    A throw that no try catches propagates to the nearest enclosing task
@@ -2546,6 +2557,33 @@ Table of Contents
    and a program whose resources matter closes them before it calls
    either.
 
+6.2.1.  assert
+
+   assert is the built-in check (Section 10.2.17).  assert(cond, message
+   = null) evaluates cond and, when cond is truthy, yields null and does
+   nothing further.  When cond is falsy it raises a throw of
+   Error("AssertionError", message ?? "assertion failed"), and the
+   failure propagates and is caught exactly as any other throw of
+   Section 6.2:
+
+      assert(x > 0, "x must be positive")
+      assert(len(xs) == 3)        # message defaults to "assertion failed"
+
+   An assertion that fails is a throw and not a panic: a surrounding try
+   may catch it with catch AssertionError as e, and finally clauses run.
+   A program uses assert to encode invariants it expects to hold, and a
+   test harness uses it to record a failed expectation without ending the
+   whole program.  assert of a non-boolean cond is the load-time
+   diagnostic TypeError where the type is known and the runtime error
+   TypeError where it is not, so assert(x) on a value of unknown type is
+   checked when run and not silently passed.
+
+      try {
+         assert(speed <= limit, "overspeed")
+      } catch AssertionError as e {
+         log("safety", e.message)   # caught, reported, execution continues
+      }
+
 6.3.  Tasks, spawn and await
 
    A task is a unit of concurrent execution.  The program itself runs
@@ -2561,7 +2599,7 @@ Table of Contents
    the future does not cancel the task.
 
    The operand need not be a call.  A block is a task whose value is
-   the value of the block (Section 5.7), as in spawn { await sense("t")
+   the value of the block (Section 5.7), as in spawn { await $sense("t")
    }, and any other expression is a task whose value is that
    expression's, as in spawn step().  A spawn with no operand at all is
    the runtime error TypeError, and it is a load-time diagnostic
@@ -2574,7 +2612,7 @@ Table of Contents
    its value or re-raises its throw:
 
       let result = await f
-      let temp = await sense("temp")      # a device call is a future
+      let temp = await $sense("temp")    # a device call is a future
 
    await of anything that is not a future is the load-time diagnostic
    TypeError where the operand's type is known and the runtime error
@@ -2646,7 +2684,7 @@ Table of Contents
 
       par {
          move_arm("home")
-         await sense("grip")      # each branch may await
+         await $sense("grip")     # each branch may await
          log_status()
       }
 
@@ -2698,9 +2736,9 @@ Table of Contents
    first branch that resolves; every other branch is cancelled.
 
       let winner = race {
-         sense("left")
-         sense("right")
-         status()
+         $sense("left")
+         $sense("right")
+         $status()
       }
 
    The block contains one or more expressions or statements; each is
@@ -3152,33 +3190,37 @@ Table of Contents
 
    A remote function is one whose body lives on a peer.  A program does
    not define it; it REGISTERS it, giving the name and the signature the
-   peer implements.  The registration is written either with the remote
-   keyword or with the `$` sigil, which is sugar for it:
+   peer implements.  Every remote call carries the `$` sigil -- the Core
+   Profile of Section 9.3 included -- and a call written without it is a
+   call to a local function and never to the remote one.  The two kinds
+   do not share a namespace, so a local `fn read_sensor` and a
+   registered `$read_sensor` may both exist and each call form reaches
+   its own:
 
-      fn $read_sensor(name: str) -> f64          # sigil form
-      remote fn read_sensor(name: str) -> f64    # keyword form
-
-   Both spellings are normative and declare the same thing; neither is
-   reported and neither is an error.  A program MAY use either, and MAY
-   use both in one unit.
-
-      fn $read_sensor(name: str) -> f64     # register
-      let v = $read_sensor("temp")           # call it
-
-   The `$` is part of the call, not of the name: `$read_sensor(...)`
-   calls the remote registration, and `read_sensor(...)` -- with no `$` --
-   is a call to a local function and NEVER to the remote one.  A call
-   that is written without the `$` is resolved in the ordinary way, and a
-   program that means the peer has to say so.
-
-   The two kinds do not share a namespace.  A local `fn read_sensor` and
-   a registered `$read_sensor` may both exist, in either order, and each
-   call form reaches its own:
-
-      fn $read_sensor(name: str) -> f64 { ... }   # on the peer
-      fn read_sensor(name: str) -> f64 { ... }    # local
+      fn read_sensor(name: str) -> f64 { ... }   # local, defined here
+      fn $read_sensor(name: str) -> f64          # registered, runs on the peer
       let a = read_sensor("temp")   # the local one
       let b = $read_sensor("temp")  # the peer
+
+   A registration is written in one of four spellings.  The sigil form
+   and the keyword form are sugar for one another, and either MAY name
+   the session the function is registered against with an `@sess`
+   prefix; writing that prefix as `session sess remote fn ...` instead of
+   `fn @sess$...` is the same registration in keyword form:
+
+      fn $read_sensor(name: str) -> f64                    # sigil form
+      remote fn read_sensor(name: str) -> f64              # keyword form
+      fn @dev$read_sensor(name: str) -> f64                # sigil, on `dev`
+      session dev remote fn read_sensor(name: str) -> f64  # keyword, on `dev`
+
+   All four spellings are normative and declare the same thing; none is
+   reported and none is an error, and a program MAY use several in one
+   unit.  The `@sess` of a registration is documentation: it names the
+   session the function was registered against, which is what a reader
+   and a checker see, and it does not change how a call routes.  The
+   `-> T` return type is optional as it is everywhere (Section 7.1).  A
+   registration is visible throughout the block that declares it by the
+   hoisting rule of Section 7.3, so a call may be written above it.
 
    A registration has no body.  Writing one is the load-time diagnostic
    BadSignature, because the result would be a function that is neither
@@ -3187,13 +3229,38 @@ Table of Contents
 
       fn $f(a: i32) { return a }      # BadSignature
 
-   A call to a `$name` that has no registration anywhere in the unit is a
-   WARNING, not an error: what is wrong is the missing declaration rather
-   than the call, and a registration is visible throughout the block that
-   declares it by the hoisting rule of Section 7.3, so the call may be
-   written above it.  A warning is the right level because the call is
-   still unambiguous -- it names the remote namespace and nothing else --
-   and the program is one registration away from correct.
+   A call names its remote function in one of four spellings as well.
+   The keyword markers separate with spaces -- `remote name`, `session
+   sess remote name` -- and never with a dot; the sigil markers MAY be
+   written apart (`@ sess $ name`) or tight (`@sess$name`), and a
+   conforming formatter normalises them to the tight spelling:
+
+      $read_sensor("temp")                     # the default session
+      @dev$read_sensor("temp")                 # the session `dev` holds
+      remote read_sensor("temp")               # keyword form
+      session dev remote read_sensor("temp")   # keyword form, on `dev`
+
+   Written without an immediate call, a remote function is a first-class
+   value like any other: `let f = $ping`, `let g = @dev$ping`.  A session
+   bound at the reference travels with the value, so invoking `g`
+   dispatches on `dev` whatever session is active at the call, while
+   invoking `f` uses the active one.  The `@sess` prefix qualifies a
+   remote function only; it never stands alone, and a session is named
+   where it is bound -- `let dev = connect(...)` of Section 9.2 -- not by
+   a selector written among the arguments.
+
+   A session is a variable bound to the value `connect()` returned.  A
+   call that names no session travels on the current scope's default
+   session: the one the innermost enclosing `with dev = connect(...)` or
+   bare `connect()` established, and failing that the host's default
+   session (Section 9.2).  A prefix that names a binding holding no
+   session is the runtime error TypeError, never a silent dispatch on
+   another session.
+
+   A registration is optional.  A call to a `$name` that has no
+   registration anywhere in the unit is a WARNING, not an error: what is
+   wrong is the missing declaration rather than the call, and the program
+   is one registration away from correct.
 
       $read_sensor("temp")      # no registration anywhere: a warning
 
@@ -3204,6 +3271,13 @@ Table of Contents
 
       fn $p(a: i32) -> i32
       $p(1, 2)      # Error: the registered signature takes one argument
+
+   The seven Core Profile instructions of Section 9.3 are registered by
+   this document itself, with the signatures Table 3 gives them, so a
+   call to one of them is checked like any registered call.  A program
+   that registers one of those names -- whatever signature it writes,
+   including one that matches -- is reported as an error at load time: the
+   signature is the standard's and not the program's to restate.
 
    A remote function is dispatched over the session of Section 9.2, so
    it may not take a mutable reference parameter, nor an async function
@@ -3319,7 +3393,9 @@ Table of Contents
      - <-ch / recv ch           receive from ch (Section 3.7, 6.6)
      - select ...               select over receives and time (Section 6.6)
      - cancel t                 cancel the task t (Section 6.9)
-     - remote fn / $name        a call across the host boundary (Section 7.1.1)
+     - $name / @sess$name /     a call across the host boundary
+       remote name /              (Section 7.1.1); the keyword markers
+       session sess remote name   separate with spaces
 
    Of these, spawn, async fn and remote fn/$name take arguments; they take
    them by value -- a copy of a scalar, a shared binding of a container --
@@ -3523,6 +3599,13 @@ Table of Contents
    capabilities (rpc, pubsub, blobtun) [RFC0004], Section 8 and the
    security mode in force.
 
+   A session is an ordinary value: `let dev = connect(...)` binds it to
+   a name like any other, and it is that binding the `@sess` prefix of
+   Section 7.1.1 names.  A session opened by a bare `connect()` is the
+   current scope's default from the statement that opened it until the
+   scope ends, and a `with dev = connect(...) { }` block makes it the
+   default for its body and closes it on exit (Section 6.1.8).
+
       let dev = connect("ocp://arm.example:6286")
       let sec = connect("ocp-fls://arm.example", {
          algs: {enc: ["chacha20-poly1305"], itg: ["crc32"]}
@@ -3573,38 +3656,46 @@ Table of Contents
    that catches the failure and goes on is not holding a half-open
    session.
 
-   A device call may name a session: sense("temp", @dev) issues the CALL
-   on dev instead of the default session.  The @ prefix is the session
-   selector; when omitted the call uses the default session.  It stands
-   among the call's arguments and is not one: it may appear anywhere in
-   the argument list, it takes a session rather than a value, and a call
-   that names two sessions -- sense("temp", @dev, @other) -- is the
-   load-time diagnostic BadSyntax.  A call to a session that has been
-   closed (Section 9.10) is the runtime error NotConnected.
+   A remote call names the session it travels on with the `@sess` prefix
+   of Section 7.1.1: `@dev$sense("temp")` issues the CALL on `dev`, where
+   `dev` is a variable bound to the session object `connect()` returned.
+   The prefix is part of the call and not one of its arguments.  When it
+   is omitted the call uses the current scope's default session: the one
+   the innermost enclosing `with dev = connect(...)` block or the
+   innermost bare `connect()` established, and failing that the host's
+   default session -- the one it opens before the program runs.  A prefix
+   that names a binding holding no session is the runtime error
+   TypeError.  A call to a session that has been closed (Section 9.10) is
+   the runtime error NotConnected.
 
 9.3.  Core Profile Bindings
 
-   The Core Profile instructions of [RFC0004], Section 9.1 are available
-   as built-in asynchronous functions.  Each returns a future that
-   resolves with the RESULT value or fails with the RESULT error.
+   The Core Profile instructions of [RFC0004], Section 9.1 are remote
+   functions like any other (Section 7.1.1): they carry the `$` sigil,
+   they travel on a session, and each returns a future that resolves
+   with the RESULT value or fails with the RESULT error.  They are
+   registered by this document itself, with the signatures Table 3
+   gives them, so a call to one is checked like any registered call and
+   a program cannot re-register one of those names over the standard's
+   signature.
 
       +--------------+-----------------------------------+-------------+
       | Function     | Maps to                           | Returns     |
       +--------------+-----------------------------------+-------------+
-      | ping()       | CALL ping                         | {t, time}   |
+      | $ping()      | CALL ping                         | {t, time}   |
       +--------------+-----------------------------------+-------------+
-      | status()     | CALL status                       | state map   |
+      | $status()    | CALL status                       | state map   |
       +--------------+-----------------------------------+-------------+
-      | metadata()   | CALL metadata                     | five arrays |
+      | $metadata()  | CALL metadata                     | five arrays |
       +--------------+-----------------------------------+-------------+
-      | sense(n)     | CALL sense (name = n)             | reading     |
+      | $sense(n)    | CALL sense (name = n)             | reading     |
       +--------------+-----------------------------------+-------------+
-      | actuate(n,   | CALL actuate (name = n, rest by   | null        |
+      | $actuate(n,  | CALL actuate (name = n, rest by   | null        |
       | ...)         | position or name)                 |             |
       +--------------+-----------------------------------+-------------+
-      | get_param(n) | CALL get_param (name = n)         | value       |
+      | $get_param(n)| CALL get_param (name = n)         | value       |
       +--------------+-----------------------------------+-------------+
-      | set_param(n, | CALL set_param (name = n, value = | null        |
+      | $set_param(n,| CALL set_param (name = n, value = | null        |
       | v)           | v)                                |             |
       +--------------+-----------------------------------+-------------+
 
@@ -3613,16 +3704,20 @@ Table of Contents
    These seven bindings and the cancellation of Section 6.9 are the
    eight instructions of [RFC0004], Table 20, and they are the whole of
    the Core Profile as this language exposes it.  An instruction outside
-   that table is reached through the peer's own name space as a host
-   native function (Section 9.1), not by a built-in of this document.
+   that table is reached through the peer's own name space as a
+   registered remote function of the program's own (Section 7.1.1), not
+   by a built-in of this document.  The `octo` meta object (Section 9.8)
+   is a separate surface and does not carry them.
 
-   Because each call is a future, awaiting it is the norm:
+   Because each call is a future, awaiting it is the norm.  The `@sess`
+   prefix names the session; with none the call uses the current scope's
+   default session (Section 9.2):
 
-      let t = await sense("temp", @dev)
-      await actuate("gripper", force = 20)
+      let t = await @dev$sense("temp")
+      await $actuate("gripper", force = 20)
 
    The name each call takes is its first argument and may be given
-   positionally or by name, so sense("temp") and sense(name = "temp")
+   positionally or by name, so $sense("temp") and $sense(name = "temp")
    are the same call.  actuate alone passes further arguments through,
    by position or by name, and they are the ones the peer's actuator
    declares (Section 9.1.3); the other five take no further arguments,
@@ -3639,7 +3734,7 @@ Table of Contents
    program catches with catch.  This matches [RFC0004], Section 6.4.2:
    a refused call is an outcome, never an ERROR frame.
 
-   metadata() returns {instructions, sensors, actuators, params,
+   $metadata() returns {instructions, sensors, actuators, params,
    events} exactly as [RFC0004], Section 9.1.2 specifies; a program
    SHOULD read it once after connect() and re-read it when the
    core.metadata topic fires (Section 6.7).  Its value is an Any
@@ -3647,7 +3742,7 @@ Table of Contents
    language's; a program reads it with d["sensors"] and a for loop over
    it, and an implementation that declares the shape MAY let the same
    name have it.  A program MUST NOT read the absence of a name from
-   metadata() as a claim that the procedure is not served
+   $metadata() as a claim that the procedure is not served
    ([RFC0004], Section 9.1.2), because for the eight instructions of
    Table 3 that is not what it means.
 
@@ -3813,16 +3908,16 @@ Table of Contents
 
    A script written for a full peer runs against an Air peer by
    intersection: whatever the Air peer does not offer is simply absent,
-   and the same metadata() call reveals it.
+   and the same $metadata() call reveals it.
 
    A program that must behave differently on an Air peer tests what it
    needs rather than asking what kind of peer it has, because there is
    no such question to ask.  The capabilities of [RFC0004], Section 8
    are on the session object (Section 9.10), and the peer's own offers
-   are in metadata():
+   are in $metadata():
 
       let air = !dev.caps["blobtun"]      # no tunnels on an Air peer
-      let sizes = (await metadata(@dev))["params"]
+      let sizes = (await @dev$metadata())["params"]
       if len(sizes) < 3 {
          # this peer does not offer everything the full build has
       }
@@ -3890,7 +3985,7 @@ Table of Contents
 
    A name is resolved in this order: the current block scope; enclosing
    function scopes outward; enclosing module scopes outward; the
-   top-level scope; the built-ins of Sections 9.3 and 9.4; the core
+   top-level scope; the built-ins of Section 9.4; the core
    library of Section 10.2 together with the built-in members of
    Sections 10.2.10 to 10.2.16; the meta object octo; then the host's
    native functions.
@@ -3906,8 +4001,11 @@ Table of Contents
    program MAY NOT shadow octo, which is a rebinding and a syntax error,
    nor a conversion function of Section 10.2.1, nor a reserved name of
    Section 2.4: these are the ReservedName diagnostic (Appendix C).
-   Shadowing a device binding -- naming a variable sense, say -- is
-   allowed, and hides the built-in only where it is declared.
+   The remote namespace is outside this order altogether: a `$name` call
+   resolves against the registrations of Section 7.1.1 and never against
+   a local binding, so a local `fn sense` and a registered `$sense` are
+   two different functions that never shadow one another, and naming a
+   variable `sense` is an ordinary local shadow of nothing remote.
 
    The type names of Section 2.8 resolve in the same order, and a type
    that names no declaration is BadAnnotation rather than a fallback to
@@ -3967,8 +4065,9 @@ Table of Contents
 
    The host opens the default session before the program runs
    (Section 9.2) and a program MAY close it, which leaves every
-   subsequent built-in call failing until it installs another with
-   octo.default (Section 9.8).  An implementation MUST NOT close a
+   subsequent remote call that names no session failing until it
+   installs another with octo.default (Section 9.8).  An implementation
+   MUST NOT close a
    session on its own while the program is still running, and a
    program MUST NOT depend on one being left open: a peer may disappear
    at any time and the only way to learn of it is the failure of a call
@@ -4574,6 +4673,18 @@ Table of Contents
    message and cause.  They are immutable and carry no method; str(e)
    writes an Error as Section 3.10 defines.
 
+10.2.17.  assert
+
+      assert(cond, message = null)
+
+   Evaluates cond; yields null when cond is truthy.  When cond is falsy,
+   throws Error("AssertionError", message when message is not null, else
+   "assertion failed").  assert is the means by which a program states an
+   invariant and by which a test records a failed expectation; it is a
+   throw and not a panic, so it is catchable (Section 6.2.1).  cond MUST
+   be a boolean or the unknown-typed operand that resolves to one; any
+   other value raises TypeError.
+
 10.3. Modules
 
    A module is a named namespace holding declarations -- bindings,
@@ -5095,8 +5206,8 @@ Table of Contents
       }
 
       # Read both encoders at once; await them together.
-      let lf = spawn sense("enc.left", @dev)
-      let rt = spawn sense("enc.right", @dev)
+      let lf = spawn @dev$sense("enc.left")
+      let rt = spawn @dev$sense("enc.right")
       let left = await lf
       let right = await rt
 
@@ -5106,8 +5217,8 @@ Table of Contents
       # say which branch won; the two are told apart by the status
       # branch, which is the one that resolves with a value.
       let state = race {
-         status() within 2s
-         actuate("gripper", force = 20)
+         @dev$status() within 2s
+         @dev$actuate("gripper", force = 20)
       }
       if state == null {
          log("warn", "gripper slow; status won the race")
@@ -5119,13 +5230,13 @@ Table of Contents
          select {
             recv cmd_chan as cmd {
                if cmd == "halt" { break }
-               await actuate("drive", cmd, @dev)
+               await @dev$actuate("drive", cmd)
             }
             on "device.fault" {
-               await actuate("drive", stop = true, @dev)
+               await @dev$actuate("drive", stop = true)
             }
             after 30s {
-               await actuate("led", blink = 1, @dev)
+               await @dev$actuate("led", blink = 1)
             }
          }
       }
@@ -5143,12 +5254,13 @@ Table of Contents
       let st = wait "device.status"
       log("state", st.payload.state)
 
-   The session connect() returns is bound, and every call below names it
-   with @dev; a call that named no session would go to the default one
-   (Section 9.2), which is not this peer.
+   The session connect() returns is bound to `dev`, and every remote call
+   below names it with the @dev prefix of Section 7.1.1; a call that named
+   no session would go to the current scope's default one (Section 9.2),
+   which is not this peer.
 
-   The expression status() within 2s is sugar for race { status();
-   sleep 2s }; if the timeout arm wins, the result is null and the
+   The expression @dev$status() within 2s is sugar for race {
+   @dev$status(); sleep 2s }; if the timeout arm wins, the result is null and the
    status future is cancelled (Section 6.3).  In the race above the
    gripper close is the second branch, so the race yields either the
    state map -- when the status reply arrived first -- or null, which is

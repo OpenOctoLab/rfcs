@@ -10,9 +10,10 @@ Abstract
 
    OctoScript ships as several binaries behind one entry, octo.  The
    interpreter (octoexec), formatter (octofmt) and checker (octolint)
-   are reached through octo subcommands -- "octo run" (alias "exec"),
-   "octo fmt" (alias "format"), "octo lint" (alias "check") -- and the
-   package manager (tentacle) through "octo grab" and "octo drop".  The
+   are reached through octo subcommands -- "octo swim" (aliases "run",
+   "exec"), "octo squeeze" (aliases "fmt", "format") and "octo sift"
+   (aliases "lint", "check") -- and the package manager (tentacle)
+   through "octo grab" and "octo drop" and the rest of its verbs.  The
    daemon (octod) and language server (octolsp) are separate products
    and are not entered through octo.  This document specifies all three
    interfaces, the files and environment variables they read, the
@@ -77,10 +78,33 @@ Table of Contents
    OctoScript is several binaries behind one entry point, octo, which is
    a wrapper that dispatches subcommands.  octoexec runs programs and
    serves the REPL; tentacle is the package manager; octofmt formats
-   source; octolint checks it.  A subcommand is a verb -- "run", "fmt",
-   "lint", "grab", "drop" -- and some have aliases: "run" is "exec",
-   "format" is "fmt", "check" is "lint".  octod (daemon) and octolsp
-   (language server) are separate products, not under octo.
+   source; octolint checks it.  A subcommand is a verb, and every verb
+   has a primary spelling drawn from the octopus world the tools are
+   named for; the generic spellings other tools use are bound as visible
+   aliases of the same verb, so both reach it and the help shows the
+   mapping.  The verbs are:
+
+      swim     run programs              (aliases: run, exec)
+      squeeze  format source             (aliases: fmt, format)
+      sift     check source              (aliases: lint, check)
+      den      interactive REPL          (alias: repl)
+      ink      dump bytecode as text     (alias: dump)
+      stash    write the bytecode cache  (alias: cache)
+      wake     load and run a cache      (alias: load)
+      unfurl   disassemble a cache       (alias: disasm)
+      coil     assemble a text dump      (alias: asm)
+      jet      run a text dump           (alias: irload)
+      grab     install packages          (alias: install)
+      drop     remove packages           (alias: remove)
+      ... and the rest of the tentacle verbs of [RFC0013].
+
+   Every tentacle verb is reached at the top level and, equivalently,
+   behind the "tentacle" namespace: "octo grab" and "octo tentacle grab"
+   are the same command.  The namespace accepts tentacle verbs only; the
+   verbs of this document are not recognized under it.  One further
+   verb, "octo", is bound but hidden from the help listing: it prints a
+   single line and is an Easter egg, not an interface.  octod (daemon)
+   and octolsp (language server) are separate products, not under octo.
 
    The tools are specified here as observable interfaces: command-line
    arguments, files read, output produced, exit status, and side
@@ -95,11 +119,11 @@ Table of Contents
 
 3.  The Interpreter Command
 
-   The interpreter is the octoexec binary, entered through "octo run" or
-   its alias is "octo exec"; it starts no REPL when given no script;
-   the REPL is "octo repl" (Section 4).
+   The interpreter is the octoexec binary, entered through "octo swim"
+   or its aliases "octo run" and "octo exec"; it starts no REPL when
+   given no script; the REPL is "octo den" (Section 4).
 
-      octo run [options] [script ...]
+      octo swim [options] [script ...]
 
       Operand / option     Argument      Meaning
       +=====================+==============+===========================+
@@ -154,9 +178,9 @@ Table of Contents
 
 4.  The REPL
 
-   The REPL is entered through "octo repl"; it is a subcommand of octo
-   and is not a fallback of "octo run": when given no program
-   file it is a usage error, not an entry to the REPL.  The REPL reads
+   The REPL is entered through "octo den" (alias "octo repl"); it is a
+   subcommand of octo and is not a fallback of "octo swim": when given no
+   program file it is a usage error, not an entry to the REPL.  The REPL reads
    statements from the standard input and requires a terminal; when no
    terminal is attached (for example when the terminal type is "dumb" or
    the input is not a terminal) it refuses to run and exits with
@@ -298,10 +322,10 @@ Table of Contents
 
 9.  The Formatter Command
 
-   The formatter is octofmt binary, entered through "octo fmt" or its
-   alias "octo format".
+   The formatter is octofmt binary, entered through "octo squeeze" or
+   its aliases "octo fmt" and "octo format".
 
-      octo fmt [options] [file ...]
+      octo squeeze [options] [file ...]
 
       Option       Meaning
       +=============+==================================================+
@@ -325,11 +349,12 @@ Table of Contents
 
 10. The Checker Command
 
-   The checker is octolint binary, entered through "octo lint" or its
-   alias "octo check".  It reports problems in source text without
-   changing it, and exits non-zero when any problem is found.
+   The checker is octolint binary, entered through "octo sift" or its
+   aliases "octo lint" and "octo check".  It reports problems in source
+   text without changing it, and exits non-zero when any problem is
+   found.
 
-      octo lint [options] [file ...]
+      octo sift [options] [file ...]
 
    With no file, or with "-", the standard input is read.  A file that
    cannot be read, a source text that cannot be lexed and check failure

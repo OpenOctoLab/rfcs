@@ -65,12 +65,14 @@ Table of Contents
 
 1.  Introduction
 
-   Tentacle is the package manager of OctoScript; its binary is
-   tentacle, reached through the unified entry, octo, as "octo grab"
-   (install dependencies) and "octo drop" (remove them), or directly as
-   tentacle.  This section will say what a package is, what it carries,
-   and how it differs from the file modules and the host units that
-   [RFC0003], Section 10.3 already reaches.
+   Tentacle is the package manager of OctoScript.  It has no binary of
+   its own: it is reached through the unified entry, octo, as the
+   top-level verbs "octo grab" (install dependencies) and "octo drop"
+   (remove them) together with the rest of the lifecycle verbs, or
+   behind the "tentacle" namespace, as "octo tentacle grab"; the two
+   forms are the same commands.  This section will say what a package
+   is, what it carries, and how it differs from the file modules and
+   the host units that [RFC0003], Section 10.3 already reaches.
 
 2.  Conventions
 
