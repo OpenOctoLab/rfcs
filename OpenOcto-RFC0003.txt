@@ -142,7 +142,7 @@ Table of Contents
          10.2.5. Dictionaries and Types: keys, values, items and type
          10.2.6. Channels: chan, close, send and recv
          10.2.7. Events: emit
-         10.2.8. Line I/O: print, println, eprint, eprintln and input
+         10.2.8. Line I/O: print, println, eprint, eprintln, flush, input, getchar and getline
          10.2.9. Ending the Program: panic and exit
          10.2.10. Text Members
          10.2.11. Vec Members
@@ -2608,6 +2608,19 @@ Table of Contents
    name it declares is local to that task and is not visible to the
    caller (Section 6.4).
 
+   The keyword task spells the one-shot function form of the same idea:
+   task { body } is a function of no parameters whose body is the block,
+   and it is called at once -- the value of the expression is the value
+   the body yields (Section 5.7).  The block reads its resources from
+   the context the way any closure does (Section 7.2); it takes no
+   arguments.  A task block is an expression and may appear anywhere one
+   can, including as a spawn's operand -- spawn task { await $sense("t")
+   } starts the block as its own task, await and all -- and a task block
+   written as a statement runs for its side effects.  Because the call
+   is immediate, a task block that suspends (a sleep, an await, an
+   input) suspends the task that reaches it; only a spawned one runs
+   apart.
+
    await suspends the current task until a future resolves, then yields
    its value or re-raises its throw:
 
@@ -3293,7 +3306,7 @@ Table of Contents
    is a runtime error naming the registration that could not be
    dispatched, never a silent null.
 
-7.2.  Closures</new_string>
+7.2.  Closures
 
    A function closes over the lexical bindings visible where it is
    defined.  A mutation of a closed binding is visible to every closure
@@ -4097,9 +4110,10 @@ Table of Contents
    reversed, zip and enumerate (Section 10.2.3); map, filter, any and
    all (Section 10.2.4); keys, values, items and type (Section
    10.2.5); the channel primitives chan, close, send and recv (Section
-   10.2.6); emit (Section 10.2.7); print, eprint and input (Section
-   10.2.8); and panic and exit (Section 10.2.9).  All but emit, print,
-   eprint, input, panic and exit are pure: they read their arguments,
+   10.2.6); emit (Section 10.2.7); print, eprint, input, flush,
+   getchar and getline (Section 10.2.8); and panic and exit (Section
+   10.2.9).  All but emit, print, eprint, input, flush, getchar,
+   getline, panic and exit are pure: they read their arguments,
    yield a value and change nothing else.  The members of the built-in
    types, Sections 10.2.10 to 10.2.16, are part of the core library in
    the same way.
@@ -4409,13 +4423,16 @@ Table of Contents
 
       emit("arm.done", {"id": 3})
 
-10.2.8.  Line I/O: print, println, eprint, eprintln and input
+10.2.8.  Line I/O: print, println, eprint, eprintln, flush, input, getchar and getline
 
       print(args...) -> null
       println(args...) -> null
       eprint(args...) -> null
       eprintln(args...) -> null
-      input() -> str?
+      flush() -> null
+      input(prompt = null) -> str?
+      getchar() -> str?
+      getline() -> str?
 
    print writes each of its arguments, formatted by Section 10.4 and
    separated by a space, to standard output; eprint does the same on
@@ -4434,10 +4451,22 @@ Table of Contents
       print("a", "b")        # ab, no newline
       println("a", "b")      # ab and a newline
       eprintln("jammed")     # the same on standard error
+      flush()                # push written text out now
+
+   flush takes no arguments and yields null: it pushes whatever the
+   program has written to standard output onto the stream now, so a
+   label written with print is on screen before the program blocks on
+   input.  A flush that fails -- a stream that is closed -- throws
+   with an Error of kind IOError (Appendix C).
 
    input reads one line from standard
    input and yields it without the trailing newline, or null at end of
-   input.  It is a suspension point like sleep (Section 6.8): a task
+   input.  When prompt is given and is a str, it is written to
+   standard output, exactly as print writes its arguments, and the
+   stream is flushed before the read: an interactive program labels
+   the line it asks for.  A prompt that is not a str throws with
+   BadArgument, and a second argument throws with BadArity.  It is a
+   suspension point like sleep (Section 6.8): a task
    that reaches input and finds nothing waits on the stream and is
    cancelled with the rest of the task when it is cancelled
    (Section 6.9), so a program on a machine with no console SHOULD NOT
@@ -4450,6 +4479,22 @@ Table of Contents
    (Appendix C).
 
       let line = input()   # one line, or null at end of input
+      let name = input("name: ")
+                         # labels the line, then reads it
+
+   getchar reads one character -- one Unicode scalar value -- from
+   standard input and yields it as a str, or null at end of input.  The
+   character may be a newline; getchar is not a line reader, so it does
+   not strip one.  getline reads one line from standard input and yields
+   it without the trailing newline, or null at end of input; it is input
+   with no prompt to write.  Both take no arguments and are suspension
+   points like input (Section 6.8): a task that reaches them and finds
+   nothing waits on the stream and is cancelled with the rest of the
+   task when it is cancelled (Section 6.9).  A read that fails throws
+   with an Error of kind IOError (Appendix C).
+
+      let c = getchar()    # one character, or null at end of input
+      let line = getline() # one line, or null at end of input
 
 10.2.9.  Ending the Program: panic and exit
 
