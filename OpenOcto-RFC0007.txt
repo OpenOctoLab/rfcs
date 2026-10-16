@@ -94,9 +94,19 @@ Table of Contents
       unfurl   disassemble a cache       (alias: disasm)
       coil     assemble a text dump      (alias: asm)
       jet      run a text dump           (alias: irload)
+      poke     run the tests             (aliases: test, tests)
       grab     install packages          (alias: install)
       drop     remove packages           (alias: remove)
       ... and the rest of the tentacle verbs of [RFC0013].
+
+   "octo poke" feels the water: it compiles a program with its test
+   declarations enabled ([RFC0003], Section 7.1.2), runs the top level
+   once to set the globals the tests lean on, and then drives each
+   lifted `_test_<name>` in the same interpreter.  A test that returns
+   passes; one that raises an `Error` fails; one that raises an error
+   of kind `Skipped` skipped.  The report names every test and its
+   outcome, and the exit status is 1 when anything failed -- the
+   Section 11.2 convention of [RFC0003] applied to the driver.
 
    Every tentacle verb is reached at the top level and, equivalently,
    behind the "tentacle" namespace: "octo grab" and "octo tentacle grab"

@@ -1804,7 +1804,11 @@ Table of Contents
    request acknowledgement.  A single frame, including header and
    trailer, SHOULD NOT exceed 1200 octets so as to avoid fragmentation.
    Bulk data SHOULD use a stream transport together with the tunnel
-   primitive.
+   primitive.  A TUNDATA frame's payload is the sender's slice of the
+   tunnel's stream (Section 6.6.3): the slice size is the sender's
+   choice, and a sender on a datagram transport sizes its slices so that
+   the whole frame stays within the budget above, because the slice is
+   what the frame becomes.
 
    Session establishment is not a property of the transport: HELLO and
    WELCOME are ordinary frames and MAY be carried by datagrams.  The

@@ -80,6 +80,7 @@ Table of Contents
      3.9.  struct: Composite Types
      3.10. Event and Error
      3.11. Any
+     3.12. Session
    4.  Operators and Precedence
      4.1. Type Promotion
      4.2. Operators Beyond Arithmetic
@@ -116,6 +117,7 @@ Table of Contents
      7.  Functions, Scope and Arguments
        7.1.  Definition and Call
        7.1.1.  Remote Functions
+       7.1.2.  Test Declarations
        7.2.  Closures
        7.3.  Scope and Declaration
        7.4.  Argument Passing
@@ -132,6 +134,7 @@ Table of Contents
        9.8.  Instance Meta Object
        9.9.  Name Resolution Order
        9.10. Session Lifetime and Teardown
+       9.11. Session Members: dev.rpc and dev.tunnel
      10. Library and External Objects
        10.1. Operations on Values
        10.2. Standard Library Functions
@@ -152,6 +155,14 @@ Table of Contents
          10.2.15. Range and Duration Members
          10.2.16. Channel, Future, Event and Error Members
          10.2.17. assert
+         10.2.18. Command-Line Environment: env, env_args, env_keys, cwd,
+                  exe_path, pid and temp_dir
+         10.2.19. File Input and Output: read_file, read_bytes, write_file,
+                  write_bytes, append_file, file_exists, file_meta, list_dir,
+                  make_dir, make_dirs, remove_file, remove_dir, copy_file and
+                  rename
+         10.2.20. Session and Tunnel Members
+         10.2.21. Dynamic Execution: eval and exec
        10.3. Modules
          10.3.1. Module Declarations
          10.3.2. Visibility and pub
@@ -284,9 +295,10 @@ Table of Contents
       next     not      null     octo     on       or
       par      pass     pub      race     remote   return
       session  select   sleep    spawn    str      struct
-      throw    true     try      u128     u16      u32
-      u64      u8       usize    var      wait     while    with
-      within   bytes    function  byte     destroy
+      test     throw    true     try      u128     u16
+      u32      u64      u8       usize    var      wait
+      while    with     within   bytes    function byte
+      destroy
 
    A contextual keyword is recognised only in the position named below
    and is an ordinary identifier everywhere else, so a program MAY
@@ -326,8 +338,8 @@ Table of Contents
    exceptions this document states: this names the receiver of a method
    and MUST NOT be rebound (Section 3.9), and the default of a struct
    is a read-only pseudo-member (Section 3.9), so a write to it is the
-   runtime error Immutable.  Writing
-   through a member or an index (octo.mock = true) is
+   runtime error Immutable.     Writing
+   through a member or an index (octo.default = dev) is
    permitted and is not an assignment to the keyword.  octo is the
    reserved global meta object of Section 9.8; it MUST NOT be rebound,
    though its members and indices MAY be written.
@@ -444,17 +456,19 @@ Table of Contents
       after it: 1. and .5 are not written, and a trailing f32 or f64
       suffix does not exist -- the width is an annotation (Section 2.8).
 
-      A literal is typed at the default width of Section 2.8, i32 for an
+      A literal is typed at the default width of Section 2.8, i64 for an
       integer and f64 for a float, unless the context gives it another
       one.  An integer literal whose value does not fit the width it
       lands in is the load-time diagnostic ConstantOverflow (Appendix C)
       where the unit is loaded, and the runtime error OutOfRange where a
       width is not known until the program runs; to write a value wider
-      than the default, annotate it:
+      than the default, annotate it.  A unary minus folds into the
+      literal it negates, so INT64_MIN is written as it reads:
 
-         let small = 42                # i32, the default
-         let big: i64 = 42_000_000_000 # an i64, so it fits
-         let big2 = 42_000_000_000     # ConstantOverflow
+         let small = 42                        # i64, the default
+         let big: i64 = 42_000_000_000         # an i64, so it fits
+         let min = -9223372036854775808        # INT64_MIN, folded
+         let big2 = 18446744073709551616       # ConstantOverflow
 
    Duration literals
 
@@ -602,14 +616,14 @@ Table of Contents
    (->).  Annotations are optional: a program without annotations is
    complete, and an implementation MUST NOT reject it for a missing
    annotation: it is inferred from the initialiser and later uses.
-   Unannotated integers are i32 and unannotated floats are f64.  Where a
+   Unannotated integers are i64 and unannotated floats are f64.  Where a
    name does carry one, the annotation is enforced: the value bound to
    that name -- by let, const, var, an assignment, a parameter or a
    return -- is stored and operated on at the annotated width, and a
    value that does not fit it throws with an Error of kind OutOfRange.
    An annotation never converts a value; an out-of-range value is an
    error, not a truncation.  The default width is enforced the same way:
-   a value or result that does not fit i32 or f64 throws with an Error
+   a value or result that does not fit i64 or f64 throws with an Error
    of kind OutOfRange whether or not a name is annotated.
 
       let count: i32 = 0
@@ -633,8 +647,8 @@ Table of Contents
    Channel<T> and may be written wherever that is written.  The
    container types of this document are Tuple, Vec, HashSet, HashMap,
    Option, Channel, Future and Range, and the struct kind declared by
-   a program; Duration, Event and Error are built-in composite types
-   that are not containers.  Of the containers, Vec<T>, HashSet<T>,
+   a program; Duration, Session, Event and Error are built-in composite
+   types that are not containers.  Of the containers, Vec<T>, HashSet<T>,
    HashMap<K, V>, Option<T>, Channel<T>, Future<T> and Range<T> name
    an element type in the parameterised form, and three of them --
    Option, Vec and HashSet -- are also written through a suffix sugar:
@@ -649,8 +663,8 @@ Table of Contents
 
    The built-in names are bool, char, str, bytes, byte, i8, i16, i32,
    i64, i128, isize, u8, u16, u32, u64, u128, usize, f32, f64, function,
-   (), Option, Vec, Tuple, HashSet, HashMap, Range, Duration, Event,
-   Error, Future, Channel and Any; a name that is none of these and is
+   (), Option, Vec, Tuple, HashSet, HashMap, Range, Duration, Session,
+   Event, Error, Future, Channel and Any; a name that is none of these and is
    not declared as a struct by this program or published by a module it
    imports (Section 10.3) is the load-time diagnostic BadAnnotation
    (Appendix C).  There is deliberately no fallback: an annotation that
@@ -702,8 +716,8 @@ Table of Contents
    written.  An unannotated name does not lack a type; it takes the
    type inferred for it (Section 2.8).  A value belongs to exactly one
    of the following kinds: null, bool, integer, float, str, bytes, Vec,
-   Tuple, HashSet, HashMap, Range, Duration, struct, Event, Error,
-   function, Future, Channel or Any.  A module is not a value of any of
+   Tuple, HashSet, HashMap, Range, Duration, Session, struct, Event,
+   Error, function, Future, Channel or Any.  A module is not a value of any of
    these kinds: it is a distinct, immutable binding produced by import
    (Section 10.3) and has no kind of its own, although Section 10.3.5
    gives it value-like behaviour.  The struct kind covers every struct
@@ -761,6 +775,15 @@ Table of Contents
    expr[key] = value.  The empty HashMap is written {:}; the empty
    braces {} are always an empty block, never a literal.
 
+   A key written as a bare identifier directly followed by the colon
+   is the text of that identifier, so the quotes of a text key MAY be
+   omitted whenever the text is a valid identifier: {a: 1, b: 2} is
+   {"a": 1, "b": 2}.  The name is never read; a key that is the value
+   of a variable is written in parentheses, as (a): 1, or is any other
+   expression.  In a dictionary comprehension (Section 5.4) the key is
+   always an expression, so a bare name there is the iteration
+   variable and not its text.
+
    Keys, and the elements of a set, are drawn from the hashable kinds.
    A kind is hashable when a value of it can be compared for identity
    and has no mutable interior that would change that identity while it
@@ -811,15 +834,15 @@ Table of Contents
 
    A range holds integers, and it holds them at one integer width: the
    width of its three parts, promoted among themselves as Section 4.1
-   promotes, and i32 where a part is unannotated.  So 0..10 is a
-   Range<i32>, range(0, n) where n is an i64 is a Range<i64>, and
-   0..10..2 fits i32 whatever else is around it.  The width is not
+   promotes, and i64 where a part is unannotated.  So 0..10 is a
+   Range<i64>, range(0, n) where n is an i64 is a Range<i64>, and
+   0..10..2 fits i64 whatever else is around it.  The width is not
    lost and never truncated: r.start, r.stop and r.step (Section
    10.2.15) yield values of it, and a bound that does not fit the
    width the range lands in is the error OutOfRange (Section 2.8).  A
    range is lazy: it holds its three parts and not the positions
    between them, so a range of four billion positions costs no more
-   than a range of four.  A range whose length does not fit i32 -- the
+   than a range of four.  A range whose length does not fit i64 -- the
    case only 0..i64::MAX with a step of one reaches -- reports a length
    of i32::MAX from len() and says so in no other way; the positions
    themselves are still all there.
@@ -827,13 +850,16 @@ Table of Contents
 3.5.  Duration
 
    A Duration is a time interval.  It is a built-in type and not a
-   primitive one: beneath it lies a u32 count of milliseconds, so one
-   unit of the count is one millisecond and the longest interval a
-   Duration holds is 4294967295ms.  A Duration takes part in type
-   inference (Section 2.8) as any other type does.
+   primitive one: beneath it lies a u64 count of nanoseconds, so one
+   unit of the count is one nanosecond and the longest interval a
+   Duration holds is 18446744073709551615ns -- some 584 years.  A
+   Duration takes part in type inference (Section 2.8) as any other
+   type does.
 
    A Duration literal is one or more sections.  A section is a decimal
-   number followed by one of the unit suffixes ms, s, m, h and d, and
+   number followed by one of the unit suffixes ns, us, ms, s, m, h and
+   d -- nanoseconds, microseconds, milliseconds, seconds, minutes,
+   hours and days, aligned with the Linux clock precisions -- and
    sections MAY be separated by spaces:
 
       let a = 500ms
@@ -841,30 +867,34 @@ Table of Contents
       let c = 2h 30m
       let d = 1_000ms                    # separators are permitted
       let e = 1.5s                       # a fraction is permitted
+      let f = 250us 100ns                # micro and nanoseconds
 
    A section is decimal: it carries no base prefix, no exponent and no
    sign, and it MAY carry the digit separators of a numeric literal
-   (Section 2.6).  The value of a literal is the sum of its sections,
-   each converted to milliseconds -- 1s is 1000ms, 1m is 60_000ms, 1h
-   is 3_600_000ms and 1d is 86_400_000ms -- rounded to a whole
-   millisecond.  The writing is not examined for sense: 23h 60m 3600s
-   3600000ms is written freely and is the interval 93_600_000ms, the
-   same interval as 1d 2h.  A total that does not fit u32, or an
-   operation whose result does not, throws with an Error of kind
-   OutOfRange (Section 2.8); a literal whose total exceeds u32 is
-   reported while the unit is loaded, as the load-time diagnostic
-   ConstantOverflow (Appendix C).
+   (Section 2.6).  A suffix is lowercase and is matched exactly: MS, S
+   and Us name nothing and the section is refused.  The value of a
+   literal is the sum of its sections, each converted to nanoseconds --
+   1ns is 1ns, 1us is 1_000ns, 1ms is 1_000_000ns, 1s is
+   1_000_000_000ns, 1m is 60_000_000_000ns, 1h is 3_600_000_000_000ns
+   and 1d is 86_400_000_000_000ns -- rounded to a whole nanosecond.
+   The writing is not examined for sense: 23h 60m 3600s 3600000ms is
+   written freely and is the interval 93_600_000_000_000ns, the same
+   interval as 1d 2h.  A total that does not fit u64, or an operation
+   whose result does not, throws with an Error of kind OutOfRange
+   (Section 2.8); a literal whose total exceeds u64 is reported while
+   the unit is loaded, as the load-time diagnostic ConstantOverflow
+   (Appendix C).
 
    Arithmetic.  A Duration is added to and subtracted from a Duration
    and from nothing else: + and - with a plain number, or with a value
    of another kind, is a type error.  One product holds at most one
    Duration and otherwise only plain numbers, of the integer or the
-   float kind; the product is rounded to a whole millisecond and is a
+   float kind; the product is rounded to a whole nanosecond and is a
    Duration, so 2 * 1s 500ms is 3s.  In a quotient the Duration stands
    on the left: a Duration over a plain number is a Duration, rounded
    the same way; a Duration over a Duration is their ratio as an f64,
    so 1h / 30m is 2.0.  A Duration stands on the left of // and % as
-   well: d1 // d2 is the i32 count of whole d2 in d1, so 1h // 25m is
+   well: d1 // d2 is the i64 count of whole d2 in d1, so 1h // 25m is
    2; d1 % d2 is the Duration left over, so 1h % 25m is 10m; d // n,
    for a plain number n, is a Duration, so 1h // 2 is 30m.  The right
    operand of % is a Duration and only a Duration: d % n is not
@@ -874,7 +904,7 @@ Table of Contents
    with an Error of kind DivideByZero.
 
    Text.  A Duration is written as text in the standard form: the units
-   d, h, m, s and ms in that order, each with its value, a space
+   d, h, m, s, ms, us and ns in that order, each with its value, a space
    between two sections and none between a number and its unit.  A
    unit of zero at either end is left out; a unit of zero between two
    sections that are written is kept, so that the sections after it
@@ -884,10 +914,10 @@ Table of Contents
    interval prints as 0ms.
 
    Conversion.  The constructor of a primitive type unboxes a Duration
-   (Section 10.2.1): u32(d) is the millisecond count of d.  Unlike the
+   (Section 10.2.1): u64(d) is the nanosecond count of d.  Unlike the
    conversions of Section 10.2 the count is cut down to the width of
    the target and does not throw, so i8(1h) truncates rather than
-   fails.  Duration(n) builds the interval of n milliseconds from a
+   fails.  Duration(n) builds the interval of n nanoseconds from a
    value of a primitive numeric kind; a fraction in n is rounded to a
    whole millisecond as above.  The timing statements of the language
    take a Duration and no other kind: sleep (Section 6.8), the after
@@ -1408,6 +1438,32 @@ Table of Contents
    on which of the two a host chooses, and SHOULD re-read $metadata()
    (Section 9.3) rather than assume either.
 
+3.12.  Session
+
+   A Session is the value `connect()` returns (Section 9.2): a handle
+   to one open conversation with one peer, which the program holds,
+   passes and stores as any value of any other kind.  It is a built-in
+   composite type and not a primitive one: beneath it lies an opaque
+   key the host mints, and everything a program can do with a session
+   -- the members it reads and the controls it holds -- is what
+   Section 9.10 defines and the host answers.  A session compares by
+   identity: two values are the same session when they name the same
+   conversation, and equal to nothing else.
+
+   The type is written `Session`, with the capitalisation every
+   built-in composite type carries; the lower-case word is the
+   reserved keyword of Section 2.4 and names no type.  An annotated
+   binding accepts a session and refuses everything else:
+
+      let dev: Session = connect("ocp://arm.example:6286")
+
+   A session is not hashable and not a set element or a map key,
+   because the host may close and re-open the conversation a key would
+   have to keep meaning.  The session selector of an event descriptor
+   (Section 6.6) names its session by a binding of this type, and a
+   prefix that is bound to anything else is the runtime error
+   BadSession.
+
 4.  Operators and Precedence
 
    Operators associate as listed.  Higher precedence binds tighter.
@@ -1464,7 +1520,7 @@ Table of Contents
 
 4.1.  Type Promotion
 
-   Every number carries a width: an unannotated integer is i32, an
+   Every number carries a width: an unannotated integer is i64, an
    unannotated float is f64, and an annotated one is the width it names
    (Section 2.8).  An arithmetic or bitwise operator given two operands
    of different widths is computed at the wider of them:
@@ -1502,7 +1558,7 @@ Table of Contents
    count: x << 1 where x is an i8 is an i8.  The count is an integer of
    any width, and it is never masked or reduced: a count that is
    negative, or that is at or above the width of the operand shifted,
-   throws OutOfRange, so a shift of 32 on an i32 and a shift of -1 on
+   throws OutOfRange, so a shift of 64 on an i64 and a shift of -1 on
    any integer are both errors rather than a wrapped result.  A count
    that fits is a plain shift: << moves the value left and fills with
    zeros, and >> on an unsigned integer moves it right and fills with
@@ -1520,7 +1576,7 @@ Table of Contents
       b >> 1         # 0x40, unsigned: no sign is copied
       let c: i8 = -1
       c >> 1         # -1, signed: the sign bit is copied in
-      1 << 32        # throws OutOfRange: the width of an i32 is 32
+      1 << 64        # throws OutOfRange: the width of an i64 is 64
 
 4.2.  Operators Beyond Arithmetic
 
@@ -1770,6 +1826,11 @@ Table of Contents
    clauses filter.  At most one for clause is permitted; nesting is
    expressed by iterating over a nested structure.
 
+   The key and the value are expressions evaluated per iteration: a
+   bare name written as the key is the variable of that name and not
+   the text of it, which is what distinguishes {k: v for ...} from the
+   literal {k: v} of Section 3.3, where the bare name is its text.
+
    The iterable is evaluated once and iterated in its own order, so the
    comprehension is deterministic wherever the iterable is.  The result
    is built from the start in the order the iteration yields, so the
@@ -1949,7 +2010,7 @@ Table of Contents
 
       loop { await step() } until "stop" { stop() }
 
-      try { grab() } catch Timeout { wait 1s } finally { release() }
+      try { grab() } catch "Timeout" { wait 1s } finally { release() }
 
    The heads that continue a block are elif, else, catch, finally,
    until, every, after and while.  The reason they are written this way
@@ -2273,6 +2334,10 @@ Table of Contents
    To leave the loop the moment an event occurred, with no action, write
    an empty until body: } until "event.foo" { }.
 
+   The topic of an until may carry a session selector (Section 6.6):
+   "sess:topic" subscribes the cycle's buffer on the session the prefix
+   names, and a bare topic on the current default session (Section 9.2).
+
    every and after.  An every suffix and an after suffix are until
    clauses on events the language raises itself: the same anonymous
    event, raised at that interval by every and once by after.  The
@@ -2483,29 +2548,47 @@ Table of Contents
    -- a text, a number, null -- is the load-time diagnostic TypeError
    where the type is known and the runtime error TypeError where it is
    not, so a failure always carries the three members a catch clause
-   reads.  A throw abandons the statement that raised it: the statements
+   reads.  The KIND an Error carries MUST be an identifier-shaped name --
+   the word shape of Section 2.4, a letter or underscore followed by
+   letters, digits or underscores -- and nothing else; constructing an
+   Error whose kind is not is the runtime error TypeError.  The kind
+   shares no namespace with bindings: the shape is what is checked,
+   never the scope, so a kind may spell the same word as a variable.  A
+   throw abandons the statement that raised it: the statements
    after
-   it in the same block do not run.  try { body } catch Kind as e {
+   it in the same block do not run.  try { body } catch "Kind" as e {
    handler } finally { cleanup } catches a throw raised by body whose
-   error's kind equals Kind, exactly; the optional as e binds the Error,
-   whose members are kind, message and cause.  A try MAY carry any
-   number of catch clauses, chained without limit and tried in textual
-   order; of them at most one runs.  A bare catch catches any kind and,
-   when present, SHOULD come last, since a clause after it could never
-   run.  A catch clause does not catch a throw raised by another catch
-   clause, and a throw raised in finally supersedes the failure in
-   flight.  finally runs whether the body threw or not, and when the
-   body is left by return, break or continue.
+   error's kind the head's pattern matches; the optional as e binds the
+   Error, whose members are kind, message and cause.  A try MAY carry
+   any number of catch clauses, chained without limit and tried in
+   textual order; of them at most one runs.  A bare catch catches any
+   kind and, when present, SHOULD come last, since a clause after it
+   could never run.  A catch clause does not catch a throw raised by
+   another catch clause, and a throw raised in finally supersedes the
+   failure in flight.  finally runs whether the body threw or not, and
+   when the body is left by return, break or continue.
 
-   A catch clause matches one kind and does not match a kind that merely
-   begins the same way: catch "Hardware" does not catch
-   Error("HardwareError", ...).  There is no or-pattern and no kind
-   test in a catch head, so a program that wants either of two kinds
-   writes two clauses or a bare catch and a test inside it.  The kinds
-   a program MUST be prepared to catch are those of Appendix C: the
-   built-in runtime kinds, the OCP protocol kinds of Table 4 and the
-   kinds a host raises.  A program defines its own kinds for its own
-   failures and MUST NOT reuse one of theirs (Section 9.5).
+   The head of a catch clause is a KIND PATTERN, one of three forms:
+
+   *  a string holding a REGULAR EXPRESSION, matched in full against the
+      kind -- the whole kind, from its first to its last character, so a
+      pattern that merely begins the same way does not match: catch
+      "Hardware" does not catch Error("HardwareError", ...), while
+      catch "Hardware.*" does;
+
+   *  the bare wildcard "*" -- the string that names every kind, and so
+      the same thing a bare catch does, spelled out;
+
+   *  a list of strings -- a FINITE SET, each element a pattern of the
+      first form, any one of which may match: catch ["Net.*", "Io.*"]
+      as e catches both families with one clause.
+
+   A pattern that is not a valid regular expression is the load-time
+   diagnostic named by its implementation; it cannot silently match
+   nothing.  The kinds a program MUST be prepared to catch are those of
+   Appendix C: the built-in runtime kinds, the OCP protocol kinds of
+   Table 4 and the kinds a host raises.  A program defines its own kinds
+   for its own failures and MUST NOT reuse one of theirs (Section 9.5).
 
    A catch clause and a finally clause continue the try, so each is
    written on the line of the brace it continues (Section 6.1):
@@ -2570,7 +2653,7 @@ Table of Contents
       assert(len(xs) == 3)        # message defaults to "assertion failed"
 
    An assertion that fails is a throw and not a panic: a surrounding try
-   may catch it with catch AssertionError as e, and finally clauses run.
+   may catch it with catch "AssertionError" as e, and finally clauses run.
    A program uses assert to encode invariants it expects to hold, and a
    test harness uses it to record a failed expectation without ending the
    whole program.  assert of a non-boolean cond is the load-time
@@ -2580,7 +2663,7 @@ Table of Contents
 
       try {
          assert(speed <= limit, "overspeed")
-      } catch AssertionError as e {
+      } catch "AssertionError" as e {
          log("safety", e.message)   # caught, reported, execution continues
       }
 
@@ -2855,7 +2938,21 @@ Table of Contents
    waits for while it waits.  The topic of an on arm may be any
    expression of type str or of type Vec<str> (Section 6.7), not only a
    literal; it is evaluated once and the subscription made on the topic
-   it names.  A send arm's value, by contrast, is evaluated only when
+   it names.  The topic may carry a session selector: written
+   "sess:topic", the part before the first colon is the variable the
+   session object is bound to -- the same binding the @sess prefix of
+   Section 7.1.1 names -- and the part after it is the topic itself,
+   which is all the host sees; the arm waits on the session the prefix
+   names.  Written with an empty prefix -- ":topic" -- the arm waits on
+   the current default session, spelled out.  The selector grammar is
+   reserved: a colon whose prefix is not identifier-shaped
+   (Section 2.4), and a prefix that names no topic after it, are the
+   runtime error BadSession wherever the descriptor is read, and a
+   literal descriptor is rejected when the program is parsed.  A prefix
+   that names a binding holding no session, or a Vec of topics whose
+   selectors do not name one session throughout, is an error, as the
+   @sess prefix is (Section 9.2).  A send arm's value, by contrast, is
+   evaluated only when
    the arm is chosen (Section 6.6), so a send arm that is not chosen
    sends nothing and costs nothing to set up.
 
@@ -2888,7 +2985,10 @@ Table of Contents
    Section 6.5.2 defines: "device.+" matches one level, "device.#"
    matches every level beneath device.  A wildcard matches nothing on
    its own where the subscription is made and is therefore the error
-   BadTopic there, while + and # inside a topic are fine.
+   BadTopic there, while + and # inside a topic are fine.  The topic may
+   carry a session selector (Section 6.6): "sess:topic" subscribes on
+   the session the prefix names, and a bare topic on the current default
+   session (Section 9.2).
 
    Each arriving EVENT for a matching topic starts a new task running
    the handler; handler tasks run concurrently with the main flow and
@@ -2958,7 +3058,9 @@ Table of Contents
    accepted and matches the first concrete event it receives.  The
    topic may be any expression of type str or of type Vec<str>,
    evaluated once where the wait stands, as in the arms of a select
-   (Section 6.6).  A wait
+   (Section 6.6), and may carry a session selector the same way:
+   "sess:device.fault" waits on the session the prefix names, and a bare
+   topic on the current default session (Section 9.2).  A wait
    that is given no way to end -- no event and no timeout -- suspends
    until one arrives; a bounded wait is written with the after arm of
    select or, for a future, with within (Section 6.3).
@@ -3305,6 +3407,35 @@ Table of Contents
    A remote call needs a session to travel on.  With no session bound it
    is a runtime error naming the registration that could not be
    dispatched, never a silent null.
+
+7.1.2.  Test Declarations
+
+   test foo {
+      ...
+   }
+
+   A test declaration is a function of no parameters and no return
+   type, run only by the toolchain's test driver (RFC 0007): the
+   driver compiles the unit with tests enabled, runs the top level
+   once to set the globals the tests lean on, and then calls each
+   lifted test in turn.  The body is an ordinary block: every
+   statement of Section 6 is in scope, an `Error` it raises fails the
+   test, and an `Error` of kind `Skipped` (Appendix C) skips it.
+
+   A test is NOT compiled by default.  It is parsed, linted and
+   checked either way -- the diagnostics of Section 11 see a test body
+   exactly as they see a function body -- but it reaches neither the
+   bytecode nor its dump unless the driver turns tests on.  With tests
+   on, `test foo` compiles as the ordinary function `_test_foo`, of
+   no parameters; the `_test_` prefix is what keeps test and function
+   names in separate namespaces, so `test foo` and `fn foo` coexist,
+   and a program MUST NOT spell the `_test_` prefix itself.
+
+   The member form of the Core Profile instructions (Section 9.3) and
+   the session API (Section 9.10) are what a test uses to reach a
+   device: the driver's interpreter carries the stub host where a
+   test needs one, and the argument check of Section 9.3 applies to
+   the member spelling exactly as it does to the $ spelling.
 
 7.2.  Closures
 
@@ -3677,9 +3808,27 @@ Table of Contents
    the innermost enclosing `with dev = connect(...)` block or the
    innermost bare `connect()` established, and failing that the host's
    default session -- the one it opens before the program runs.  A prefix
-   that names a binding holding no session is the runtime error
-   TypeError.  A call to a session that has been closed (Section 9.10) is
-   the runtime error NotConnected.
+   that names a binding holding something other than a session is the
+   runtime error BadSession (Section 3.12): the selector names sessions
+   and nothing else.  A call to a session that has been closed
+   (Section 9.10) is the runtime error NotConnected.
+
+   A session is disconnected by the program in three ways.  The call
+   disconnect() closes the session unqualified calls travel on -- the
+   program's replacement of the default first, then the current scope's
+   default -- and yields null.  It takes no arguments: a session named
+   explicitly is disconnected through its own member, and a disconnect()
+   with no session open is the runtime error NotConnected, as any call
+   with no session is.  The member dev.disconnect() closes the session
+   dev holds, as dev.close() does (Section 9.10).  And reassigning a
+   variable closes the session the variable held: the binding owns the
+   session's lifetime, so writing anything else over dev ends the
+   session dev carried, even when that session is the one unqualified
+   calls travel on -- the default it was is forgotten with it, and the
+   unqualified calls fall back to the scope's default.  Rebinding the
+   same session to the same variable is not a reassignment.  A
+   disconnect is a close: it sends BYE (Section 9.10), is immediate and
+   one-way, and is idempotent.
 
 9.3.  Core Profile Bindings
 
@@ -3721,6 +3870,18 @@ Table of Contents
    registered remote function of the program's own (Section 7.1.1), not
    by a built-in of this document.  The `octo` meta object (Section 9.8)
    is a separate surface and does not carry them.
+
+   Each instruction is also a member of the session it travels on, and
+   that member form is the approved alternative entrance to the same
+   call: `dev.sense("temp")` is exactly the remote call
+   `$sense("temp")` makes, with the receiver naming the session instead
+   of the @sess prefix, and `dev.set_param(n, v)` likewise.  The
+   regular remote-call syntax stays in force beside it, and the two
+   spellings are held to the same signature: the argument list of the
+   member form is checked against Table 3 exactly as the $ form is.
+   The members a session carries beyond these are the reads and the
+   controls of Section 9.10; no Core Profile instruction is reachable
+   through the `octo` meta object (Section 9.8).
 
    Because each call is a future, awaiting it is the norm.  The `@sess`
    prefix names the session; with none the call uses the current scope's
@@ -3785,7 +3946,10 @@ Table of Contents
    it, drop it under a rate limit, fail the connection -- is not visible
    to the call, and a program that must know writes on the topic the
    peer raises in reply or waits for a state frame, as [RFC0004],
-   Section 6.4.2 requires for any other fire-and-forget send.
+   Section 6.4.2 requires for any other fire-and-forget send.  The name
+   may carry a session selector (Section 6.6): "sess:topic" publishes on
+   the session the prefix names, and a bare name travels on the current
+   default session (Section 9.2).
 
    publish sends an Event on the session, over the PubSub pipe, and the
    peer sees it as it sees any other topic.  The Event is not raised
@@ -3956,10 +4120,8 @@ Table of Contents
       +---------------+------------------------------------------+
       | octo.now()    | Wall-clock seconds (f64).                |
       +---------------+------------------------------------------+
-      | octo.sleep    | Alias of the sleep statement as a        |
-      |               | callable.                                |
-      +---------------+------------------------------------------+
-      | octo.mock     | Whether the host is simulating the peer. |
+      | octo.mock     | Whether this host simulates the peer     |
+      |               | (read-only).                             |
       +---------------+------------------------------------------+
 
                       Table 5: Meta Object octo
@@ -3974,7 +4136,7 @@ Table of Contents
    octo.now() is seconds since the Unix epoch as an f64 and moves with
    the wall clock, which may step it backwards; it is for stamping and
    for comparing against a peer's time, not for measuring an interval.
-   Measuring an interval is what octo.sleep and the timing statements
+   Measuring an interval is what sleep and the timing statements
    are for (Section 6.8), and a program that must be immune to a clock
    step takes its times from a device of its own.
 
@@ -3986,13 +4148,17 @@ Table of Contents
    session (Section 9.2), which is the one way a program redirects the
    built-in calls onto a session of its own.
 
-   Writing octo.mock = true (Section 2.4) is permitted and is the only
-   way a program influences host behaviour out of band; a host MAY
-   interpret it as a request to substitute a simulated peer.  A host
-   that offers it MUST say so in octo.version, because a program that
-   writes it and is talking to a real machine has done something the
-   operator of that machine cannot see.  Every other member of octo is
-   read-only, and a write to one is Immutable.
+   octo.mock is the host's self-description, and it is read-only: it
+   says whether THIS host simulates the peer, and a host that does MUST
+   say so in octo.version, because a program reading it is entitled to
+   know that what answers is not the machine.  It is not a switch a
+   program can throw -- what the operator of a machine believes is
+   connected is the operator's to decide, not the program's -- and a
+   write to it, as to every member of octo but octo.default, is the
+   runtime error Immutable.  The meta object carries no device call:
+   the Core Profile instructions of Section 9.3 are spelled with the $
+   prefix or as members of the session they travel on, and a method
+   call on octo that is not octo.now() is the host's to refuse.
 
 9.9.  Name Resolution Order
 
@@ -4057,7 +4223,11 @@ Table of Contents
    and yields null.  A close is immediate and one-way: the session is
    closed as soon as the call returns, and what the peer sends
    afterwards is discarded.  Closing a session that is already closed
-   does nothing.
+   does nothing.  dev.disconnect() is a spelling of dev.close(), and
+   disconnect() with no receiver closes the session unqualified calls
+   travel on (Section 9.2); reassigning the variable a session is bound
+   to closes it the same way, so a session is never kept open behind a
+   binding the program has overwritten.
 
    Closing a session ends it for the program in four ways at once, and a
    program MAY rely on all four:
@@ -4085,6 +4255,82 @@ Table of Contents
    program MUST NOT depend on one being left open: a peer may disappear
    at any time and the only way to learn of it is the failure of a call
    or of a wait (Section 13).
+
+9.11.  Session Members: dev.rpc and dev.tunnel
+
+   Two members of a session reach what the `$` spelling cannot say
+   inline: a procedure whose name the program computed at run time, and
+   the blob tunnels of [RFC0004], Section 6.6.  Both are members of the
+   session they travel on, and both have a bare spelling that is the
+   same call on the session unqualified calls travel on (Section 9.2).
+
+   dev.rpc(name, ...) is the dynamic-name spelling of the remote call
+   of Section 7.1.1: name is the procedure's name and the rest are its
+   arguments, bound by position exactly as a `$`-call binds them.  The
+   call travels on dev, parks the task, and resolves or fails as any
+   remote call does; a name that is not a str raises TypeError.  The
+   bare rpc(name, ...) is the same call on the default session.  The
+   seven Core Profile instructions of Section 9.3 travel the same way:
+   dev.rpc("sense", "temp") and @dev$sense("temp") are one call.
+
+      let f = "set_" + axis
+      await dev.rpc(f, 20)
+
+   dev.tunnel(name) opens a tunnel sub-session of dev -- the blob
+   tunnel of [RFC0004], Section 6.6, under the name name -- and blocks
+   until the peer answers the opening exchange, the way connect()
+   blocks until WELCOME.  It yields a value of the built-in composite
+   type Tunnel, which is to its session what the session is to
+   connect(): a resource with its own scope, its own members and its
+   own teardown.  A peer that refuses the tunnel, a session without
+   the blobtun capability (Section 9.10's dev.caps) and a name already
+   open on the same session throw, and leave no tunnel behind.
+   tunnel(name) is the same call on the default session.
+
+   A Tunnel is a full-duplex stream of bytes.  Its members are:
+
+   +---------------+---------------------------------------------------+
+   | Member        | Meaning                                           |
+   +---------------+---------------------------------------------------+
+   | t.name        | The name the tunnel was opened under.             |
+   +---------------+---------------------------------------------------+
+   | t.closed      | Whether the tunnel has been destroyed, or the     |
+   |               | session it rides has closed.                      |
+   +---------------+---------------------------------------------------+
+
+   and its methods are:
+
+   *  t.write(data) sends octets -- a bytes value verbatim, or a str
+      taken as its UTF-8 octets -- and yields how many the peer's
+      window accepted.  It blocks until the whole buffer has gone out,
+      pumping for window credit as it goes; fewer octets than were
+      given means the tunnel died mid-stream.  The stream is sliced
+      and flow-controlled by the host ([RFC0004], Section 6.6.3): the
+      program writes a stream and never sees a slice.
+
+   *  t.read() suspends until the next octets arrive and yields them
+      as bytes.  At the peer's end of stream ([RFC0004], Section 6.6.5)
+      it yields null once everything buffered is delivered.  A tunnel
+      that was destroyed throws NoTunnel, and a tunnel that failed
+      ([RFC0004], Section 5.9) throws TunnelReset.
+
+   *  t.finish() announces this direction's end; the other direction
+      survives ([RFC0004], Section 6.6.5).
+
+   *  t.close() destroys the tunnel at both ends ([RFC0004],
+      Section 6.6.6).  It is idempotent, and
+
+         with dev.tunnel("logs") as t { ... }
+
+      performs it on exit, exactly as a session's with block does
+      (Section 9.2).
+
+   A tunnel dies with its session: a session that closes destroys
+   every tunnel it carries, and t.closed reads true afterwards.  The
+   octets that arrived but were not read are the host's to buffer,
+   within the receive window of [RFC0004], Section 6.6.3; a program
+   that reads promptly keeps that window open for the peer, and a
+   read the program no longer reaches is not a leak the peer sees.
 
 10. Library and External Objects
 
@@ -4260,8 +4506,8 @@ Table of Contents
 
 10.2.3.  Sequences: len, range, sorted, zip and enumerate
 
-      len(x) -> i32
-      range(stop) -> Range<i32>
+      len(x) -> i64
+      range(stop) -> Range<i64>
       range(start, stop) -> Range
       range(start, stop, step) -> Range
       sorted(items, key = null, reverse = false) -> Vec<T>
@@ -4352,7 +4598,8 @@ Table of Contents
    type(x) yields the name of the type of x as a text, written the way
    an annotation is written (Section 2.8): type(1) is "i32",
    type(1.0) is "f64", type("a") is "str", type([1]) is "Vec<i32>",
-   type(2s) is "Duration" and type(chan i32) is "Channel<i32>".  It is
+   type(2s) is "Duration", type(chan i32) is "Channel<i32>", and
+   type of a session value is "Session".  It is
    a name for a log or for a person, and a program MUST NOT parse it:
    the text of a type is not part of the interface of this document.
 
@@ -4729,6 +4976,192 @@ Table of Contents
    throw and not a panic, so it is catchable (Section 6.2.1).  cond MUST
    be a boolean or the unknown-typed operand that resolves to one; any
    other value raises TypeError.
+
+10.2.18.  Command-Line Environment: env, env_args, env_keys, cwd, exe_path, pid and temp_dir
+
+      env(name, default = null) -> str?
+      env_args() -> [str]
+      env_keys() -> [str]
+      cwd() -> str
+      exe_path() -> str?
+      pid() -> int
+      temp_dir() -> str
+
+   env yields the value of the environment variable name from the
+   environment the program runs in, or default when name is not set,
+   and null when no default is given.  A name that is set but holds
+   bytes that are not valid Unicode counts as unset.  name MUST be a
+   str, or TypeError is raised.
+
+      env("HOME")            # the user's home directory, or null
+      env("TEMP", "/tmp")    # with a default
+
+   env_args yields the command line the program was started with, as a
+   list of strs, the program's own name first; a script that takes
+   arguments reads them there.  env_keys yields the names of every
+   variable in the environment, sorted, so a program can enumerate
+   what it was given.  All of these are reads: none of them changes
+   the environment, and what they yield is whatever the process was
+   started with.
+
+   The rest report the process itself, as a script that works with
+   files and with other programs wants them.  cwd yields the current
+   working directory, which a relative path of Section 10.2.19
+   resolves against; exe_path yields the path of the running
+   program's own executable, or null when the system does not say;
+   pid yields the process id of the running program; temp_dir yields
+   the directory for temporary files.  None of them takes an
+   argument, and none of them changes anything.
+
+10.2.19.  File Input and Output: read_file, read_bytes, write_file, write_bytes, append_file, file_exists, file_meta, list_dir, make_dir, make_dirs, remove_file, remove_dir, copy_file and rename
+
+      read_file(path) -> str
+      read_bytes(path) -> bytes
+      write_file(path, content) -> null
+      write_bytes(path, data) -> null
+      append_file(path, content) -> null
+      file_exists(path) -> bool
+      file_meta(path) -> {}
+      list_dir(path) -> [str]
+      make_dir(path) -> null
+      make_dirs(path) -> null
+      remove_file(path) -> null
+      remove_dir(path) -> null
+      copy_file(from, to) -> null
+      rename(from, to) -> null
+
+   The file functions bind the file system of the machine the program
+   runs on.  Every path is a str, or TypeError is raised, and a
+   relative path resolves against the process's working directory, as
+   the operating system resolves it.  A failure of the underlying
+   operation -- a file that is not there, a directory that is not
+   empty, a permission denied -- throws with an Error of kind IOError
+   (Appendix C) carrying the path and the system's message, so a
+   program can catch it (Section 6.2.1).
+
+   read_file yields the file's whole content as a str; a file whose
+   bytes are not valid UTF-8 is an error, and read_bytes is the form
+   that yields any file's content as a bytes value.  write_file writes
+   a str to the file and write_bytes a bytes value: the file is
+   created when it does not exist and truncated to the new content
+   when it does; append_file adds the str at the end of the file
+   instead, creating the file when it is not there.  All five yield
+   null, and none of them creates a directory: the parents of a
+   written file must already be there.
+
+   file_exists is true when something lives at path -- a file, a
+   directory, a symlink -- and false otherwise; it never throws.
+   file_meta yields a map describing what is at path: size, its
+   length in bytes; is_file and is_dir; readonly, whether the
+   permission bits allow writing; and modified, the time of the last
+   modification in seconds since the Unix epoch, or null when the
+   system does not say.  A path that is not there is an error, unlike
+   file_exists.
+
+   list_dir yields the names of the entries of the directory at path,
+   sorted, as a list of strs; a name that is not valid Unicode is read
+   with its lossy rendering.  make_dir creates the directory at path
+   and fails when a parent of it is missing; make_dirs creates it and
+   every missing parent.  remove_file deletes the file at path;
+   remove_dir deletes the directory at path, which MUST be empty -- a
+   tree is emptied by the program that filled it.  copy_file copies
+   the file at from to to, creating or truncating it, together with
+   its permission bits; rename moves from to to, for a file or a
+   directory, failing when to already exists.  Both take the source
+   first and the destination second.
+
+      write_file("notes.txt", "first line\n")
+      append_file("notes.txt", "second line\n")
+      println(read_file("notes.txt"))   # both lines
+      for name in list_dir(".") { println(name) }
+
+10.2.20.  Session and Tunnel Members
+
+   A session and a tunnel are built-in composite values whose members
+   are the host binding's to answer, not functions of this library;
+   their semantics are Sections 9.10 and 9.11, which define them.
+   Their surface, collected here for the type system's sake:
+
+      dev.rpc(name, ...)      # a remote call, name computed at run time
+      dev.tunnel(name)        # opens a Tunnel sub-session
+      rpc(name, ...)          # the same call on the default session
+      tunnel(name)            # the same open on the default session
+
+      t.write(data) -> int    # octets out; how many the window accepted
+      t.read() -> bytes?      # octets in; null at the peer's end of stream
+      t.finish() -> null      # end this direction (RFC0004 6.6.5)
+      t.close() -> null       # destroy the tunnel (RFC0004 6.6.6)
+      t.name                  # str, read-only
+      t.closed                # bool, read-only
+
+   A Tunnel is equal to the tunnel it names -- its session and the name
+   it was opened under -- and to no other, so two bindings of one
+   tunnel compare equal the way two bindings of one session do.  A
+   tunnel is a resource: a binding that leaves its scope destroys the
+   tunnel it holds, as a session binding's leaving its scope closes the
+   session (Section 9.2), and with name = expr { } is the scoped
+   spelling of both.  A tunnel value never outlives its session, and
+   using one whose session is closed throws NotConnected (Section 9.10).
+
+10.2.21.  Dynamic Execution: eval and exec
+
+   eval and exec run OctoScript source supplied at runtime, as a string.  They
+   are ordinary built-in calls: the compiler does NOT desugar them into special
+   bytecode, and a call to eval(expr) or exec(expr) lowers exactly like any
+   other built-in call.  The dynamic parse-and-run happens at runtime, inside
+   the virtual machine, when the call is recognized by the function address of
+   the built-in (the same late-binding mechanism sleep and input use).  This
+   keeps the language's static guarantees -- type-checked conditions, imported
+   signatures, the linter -- intact for the surrounding program, while the text
+   handed to eval/exec is itself checked only when it runs.
+
+      eval(s)   -- parse and run the OctoScript source s as a program and yield
+                   the value of its last top-level expression, or null when s has
+                   no trailing expression.  Side effects (var declarations,
+                   octo calls, file I/O) affect the running program exactly as if
+                   the code had been written in place.
+
+      exec(s)   -- parse and run s for its side effects and always yield null.
+                   Use exec when the code is statements (or its value is unused)
+                   and eval when the code is an expression whose result you need.
+
+   Both take exactly one argument, which must be a string; any other arity or
+   type is a throw of kind BadArity or BadArgument respectively.
+
+   The dynamically run program shares the caller's global scope, output sink,
+   host binding and session set.  Concretely:
+
+     * built-ins (print, len, octo.*, connect, ...) are visible and behave as
+       usual;
+     * a var declaration inside the dynamic code lands in the shared global
+       scope and is visible to the enclosing program afterwards;
+     * a plain let declaration is local to the dynamic run and is discarded
+       when it returns -- the dynamic code does NOT see the enclosing program's
+       lexical (let) locals, only its globals (var and built-ins).  This mirrors
+       the lexical-scoping rule of Section 7.3.
+
+   A parse or compile error in s is thrown as a catchable error of kind
+   EvalError; a runtime error raised while s runs propagates out as if it had
+   occurred at the eval/exec call, and is therefore catchable by a try around
+   that call.  The dynamically compiled unit is compiled against the current
+   constant, pattern and function-proto pools, so closures and functions
+   defined earlier remain callable from within s.
+
+   The error carries the source of s itself (not the enclosing program) alongside
+   its span, so when it is reported the caret is drawn under the offending
+   fragment inside s -- exactly where the problem is -- rather than at the wrong
+   offset in the program that called eval/exec (RFC 0003, section 10.2.21).
+
+   Examples:
+
+      let f = eval("1 + 2")              # f == 3
+      exec("var x = 10")                 # x is now a global
+      let g = eval("fn sq(n) { n * n }\n sq(4)")   # g == 16
+      try {
+          eval("let y = 1 / 0")          # raises a RuntimeError, caught here
+      } catch as e {
+          println(e.kind)                # "RuntimeError"
+      }
 
 10.3. Modules
 
@@ -5381,9 +5814,9 @@ Table of Contents
       chose; a host that logs these MUST treat their contents as data
       and not as text to be interpreted, and MUST NOT let a log line
       forge a frame boundary.  octo.mock makes the same point from the
-      other side: a flag the program can set changes what the operator
-      of the machine believes is connected, and a host that honours it
-      MUST say so where the operator will see it.
+      other side: what the operator of a machine believes is connected
+      is the operator's to decide, and a host that simulates a peer
+      says so where both the program and the operator will see it.
 
    Finally, the failure model is part of the surface: a program that
    catches everything and continues has declared that it will drive a
@@ -5447,7 +5880,7 @@ Appendix A. Collected Grammar (ABNF)
 
       program      = stmt *( [newline] stmt ) [newline]
 
-           stmt        = let-stmt / fn-def / struct-def / impl-def
+           stmt        = let-stmt / fn-def / test-def / struct-def / impl-def
                        / mod-stmt / import-stmt
                        / if-stmt / for-stmt / while-stmt / loop-stmt
                        / match-expr / try-stmt / with-stmt
@@ -5561,7 +5994,13 @@ Appendix A. Collected Grammar (ABNF)
 
            try-stmt    = "try" block *( catch-clause ) [ "finally" block
                        ]
-           catch-clause= "catch" [ expr ] [ "as" name ] block
+           catch-clause= "catch" [ catch-kind ] [ "as" name ] block
+           catch-kind  = dq-string / "[" dq-string *( "," dq-string ) "]"
+                       # a dq-string is a regular expression matched in full
+                       # against the failure's kind; the bare "*" is the
+                       # wildcard that names every kind; the bracketed form
+                       # is a finite set, any of which may match
+                       # (Section 6.2)
            # a catch clause and a finally clause continue the try, and
            # are
            # written on the same line as the brace that precedes them
@@ -5638,6 +6077,11 @@ Appendix A. Collected Grammar (ABNF)
            fn-def      = [ "pub" ] [ "async" ] "fn" name
                        "(" [ param *( "," param ) ] ")" [ "->" type ]
                        block
+           test-def    = "test" name block
+                       # a zero-parameter function run only by the toolchain's
+                       # test driver (Section 7.1.2); not compiled unless the
+                       # driver turns tests on, and compiled then as the
+                       # function "_test_" name
            param       = [ "mut" / "$" ] bind-target [ ":" type ]
                       [ "=" expr ]
                       / "..." bind-target [ ":" type ]
@@ -5709,8 +6153,11 @@ Appendix A. Collected Grammar (ABNF)
            # a literal (Section 3.9)
            tuple       = "(" [ expr *( "," expr ) [ "," ] ] ")" / "(,)"
            vec-lit     = "[" [ elem *( "," elem ) [ "," ] ] "]" / "[,]"
-           map-lit     = "{" [ expr ":" expr *( "," expr ":" expr ) ]
-                       [ "," ] "}" / "{:}"
+           map-lit     = "{" [ map-pair *( "," map-pair ) ] [ "," ] "}"
+                       / "{:}"
+           map-pair    = name ":" expr / expr ":" expr
+           # a key written as a bare name directly followed by ":" is the
+           # text of that name (Section 3.3); "(name):" is the variable
            set-lit     = "{" [ elem *( "," elem ) [ "," ] "}" / "{,}"
            elem        = "..." expr / expr
            # an element may be spread (Section 3.8); the empty forms are
@@ -5727,7 +6174,8 @@ Appendix A. Collected Grammar (ABNF)
            # at most one for clause and any number of if clauses; the
            # iterable is evaluated once and the result built in the
            # order
-           # the iteration yields (Section 5.4)
+           # the iteration yields (Section 5.4); the key is always an
+           # expression, so a bare name there is the iteration variable
 
            block       = "{" stmt *( [newline] stmt ) [newline] "}"
            # a block has the value of its last statement (Section 5.7),
@@ -5895,19 +6343,23 @@ Appendix C. Built-in Error Kinds
       | NotConnected     | no session is open, or the one     | §9.2,  |
       |                  | named has been closed              | §9.10  |
       | BadUri           | URI is malformed                   | §9.2   |
+      | BadSession       | a session selector names something | §6.6,  |
+      |                  | other than a session               | §3.12  |
       | BadTopic         | topic name is malformed            | §6.7   |
-      | IOError          | input or output operation failed   | §10.2.8|
+      | IOError          | input or output operation failed   | §10.2.8,|
+      |                  |                                    | §10.2.19|
       | AccessDenied     | a resource may not be accessed     | §10.2  |
       | NotFound         | a named resource does not exist    | §10.2  |
       | AlreadyExists    | resource already exists            | §10.2  |
       | StackOverflow    | the call stack was exhausted       | §6.10  |
       | OutOfMemory      | the runtime could not allocate     | §6.10  |
       | ResourceBusy     | a resource is held or unavailable  | §6.10  |
+      | Skipped          | a test declared itself skipped     | §7.1.2 |
       +------------------+------------------------------------+--------+
 
                      Table C.1: Runtime built-in kinds
 
-   The runtime kinds are listed in seven groups, in the order of the
+   The runtime kinds are listed in eight groups, in the order of the
    table:
 
    *  values and types: OutOfRange to BadFormat;
@@ -5918,11 +6370,15 @@ Appendix C. Built-in Error Kinds
 
    *  concurrency and time: Cancel to Deadlock;
 
-   *  sessions and addressing: NotConnected to BadTopic;
+   *  sessions and addressing: NotConnected, BadSession to BadTopic;
 
    *  host resources and I/O: IOError to AlreadyExists;
 
-   *  runtime limits: StackOverflow to ResourceBusy.
+   *  runtime limits: StackOverflow to ResourceBusy;
+
+   *  the test driver: Skipped (Section 7.1.2) -- a kind only a test
+      body's throw raises, and one the driver catches to mark the test
+      skipped rather than failed.
 
    Four of these carry notes that belong with them rather than with the
    section that raises them.
