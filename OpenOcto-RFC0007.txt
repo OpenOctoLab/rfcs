@@ -147,6 +147,16 @@ Table of Contents
       +---------------------+--------------+-------------------------+
       | --auth-token        | secret       | Token for the session.  |
       +---------------------+--------------+-------------------------+
+      | --auth-psk          | secret       | Pre-shared key for the  |
+      |                     |              | hmac method of          |
+      |                     |              | [RFC0004], 6.2; it is   |
+      |                     |              | also the [RFC0009]      |
+      |                     |              | master secret.          |
+      +---------------------+--------------+-------------------------+
+      | --no-compress       | none         | Offer no compression on |
+      |                     |              | the endpoint session    |
+      |                     |              | ([RFC0004], 3.6).       |
+      +---------------------+--------------+-------------------------+
       | --ca                | path         | Trust anchors for       |
       |                     |              | ocps:// [RFC0010].      |
       +---------------------+--------------+-------------------------+
@@ -167,6 +177,21 @@ Table of Contents
    it -- through connect() or an unqualified remote call.  It probes
    nothing on start-up and starts nothing itself; what listens at the
    endpoint is the program's business, not the toolchain's.
+
+   The endpoint session -- the one an unqualified remote call travels on
+   when the program opens none of its own -- takes two credentials from
+   the command line: --auth-token presents a bearer ticket, and
+   --auth-psk authenticates with the hmac method of [RFC0004] Section
+   6.2 and, from the same secret, the frame keys of [RFC0009].  Neither
+   changes what a program may do: a program that names its own session
+   with connect() chooses its own credentials, and the command line is
+   only the fallback for the session it does not name.
+
+   The protection in force is not a command-line matter: the URI scheme
+   selects it ([RFC0003], Section 9.6), so a deployment that wants
+   encryption writes an ocp-fls:// or ocps:// endpoint and not a flag.
+   Compression is offered unless --no-compress turns the offer off, and
+   an algorithm is used only when the peer agrees one.
 
    Three further options tune the interpreter and change nothing a
    program can observe: --no-warn suppresses the advisory lint pass that
@@ -326,9 +351,10 @@ Table of Contents
 
    *  The interpreter evaluates the program text it is given and MAY
       read its environment.  Only trusted programs SHOULD be run.
-   *  A credential given on the command line -- the token --auth-token
-      carries -- is visible to other processes on the same host through
-      the process table; prefer a channel that does not put it there.
+   *  A credential given on the command line -- the token of
+      --auth-token, the pre-shared key of --auth-psk -- is visible to
+      other processes on the same host through the process table; prefer
+      a channel that does not put it there.
    *  --ca replaces the operating system's trust store for ocps://
       [RFC0010].  A trust anchor broader than the deployment means to
       trust makes every peer signed by it a peer, so the set SHOULD name

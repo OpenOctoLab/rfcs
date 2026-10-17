@@ -551,6 +551,17 @@ Table of Contents
    Everything in Section 5 applies, with the differences below and with
    the rules of [RFC0004], Section 7.2, for the frames it carries.
 
+   The reference implementation of this document carries the OCP half of
+   this transport and no DTLS engine: the rules an engine must meet, the
+   ALPN check of Section 4.2, the exporter of Section 4.5 and the driver
+   that carries a session over one are all there, and the handshake is
+   the application's.  It is there because no DTLS implementation this
+   project can link offers the extension of Section 4.2 -- the pure-Rust
+   DTLS stacks implement neither ALPN nor a general exporter -- and
+   because a conformant engine without ALPN would be a transport OCP
+   MUST NOT use.  A deployment that has such an engine passes it in
+   through that trait; nothing else in this document changes.
+
 6.1.  Establishing a Session
 
    The client completes the DTLS handshake, offering "ocp/1" through

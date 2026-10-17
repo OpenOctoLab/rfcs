@@ -3754,6 +3754,7 @@ Table of Contents
       let sec = connect("ocp-fls://arm.example", {
          algs: {enc: ["chacha20-poly1305"], itg: ["crc32"]}
       })
+      let lean = connect("ocp://arm.example", {algs: {comp: []}})  # no compression
       let tls = connect("ocps://arm.example:16286", {
          tls: {server: "arm.example"}
       })
@@ -4041,6 +4042,19 @@ Table of Contents
    *  Frame-layer security [RFC0009].  ocp-fls:// (port 6357).  The
       host offers the algs of [RFC0009], Section 9: enc, itg and ztr,
       each a most-preferred-first list, and requests the "ext" header.
+      The same member carries [RFC0004], Section 3.6's comp list; an
+      absent key or an empty list offers no compression, and compression
+      is never a requirement -- nothing is switched on that WELCOME does
+      not confirm.
+
+      A secure scheme [RFC0010] takes one more key, auth, whose value
+      names the authentication method where the transport is the
+      credential: auth: "tls-exporter" authenticates the session with
+      the exporter of the TLS or QUIC session it runs in (Section 4.5 of
+      [RFC0010]), which no relay can forward.  It is a usage error on a
+      cleartext scheme, which has no exporter to prove, and it is not
+      written as a secret because the program holds none: the value is
+      the name of a method, not a credential.
       A primitive is switched on only when WELCOME confirms a name the
       host offered; silence never switches one on.  If the host requires
       a primitive WELCOME does not confirm, connect() throws
@@ -4211,12 +4225,19 @@ Table of Contents
    | dev.peer      | The host and port the session reached, as written |
    |               | in the URI.                                       |
    +---------------+---------------------------------------------------+
+   | dev.compression | The compression algorithm the handshake agreed  |
+   |               | ([RFC0004], Section 3.6), or null when the      |
+   |               | session runs uncompressed.                       |
+   +---------------+---------------------------------------------------+
    | dev.closed    | Whether close has been called on it.              |
    +---------------+---------------------------------------------------+
 
-   These four are read-only and reading dev.caps on a peer that declared
+   These five are read-only and reading dev.caps on a peer that declared
    no capability yields false rather than an absent key, so a program
    tests dev.caps["blobtun"] and not dev.caps.contains("blobtun").
+   Compression is negotiated silently -- a peer that offers nothing
+   agrees nothing -- so dev.compression is how a program tells a
+   compressed session from an uncompressed one.
 
    dev.close() closes the session.  It sends BYE [RFC0004], Section 5.7
    where the peer is one that answers it, does not wait for the answer,
