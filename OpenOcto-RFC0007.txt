@@ -337,7 +337,9 @@ Table of Contents
        stays at the end of that line, separated by two spaces, and a
        comment on its own line stays on its own line at the current
        indentation.  A multi-line block comment is re-emitted line by
-       line, keeping its relative indentation.
+       line, keeping its relative indentation.  A documentation comment
+       ([RFC0003], Section 2.2.1) keeps its marker: the formatter never
+       rewrites `##` as `# #` or `/**` as `/* *`.
    10. Blank lines are preserved, with consecutive blank lines collapsed
       into one; blank lines at the beginning of a file are dropped; no
       blank line is introduced inside brackets.

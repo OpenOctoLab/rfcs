@@ -62,6 +62,7 @@ Table of Contents
    2.  Lexical Structure
      2.1.  Input Encoding and Whitespace
      2.2.  Comments
+         2.2.1.  Documentation Comments
      2.3.  Line Continuation
      2.4.  Identifiers and Keywords
      2.5.  Operators and Punctuation
@@ -254,7 +255,60 @@ Table of Contents
    A block comment begins with /* and ends with */ and MAY span lines.
    An unterminated block comment is a lexical error.
 
-   Comments are whitespace for the purposes of the grammar.
+   Comments are whitespace for the purposes of the grammar.  Two comment
+   forms carry documentation instead and are specified in Section 2.2.1.
+
+2.2.1.  Documentation Comments
+
+   A docstring is a documentation comment attached to the declaration
+   that follows it.  Two doc-comment forms exist.
+
+   A line doc comment is a run of consecutive lines whose first
+   non-whitespace characters are ##.  The third character MUST NOT be #,
+   so ### begins an ordinary line comment and not a doc comment.  The
+   lines need only be the last comments before the declaration.
+
+      ## Add two numbers.
+      ## The result is an integer.
+      fn add(a: i32, b: i32) -> i32 {
+          a + b
+      }
+
+   A block doc comment begins with /** and ends with the first */; it is
+   the documentation form of the block comment of Section 2.2.
+
+      /**
+       * The arm of the robot.
+       *
+       * angle is in degrees.
+       */
+      struct Arm {
+          ## The current angle.
+          angle: f64,
+      }
+
+   A doc comment attaches to the next declaration when at most one line
+   break separates it from that declaration.  A blank line, another
+   statement, an ordinary comment or an unattached doc comment between
+   them means the doc comment documents nothing.  A doc comment MAY
+   precede the declaration's pub, async or remote modifier.  The
+   declarations that carry documentation are fn, remote fn, test,
+   struct, a struct field, mod, impl, an impl method, let, const, var
+   and import.
+
+   Consecutive ## lines form one docstring, joined with a line feed; the
+   ## and one following space are removed.  A /** */ docstring removes
+   its markers; if every non-blank line in it starts with * (the layout
+   above), one * and one following space are removed from each line.
+   The resulting text is Markdown, and implementations expose it
+   unchanged to editors and documentation tools.  An empty docstring
+   attaches no documentation.
+
+   A doc comment remains a comment for the grammar: it is whitespace,
+   it is preserved by the formatter, and it has no effect on execution.
+   An ordinary comment is never documentation.  A declaration has at
+   most one docstring; doc comments that do not attach are ordinary
+   comments.
 
 2.3.  Line Continuation
 
