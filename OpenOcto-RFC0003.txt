@@ -5970,6 +5970,9 @@ Table of Contents
    [RFC0011]  Yang, S., "OCP Air: an OCP Subset for MCUs", RFC 0011,
               September 2026.
 
+   [RFC0014]  Yang, S., "OCP over Bluetooth Low Energy (BLE)", RFC 0014,
+              October 2026.
+
    [IETF-RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
               Requirement Levels", IETF BCP 14, IETF RFC 2119,
               March 1997.
