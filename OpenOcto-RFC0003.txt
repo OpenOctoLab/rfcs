@@ -702,7 +702,7 @@ Table of Contents
    T[]? is Option<Vec<T>> and T?[] is Vec<Option<T>>.
    A type name followed by parenthesised arguments is a constructor of
    that type, as in
-   Vec<i64>(), i64("42") and Point(x = 1.0) (Section 3.9).  The language
+   i64("42") and Point(x = 1.0) (Section 3.9).  The language
    defines no subtyping beyond its built-in kinds: T? is the only type
    that holds null, and a value of type T is not a T? by assignment -- a
    name annotated T? holds null or a T, and nothing narrows it back
@@ -997,6 +997,12 @@ Table of Contents
    appear more than once in one position and MAY be mixed with single
    values.
 
+   A spread of an iterable into a list literal is the same value as the
+   `+` of the list's runs, which is how the reference implementation
+   lowers it: `[0, ...xs, 9]` is `[0] + list(xs) + [9]`.  `list(x)`
+   (Section 10.2.3) is the conversion that makes an iterable a list, so
+   a spread copies its elements instead of sharing the container.
+
       let tail = [3, 4]
       let all = [1, 2, ...tail]          # [1, 2, 3, 4]
       fn add(a, b, c, d) { a + b + c + d }
@@ -1041,7 +1047,7 @@ Table of Contents
 
       let p: Point = Point(x = 1.0, y = 2.0)
       let r: Reading = Reading(1712, "temp")
-      let path: Vec<Point> = Vec<Point>([])
+      let path: Vec<Point> = []
       p.x = 3.0                   # a field is a member
       r[1] = "pressure"           # a slot is an index
 
@@ -1714,17 +1720,19 @@ Table of Contents
    negative; the stop is the boundary past the last element, or the
    boundary before the first one when the step is negative.  Two
    markers with nothing between them are one range whose stop is
-   omitted; the form is written .... or, with a space, .. .. , and
-   with no step after it is the same as one marker: xs[....] and
-   xs[..] are the same slice.  The dots are read in pairs, so a run
-   of them is never the spread token of Section 3.8.  A step written
-   after two markers is the step of that range and not a bound:
-   xs[....-1] is the whole list reversed, the same slice as
+   omitted; the form is written .. .. , with a space between the pairs,
+   and with no step after it is the same as one marker: xs[.. ..] and
+   xs[..] are the same slice.  The dots are read in pairs, and the two
+   pairs of a step-only slice are separated by a space -- `xs[.. ..-1]`,
+   never `xs[....-1]`, which is a lexical error rather than a token.
+   A step written after the second pair is the step of that range and
+   not a bound:
+   xs[.. ..-1] is the whole list reversed, the same slice as
    xs[-1.. .. -1], while xs[..-1] is every element but the last.
    The reading is by markers and not by eye: count the .. pairs, and
    what follows a pair is a stop, and what follows the second pair is a
    step -- so in xs[..-1] the -1 is the stop of the only pair, and in
-   xs[....-1] it is the step after the second pair.  The
+   xs[.. ..-1] it is the step after the second pair.  The
    rules are read in the order written and their pieces joined into
    one value:
 
@@ -1740,7 +1748,7 @@ Table of Contents
       xs[-3..]                         # [8, 9, 10]
       xs[8..2..-2]                     # [8, 6, 4]
       xs[..-1]                         # [0, 1, ..., 9]
-      xs[....-1]                       # [10, 9, ..., 0]
+      xs[.. ..-1]                      # [10, 9, ..., 0]
       xs[6; 0..3; ..2; 0..4..2; ..9..3]
                                        # [6, 0,1,2, 0,1, 0,2, 0,3,6]
 
@@ -1892,25 +1900,29 @@ Table of Contents
    as in async x => await $sense(x), and it yields a future like any
    other async function (Section 7.1).
 
-5.6.  Scope Views: globals and locals
+5.6.  Scope Views: octo.globals and octo.locals
 
-   The reserved name globals refers to the top-level scope and locals to
-   the immediately enclosing function scope.  Reading globals.name or
-   locals.name inspects a binding; assignment to them is not permitted
-   through the view.  They exist so a debugger or a host hook (Section
-   9.1) can inspect state without a special API.
+   Two members of the instance meta object (Section 9.8) read a scope:
+   octo.globals is the top-level scope and octo.locals the immediately
+   enclosing function scope, each as a map of names to values.  They are
+   members, not reserved words, so a program may still name a binding
+   globals or locals without shadowing anything.  Reading
+   octo.globals.name or octo.locals.name inspects a binding; assignment
+   through the view is not permitted.  They exist so a debugger or a
+   host hook (Section 9.1) can inspect state without a special API.
 
    Both are ordinary reads of a binding, so a name that is not bound
    where the view looks is the same error as any other unresolved name
    (Section 9.9), and reading a binding of an inner scope through
    globals reports that it is not there rather than reaching for it.
-   locals names the innermost function scope only: in a block nested
-   three deep inside a function it is still that function's scope, not
-   the block's, and at the top level of a program, where there is no
-   function, locals holds nothing and every read through it is an
-   error.  Neither view may be used as an assignment target, and
-   neither is a binding: a program cannot declare globals or locals,
-   which is what makes them safe to expose (Section 7.3).
+   octo.locals names the innermost function scope only: in a block
+   nested three deep inside a function it is still that function's
+   scope, not the block's, and at the top level of a program, where
+   there is no function, the view is an empty map and every read
+   through it is null.  For a name that is not bound, the same holds:
+   the view is a map, so a read yields null rather than reaching for a
+   binding of an enclosing scope.  Neither view may be used as an
+   assignment target.
 
 5.7.  The Value of an Expression and of a Block
 
@@ -5979,11 +5991,9 @@ Appendix A. Collected Grammar (ABNF)
            # a
            # slice may leave it out; two markers with nothing between
            # them
-           # may be written .... or .. .. , and a third marker takes a
-           # step
-           # or nothing at all, which is what makes ....-1 a step and
-           # ..-1
-           # a stop
+           # may be written .. .. , with a space between the pairs, and a
+           # third marker takes a step or nothing at all, which is what
+           # makes .. ..-1 a step and ..-1 a stop
            call        = "(" [ call-arg *( "," call-arg ) ] ")"
            call-arg    = name ":" expr / expr / "..." expr
                        / "@" name
@@ -6094,9 +6104,9 @@ Appendix A. Collected Grammar (ABNF)
                        "(" [ call-arg *( "," call-arg ) ] ")"
            chan-expr   = "chan" type [ "(" expr ")" ]
            chan-type   = "chan" type
-           # a type name used as a constructor: Vec<i64>(), i64("42"),
-           # Point(x = 1.0), chan i64(4); for a primitive it is the
-           # Section 10.2 conversion function
+           # a type name used as a constructor: i64("42"), Point(x = 1.0),
+           # chan i64(4); for a primitive it is the Section 10.2 conversion
+           # function
            # "..." and '...' are one-line strings and never interpolate;
            # `...` is a template string, may span lines, and
            # interpolates
