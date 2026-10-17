@@ -4394,6 +4394,28 @@ Table of Contents
    that adds a native function named push is adding a different thing
    (Section 9.1).
 
+   A member that changes its receiver yields that receiver, so the
+   chain goes on: xs.push(3).sort().reverse() is three calls on one
+   list, each writing into the list the first named.  A member that
+   yields anything else -- len, get, split, keys -- ends the chain
+   there: it hands back a value, and a member named on that value is a
+   new chain, as "a b c".split().len() reads, where split() closes the
+   first chain and len() begins the second on the list it yielded.  A
+   member that both changes the receiver and yields something else --
+   pop and remove for two -- ends the chain as well, because what
+   follows it reads the value it yielded and not the container.
+
+   The two forms are one call for a user type too, where the type
+   declares the member (Section 3.9): with len declared in impl P,
+   len(p) and p.len() are one call and the type's own body answers
+   both.  The mounting is passive.  A core function acquires no
+   knowledge of any type -- it keeps the reading it already has, and
+   len(d) still counts the entries of d -- and a type that declares
+   nothing is untouched by this paragraph.  A field, unlike a method,
+   MUST NOT be named after a core member: a field is data and that
+   name is the library's, so a struct definition that writes one is
+   the load-time diagnostic ConflictingMember (Appendix C).
+
 10.2.1.  Conversion Functions
 
       bool(v) -> bool              char(v) -> char
@@ -6420,6 +6442,7 @@ Appendix C. Built-in Error Kinds
       | BadAnnotation    | unknown or malformed type annotation      |
       | UnknownName      | name used where no scope declares it      |
       | ReservedName     | a reserved name is defined                |
+      | ConflictingMember| a user definition takes a core name      |
       | DuplicateDef     | name declared twice in one scope          |
       | DuplicateParam   | one parameter named twice                 |
       | BadSignature     | malformed parameter signature             |
@@ -6443,7 +6466,10 @@ Appendix C. Built-in Error Kinds
       reserved name being one this document claims for itself -- an
       error kind a program defines again, a name from Section 2.4, a
       conversion function of Section 10.2.1, or a magic name written
-      where Section 3.9 reserves it;
+      where Section 3.9 reserves it -- and ConflictingMember is the
+      same rule seen from a struct definition, whose field cannot take
+      a name the core library has already given to a member
+      (Section 10.2);
 
    *  declarations and signatures: DuplicateDef to BadDefault, a bad
       signature covering a mut mark in the wrong place, a default on a

@@ -8,17 +8,17 @@ Category: Standards Track                                 September 2026
 
 Abstract
 
-   OctoScript ships as several binaries behind one entry, octo.  The
-   interpreter (octoexec), formatter (octofmt) and checker (octolint)
-   are reached through octo subcommands -- "octo swim" (aliases "run",
-   "exec"), "octo squeeze" (aliases "fmt", "format") and "octo sift"
-   (aliases "lint", "check") -- and the package manager (tentacle)
-   through "octo grab" and "octo drop" and the rest of its verbs.  The
-   daemon (octod) and language server (octolsp) are separate products
-   and are not entered through octo.  This document specifies all three
-   interfaces, the files and environment variables they read, the
-   behaviour of the interactive mode, the policy that governs connecting
-   to and starting a daemon, and the exact formatting rules.
+   OctoScript ships as one binary, octo, whose subcommands are its
+   verbs: the interpreter ("octo swim", aliases "run" and "exec"), the
+   formatter ("octo squeeze", aliases "fmt" and "format"), the checker
+   ("octo sift", aliases "lint" and "check"), the interactive session
+   ("octo den"), the bytecode utilities, and the package manager
+   ("octo grab", "octo drop" and the rest of its verbs).  The daemon
+   (octod) and language server (octolsp) are separate products and are
+   not entered through octo.  This document specifies each verb's
+   interface, the environment it reads, the behaviour of the interactive
+   mode, the single endpoint it talks to and the one option that names
+   it, and the exact formatting rules.
 
 Status of This Memo
 
@@ -52,22 +52,17 @@ Table of Contents
    2. Conventions
    3. The Interpreter Command
    4. The REPL
-   5. Connection and Start-Up Policy
+   5. Connection Policy
      5.1.  Target Resolution
-     5.2.  Loopback Detection
-     5.3.  Start Policy
-     5.4.  Usage Errors
-   6. The Peer Record File
-   7. The Daemon Command
-   8. Descriptor Utilities
-   9. The Formatter Command
-   10. The Checker Command
-   11. Formatting Rules
-   12. Launcher Scripts
-   13. Security Considerations
-   14. IANA Considerations
-     15.1. Normative References
-     15.2. Informative References
+     5.2.  Usage Errors
+   6. The Formatter Command
+   7. The Checker Command
+   8. Formatting Rules
+   9. Security Considerations
+   10. IANA Considerations
+   11. References
+     11.1. Normative References
+     11.2. Informative References
    Appendix A. Environment Variables
    Appendix B. Exit Statuses
    Appendix C. Conformance Notes
@@ -75,14 +70,14 @@ Table of Contents
 
 1.  Introduction
 
-   OctoScript is several binaries behind one entry point, octo, which is
-   a wrapper that dispatches subcommands.  octoexec runs programs and
-   serves the REPL; tentacle is the package manager; octofmt formats
-   source; octolint checks it.  A subcommand is a verb, and every verb
-   has a primary spelling drawn from the octopus world the tools are
-   named for; the generic spellings other tools use are bound as visible
-   aliases of the same verb, so both reach it and the help shows the
-   mapping.  The verbs are:
+   OctoScript's toolchain is one binary, octo, which dispatches every
+   verb it offers.  A verb is a subcommand, and every verb has a primary
+   spelling drawn from the octopus world the tools are named for; the
+   generic spellings other tools use are bound as visible aliases of the
+   same verb, so both reach it and the help shows the mapping.  There
+   are no launcher scripts and no per-tool binaries behind it: what this
+   document calls "the interpreter" or "the formatter" is a verb of that
+   one binary.  The verbs are:
 
       swim     run programs              (aliases: run, exec)
       squeeze  format source             (aliases: fmt, format)
@@ -116,9 +111,12 @@ Table of Contents
    single line and is an Easter egg, not an interface.  octod (daemon)
    and octolsp (language server) are separate products, not under octo.
 
-   The tools are specified here as observable interfaces: command-line
+   The verbs are specified here as observable interfaces: command-line
    arguments, files read, output produced, exit status, and side
-   effects.  All user-facing messages are in English.
+   effects.  All user-facing messages are in English.  Anything a verb
+   does not name -- a peer, a transport, a configuration file -- the
+   toolchain assumes nothing about: the endpoint is the whole of what it
+   knows of the other side.
 
 2.  Conventions
 
@@ -129,62 +127,57 @@ Table of Contents
 
 3.  The Interpreter Command
 
-   The interpreter is the octoexec binary, entered through "octo swim"
-   or its aliases "octo run" and "octo exec"; it starts no REPL when
-   given no script; the REPL is "octo den" (Section 4).
+   The interpreter is the "swim" verb of octo, also spelled "run" and
+   "exec".  It starts no REPL: the REPL is "octo den" (Section 4), a
+   verb of its own.
 
       octo swim [options] [script ...]
 
       Operand / option     Argument      Meaning
-      +=====================+==============+===========================+
-      | Operand / option    | Argument     | Meaning                   |
-      +=====================+==============+===========================+
-      | script              | zero or more | Program files to execute. |
-      +---------------------+--------------+---------------------------+
-      | --config, -c        | path         | Device descriptor         |
-      +---------------------+--------------+---------------------------+
-      | --peer-config       | path         | Peer record file (Section |
-      +---------------------+--------------+---------------------------+
-      | --set               | KEY=VALUE    | Opaque descriptor         |
-      +---------------------+--------------+---------------------------+
-      | --daemon-host       | address      | Connect to this address.  |
-      +---------------------+--------------+---------------------------+
-      | --daemon-port       | port         | Connect to this port.     |
-      +---------------------+--------------+---------------------------+
-      | --auth-token        | secret       | Token for session         |
-      +---------------------+--------------+---------------------------+
-      | --auth-psk          | secret       | Pre-shared key for        |
-      +---------------------+--------------+---------------------------+
-      | --encrypt           | none         | Request session           |
-      +---------------------+--------------+---------------------------+
-      | --compress          | none         | Request session           |
-      +---------------------+--------------+---------------------------+
-      | --octo-id           | name         | Identifier of the         |
-      +---------------------+--------------+---------------------------+
-      | --verbose, -v       | none         | Report progress,          |
-      +---------------------+--------------+---------------------------+
-      | --color, --no-color | none         | Force or suppress colour  |
-      +---------------------+--------------+---------------------------+
+      +=====================+==============+=========================+
+      | Operand / option    | Argument     | Meaning                 |
+      +=====================+==============+=========================+
+      | script              | zero or more | Program files to run;   |
+      |                     |              | "-" is standard input.  |
+      +---------------------+--------------+-------------------------+
+      | --endpoint          | address      | Where the peer listens: |
+      |                     |              | host:port, or a URI     |
+      |                     |              | whose scheme names the  |
+      |                     |              | transport.              |
+      +---------------------+--------------+-------------------------+
+      | --auth-token        | secret       | Token for the session.  |
+      +---------------------+--------------+-------------------------+
+      | --ca                | path         | Trust anchors for       |
+      |                     |              | ocps:// [RFC0010].      |
+      +---------------------+--------------+-------------------------+
+      | --verbose, -v       | none         | Report progress.        |
+      +---------------------+--------------+-------------------------+
+      | --color, --no-color | none         | Force or suppress       |
+      |                     |              | colour.                 |
+      +---------------------+--------------+-------------------------+
 
-   With several program files, each file runs in its own interpreter
-   instance, the instances share one host environment, and identifiers
-   are assigned automatically in order (for example "octo0", "octo1").
-   With one file, the identifier defaults to a fixed name unless
-   --octo-id is given.  Each program emits the shutdown lifecycle event
-   when it finishes.
+   With no script, and with a script named "-", the program is read from
+   standard input.  With several program files each file runs in an
+   interpreter of its own; the interpreters share one host environment
+   and one endpoint.  There is no instance identifier: a program is
+   named by the file it came from, that name is what a diagnostic shows,
+   and nothing else about it is the toolchain's to invent.
 
-   If --set is given without an "=" the command fails with a usage
-   error.  A "KEY=VALUE" pair is forwarded verbatim; the interpreter
-   does not interpret the key or the value.
+   The interpreter connects to the endpoint only when a program asks for
+   it -- through connect() or an unqualified remote call.  It probes
+   nothing on start-up and starts nothing itself; what listens at the
+   endpoint is the program's business, not the toolchain's.
 
-   On start-up the interpreter probes the peer once.  A failed probe is
-   silent: it neither prints an error nor starts a daemon.  With
-   --verbose the outcome is reported, including the number of
-   instructions discovered.
+   Three further options tune the interpreter and change nothing a
+   program can observe: --no-warn suppresses the advisory lint pass that
+   precedes a run, --locate records per-op source spans so a runtime
+   error can show its line, and --jit selects the native backend in a
+   binary built with it.
 
    The exit status is zero on success; non-zero when a program file is
    missing, when lexing, parsing or evaluation fails, and when a usage
-   error is detected (Section 5.4 and Appendix B).
+   error is detected (Section 5.2 and Appendix B).
+
 
 4.  The REPL
 
@@ -207,133 +200,38 @@ Table of Contents
    5.  Input is remembered in a history file in the user's home
        directory.
    6.  The words "exit" and "quit", and an end-of-file, terminate the
-       session, which emits the shutdown lifecycle event.
+       session.
 
    Interrupting the current line abandons it and leaves the session
    running.
 
-5.  Connection and Start-Up Policy
+5.  Connection Policy
 
 5.1.  Target Resolution
 
-   The connection target is resolved from, in decreasing priority: an
-   explicit host and port from the command line; a peer record file,
-   which supplies the host, the port and optionally the credentials; and
-   the built-in defaults, namely the loopback address and port 6286.
-   Credentials given on the command line take precedence over the peer
-   record.
+   The endpoint is resolved from, in decreasing priority: the --endpoint
+   option; the OCTO_ENDPOINT environment variable; and the built-in
+   default, namely the loopback address and port 6286.  A program MAY
+   open further endpoints of its own with connect() ([RFC0003],
+   Section 9); those are the language's business, not the toolchain's.
 
-5.2.  Loopback Detection
+   Nothing here says what listens at the endpoint.  A peer is whatever a
+   program connects to; the toolchain neither probes it, starts it, nor
+   gives it a name of its own.
 
-   An address is local when it is the loopback address, the name
-   "localhost", the IPv6 loopback address, or any address starting with
-   "127.".  Every other address is remote.
-
-5.3.  Start Policy
-
-   A daemon is started by the interpreter only when the resolved address
-   is local and neither the host nor the port was given explicitly.  In
-   all other cases the interpreter connects only.  A descriptor and its
-   overrides are forwarded only when the address is local; for a remote
-   address they are ignored, because they describe buses of another
-   machine.
-
-   When a daemon is started and the connection then fails, the failure
-   message includes the output of the started daemon, so that the cause
-   is visible without a second command.
-
-5.4.  Usage Errors
+5.2.  Usage Errors
 
    A malformed option argument, an unknown option and an invalid option
    combination are usage errors: they are reported on the error stream
-   and the process exits with the usage status.
+   and the process exits with the usage status.  So is an option that
+   cannot apply at all -- --check or -w on standard input, which cannot
+   be rewritten.
 
-6.  The Peer Record File
 
-   A peer record is a TOML document whose "daemon" table records the
-   endpoint and optionally the credentials:
+6.  The Formatter Command
 
-      [daemon]
-      host = "127.0.0.1"
-      port = 6286
-      auth = "hmac"          # none | token | hmac
-      auth_token = "..."     # when auth = "token"
-      auth_psk = "..."       # when auth = "hmac"
-
-   A peer record MAY also record bus addresses, which are stored for
-   inspection only.  It MUST NOT be used as the descriptor of a remote
-   daemon: only the endpoint information is consumed, and the file is
-   never forwarded.
-
-   A program can inspect the recorded peer through its meta object; the
-   record exposes the address and the authentication method, and never a
-   secret [RFC0003].
-
-   An unreadable or malformed peer record is reported as a warning and
-   does not abort the run: the command falls back to the defaults.
-
-7.  The Daemon Command
-
-      octod [options]
-
-      Option               Argument       Meaning
-      +=====================+===============+==========================+
-      | Option              | Argument      | Meaning                  |
-      +=====================+===============+==========================+
-      | --config, -c        | path          | Descriptor to load.      |
-      +---------------------+---------------+--------------------------+
-      | --set               | KEY=VALUE     | Descriptor override;     |
-      +---------------------+---------------+--------------------------+
-      | --init-config       | OPTIONAL path | Write a copy of the      |
-      +---------------------+---------------+--------------------------+
-      | --mockify           | OPTIONAL path | Write a loopback-only    |
-      +---------------------+---------------+--------------------------+
-      | --list-transports   | none          | List the available       |
-      +---------------------+---------------+--------------------------+
-      | --host              | address       | Listening address,       |
-      +---------------------+---------------+--------------------------+
-      | --port              | port          | Listening port,          |
-      +---------------------+---------------+--------------------------+
-      | --verbose, -v       | none          | Verbose logging,         |
-      +---------------------+---------------+--------------------------+
-      | --color, --no-color | none          | Force or suppress colour |
-      +---------------------+---------------+--------------------------+
-
-   The descriptor is located by, in decreasing priority: --config; the
-   environment variable for the descriptor; a file named "octod.toml" in
-   the working directory; the same name below the user configuration
-   directory; and the packaged default.
-
-   An override takes the form "section.key=value" and builds nested
-   tables; a value is parsed as a TOML scalar when possible and is
-   otherwise taken as text.  When the descriptor declares several buses
-   and no legacy bus table, an override whose first component is the
-   legacy bus name is remapped onto the first bus.
-
-   The listening address and port are taken from the command line, then
-   from the environment, then from the descriptor, then from the
-   defaults.
-
-8.  Descriptor Utilities
-
-   Copying the packaged default descriptor writes to the given path, or
-   to "octod.toml" in the working directory when no path is given;
-   writing over the packaged default itself is refused.  The command
-   prints the path it wrote and exits without starting a daemon.
-
-   Producing a loopback-only variant rewrites every bus's transport to
-   the loopback transport.  When no path is given the output name is
-   derived from the input name.  A descriptor without any bus is
-   rejected.  On success the command prints the path it wrote; on
-   failure it prints an error and exits with a non-zero status.
-
-   Listing transports prints one line per available transport name with
-   a description of what it is and which configuration keys it accepts.
-
-9.  The Formatter Command
-
-   The formatter is octofmt binary, entered through "octo squeeze" or
-   its aliases "octo fmt" and "octo format".
+   The formatter is the "squeeze" verb of octo, also spelled "fmt" and
+   "format".
 
       octo squeeze [options] [file ...]
 
@@ -349,29 +247,37 @@ Table of Contents
       +-------------+--------------------------------------------------+
 
    Without -w and without --check the formatted text is written to the
-   standard output.  With --check each file that would change is
-   reported and the exit status becomes 1.  A file that cannot be read,
-   a source text that cannot be lexed and a formatting failure are
-   reported and produce the error status; processing stops at the first
-   such error.  The exit status is zero when nothing needed changing.
-   Because the tool reads and writes through the given paths, symbolic
-   links are followed and the target file is rewritten.
+   standard output.  With -w every file rewritten is reported.  With
+   --check each file that would change is reported and the exit status
+   becomes 1.  A file that cannot be read, a source text that cannot be
+   lexed and a formatting failure are reported and produce the error
+   status; a run reports every such file rather than stopping at the
+   first (Appendix C).  The exit status is zero when nothing needed
+   changing.  Because the tool reads and writes through the given
+   paths, symbolic links are followed and the target file is rewritten.
+   -w and --check exclude one another, and neither applies to standard
+   input.
 
-10. The Checker Command
+7.  The Checker Command
 
-   The checker is octolint binary, entered through "octo sift" or its
-   aliases "octo lint" and "octo check".  It reports problems in source
-   text without changing it, and exits non-zero when any problem is
-   found.
+   The checker is the "sift" verb of octo, also spelled "lint" and
+   "check".  It reports problems in source text without changing it, and
+   exits non-zero when any problem is found.
 
       octo sift [options] [file ...]
 
    With no file, or with "-", the standard input is read.  A file that
-   cannot be read, a source text that cannot be lexed and check failure
-   are reported and produce the error status; processing stops at the
-   first such error.  The exit status is zero when no problem is found.
+   cannot be read, a source text that cannot be lexed and a check
+   failure are reported and produce the error status; a run reports
+   every such file rather than stopping at the first (Appendix C).  The
+   exit status is zero when no problem is found.
 
-11. Formatting Rules
+   The default pass reads the source text alone.  With --strict the
+   checker also runs the compiler and reports everything a build would
+   refuse -- a field that shadows a core member, an import that resolves
+   nowhere -- so a run clean under --strict is what "octo swim" accepts.
+
+8.  Formatting Rules
 
    Formatting is lossless at the token level: every token's text is
    preserved, including string contents, numeric literal spellings, and
@@ -416,73 +322,67 @@ Table of Contents
    Applying the formatter to already formatted text MUST produce
    identical text.
 
-12. Launcher Scripts
-
-   Each tool has a launcher script that resolves its own location
-   through the symbolic-link chain before importing the implementation,
-   so that a launcher MAY be linked into a directory on the search path.
-   A launcher forwards all arguments and the exit status of the tool.
-
-13. Security Considerations
+9.  Security Considerations
 
    *  The interpreter evaluates the program text it is given and MAY
       read its environment.  Only trusted programs SHOULD be run.
-   *  Credentials given on the command line are visible to other
-      processes on the same host through the process table.  A peer
-      record file with restrictive permissions is preferable.
-   *  The descriptor-override option can change any descriptor value; it
-      is intended for development.
-   *  Utility subcommands write files.  They refuse to overwrite the
-      packaged default descriptor, and they report the path they wrote.
+   *  A credential given on the command line -- the token --auth-token
+      carries -- is visible to other processes on the same host through
+      the process table; prefer a channel that does not put it there.
+   *  --ca replaces the operating system's trust store for ocps://
+      [RFC0010].  A trust anchor broader than the deployment means to
+      trust makes every peer signed by it a peer, so the set SHOULD name
+      the fleet's own certificates.
+   *  Every verb writes files only where it is asked to, and reports the
+      path it wrote.
 
-14. IANA Considerations
+
+10. IANA Considerations
 
    This document registers no names with IANA.
 
-15. References
+11. References
 
-15.1. Normative References
-
-   [RFC0005]  Yang, S., "The OpenOcto Device Descriptor Format",
-             RFC 0005,
-             September 2026.
+11.1. Normative References
 
    [RFC0003]  Yang, S., "The OctoScript Language", RFC 0003,
-             September 2026.
+              September 2026.
 
-   [RFC0004]  Yang, S., "Octopus Control Protocol (OCP)", RFC 0004,
-             September 2026.
+   [RFC0010]  Yang, S., "OCP over Secure Transport", RFC 0010,
+              September 2026.
 
-   [TOML]  "TOML: Tom's Obvious, Minimal Language", version 1.0.
+   [IETF-RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119, March 1997.
 
-15.2. Informative References
+   [IETF-RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in
+              RFC 2119 Key Words", BCP 14, RFC 8174, May 2017.
 
-   [RFC0002]  Yang, S., "OpenOcto Ecosystem Architecture", RFC 0002,
-             September 2026.
+11.2. Informative References
 
-   [RFC0006]  Yang, S., "OpenOcto Device Daemon Behaviour", RFC 0006,
-             September 2026.
+   [RFC0013]  Yang, S., "The OctoScript Package Manager", RFC 0013,
+              September 2026.
+
 
 Appendix A.  Environment Variables
 
-      Variable               Read by              Meaning
-      +===================+=====================+======================+
-      | Variable          | Read by             | Meaning              |
-      +===================+=====================+======================+
-      | OCTO_DAEMON_PORT  | interpreter, daemon | Default port when    |
-      +-------------------+---------------------+----------------------+
-      | OCTOD_CONFIG      | daemon              | Descriptor path,     |
-      +-------------------+---------------------+----------------------+
-      | OCTOD_NO_LISTENER | daemon              | When set, the        |
-      +-------------------+---------------------+----------------------+
-      | TERM              | interpreter         | A missing or "dumb"  |
-      +-------------------+---------------------+----------------------+
-      | HOME              | interpreter         | Location of the      |
-      +-------------------+---------------------+----------------------+
-      | NO_COLOR, colour  | all tools           | Suppress colour.     |
-      +-------------------+---------------------+----------------------+
-      | settings          |                     |                      |
-      +-------------------+---------------------+----------------------+
+      Variable          Read by              Meaning
+      +=================+====================+=======================+
+      | Variable        | Read by            | Meaning               |
+      +=================+====================+=======================+
+      | OCTO_ENDPOINT   | swim, den, wake,   | The endpoint to use   |
+      |                 | jet                | when --endpoint is    |
+      |                 |                    | not given.            |
+      +-----------------+--------------------+-----------------------+
+      | NO_COLOR        | every verb         | Suppress colour.      |
+      +-----------------+--------------------+-----------------------+
+      | CLICOLOR, TERM  | every verb         | Colour settings used  |
+      |                 |                    | where NO_COLOR is     |
+      |                 |                    | unset.                |
+      +-----------------+--------------------+-----------------------+
+      | HOME            | den                | Where the history     |
+      |                 |                    | file is kept.         |
+      +-----------------+--------------------+-----------------------+
+
 
 Appendix B.  Exit Statuses
 
@@ -492,27 +392,34 @@ Appendix B.  Exit Statuses
       +========+=======================================================+
       | 0      | Success.                                              |
       +--------+-------------------------------------------------------+
-      | 1      | Program, script or formatting failure; interactive    |
+      | 1      | Program, script or formatting failure; a check that    |
+      |        | found a problem; a test run with a failed test; a      |
+      |        | file that --check would change.                        |
       +--------+-------------------------------------------------------+
-      | 2      | Usage error; unreadable or unlexable input for the    |
+      | 2      | Usage error; an input that cannot be read, or source   |
+      |        | text that cannot be lexed or parsed.                   |
       +--------+-------------------------------------------------------+
+
+   Where a run covers several operands, the status is the most severe one
+   it reached, so the result does not depend on the order of the
+   operands.
+
 
 Appendix C.  Conformance Notes
 
    This appendix is non-normative and records differences between this
    document and the reference implementation.
 
-   C.1. In the reference implementation the interpreter and daemon
-   launcher scripts do not propagate the tool's exit status, so the
-   process MAY exit with zero after a program failed.  The formatter's
-   launcher does propagate it.
+   C.1. The formatter and the checker do not stop at the first failing
+   operand: a run reports every file it could not read or could not
+   accept and then exits with the most severe status.  Sections 6 and 7
+   describe the report, not the stopping rule, so the difference is in
+   how many files one run covers.
 
-   C.2. The reference implementation stops processing a formatter run at
-   the first failing file rather than reporting every failing file.
+   C.2. The reference implementation's --strict check runs the same
+   compiler a build runs, so it reports an import that resolves nowhere.
+   The default pass reads the source text alone and does not.
 
-   C.3. The interpreter's port default is also taken from an environment
-   variable in the daemon; the two MUST agree for a locally started
-   daemon to be found.
 
 Authors' Addresses
 
