@@ -1006,7 +1006,8 @@ Table of Contents
       let tail = [3, 4]
       let all = [1, 2, ...tail]          # [1, 2, 3, 4]
       fn add(a, b, c, d) { a + b + c + d }
-      add(1, ...all)                     # 1 + 2 + 3 + 4
+      add(...all)                        # 1 + 2 + 3 + 4
+      add(1, 2, ...tail)                 # the same call, mixed with values
 
    What may be spread is what can be iterated (Section 6.1.5): a list, a
    tuple, a set or a range.  A dictionary is not spread, because its

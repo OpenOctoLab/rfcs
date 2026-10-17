@@ -193,11 +193,10 @@ Table of Contents
    Compression is offered unless --no-compress turns the offer off, and
    an algorithm is used only when the peer agrees one.
 
-   Three further options tune the interpreter and change nothing a
+   Two further options tune the interpreter and change nothing a
    program can observe: --no-warn suppresses the advisory lint pass that
-   precedes a run, --locate records per-op source spans so a runtime
-   error can show its line, and --jit selects the native backend in a
-   binary built with it.
+   precedes a run, and --locate records per-op source spans so a runtime
+   error can show its line.
 
    The exit status is zero on success; non-zero when a program file is
    missing, when lexing, parsing or evaluation fails, and when a usage
