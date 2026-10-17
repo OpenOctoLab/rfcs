@@ -1,0 +1,396 @@
+OpenOcto Standards Group (OOSG)                                  S. Yang
+Request for Comments: 0014                                          HFUT
+Category: Standards Track                                October 2026
+
+
+                  OCP over Bluetooth Low Energy (BLE)
+
+
+Abstract
+
+   This document specifies how the Octopus Control Protocol (OCP) is
+   carried over Bluetooth Low Energy (BLE).  The binding is a GATT
+   service with two characteristics and a one-octet fragment header;
+   the OCP protocol above it -- the frame format, the HELLO/WELCOME
+   handshake, calls, publish/subscribe, tunnels, compression and
+   authentication -- is unchanged from [RFC0004].  BLE is a reliable,
+   ordered transport, so no OCP retransmission or datagram mode is
+   used.  The binding adds no OCP-layer encryption: confidentiality
+   and integrity belong to the BLE link layer, as described in
+   Section 9.
+
+Status of This Memo
+
+   This document is a Standards Track document of the OpenOcto
+   Standards (OOS) series.
+
+   This document is a product of the OpenOcto Standards Group (OOSG).
+   It represents the consensus of the OOSG community, has received
+   public review and has been approved for publication.  It is not an
+   Internet Standard and is not a candidate for any level of Internet
+   Standard.  Distribution of this document is unlimited.
+
+   Information about the current status of this document, any errata
+   and how to provide feedback on it may be obtained from the OOSG.
+
+Copyright Notice
+
+   Copyright (c) 2026 OOSG and the persons identified as the document
+   authors.  All rights reserved.
+
+   This document is distributed under the MIT License: permission is
+   granted, free of charge, to use, copy, modify, merge, publish,
+   distribute, sublicense and/or sell copies of this document, subject
+   to the inclusion of the above notice in all such copies.  The
+   document is provided without warranty of any kind.  Code Components
+   extracted from this document are subject to the same terms.
+
+Table of Contents
+
+   1.  Introduction
+   2.  Conventions
+   3.  The Model
+   4.  Device Identification and URI Scheme
+   5.  The GATT Service
+   6.  Fragmentation
+   7.  Session Establishment and Lifecycle
+   8.  Reliability, Ordering and Flow Control
+   9.  Security Considerations
+   10. Error Mapping
+   11. IANA Considerations
+   12. References
+
+1.  Introduction
+
+   OCP [RFC0004] makes no assumption about the octet transport: a
+   binding only has to provide delimited frames and to state whether
+   the transport is reliable ([RFC0004], Section 7.3).  This document
+   gives it a BLE binding.
+
+   BLE is attractive for robots and bench equipment because it needs no
+   network infrastructure and because the radio link already carries
+   its own link-layer security.  This binding therefore leaves all
+   confidentiality, integrity and authentication of the link to BLE.
+   It does not use the frame-layer security of [RFC0009], and it is not
+   a secure transport in the sense of [RFC0010].  A program selects it
+   with the "ocpb" URI scheme and otherwise sees the ordinary OCP
+   session of [RFC0004].
+
+   The key words MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, SHOULD,
+   SHOULD NOT, RECOMMENDED, NOT RECOMMENDED, MAY and OPTIONAL in this
+   document are to be interpreted as described in [RFC0001], Section 4.
+
+2.  Conventions
+
+   "ATT" is the Attribute Protocol, "GATT" the Generic Attribute
+   Profile, "ATT_MTU" the negotiated Attribute Protocol maximum
+   transmission unit, and "central" and "peripheral" are the GATT roles
+   of [BLUETOOTH].  "Initiator" and "responder" are the OCP roles of
+   [RFC0004].
+
+   An "OCP frame" is the complete frame of [RFC0004], Section 3.1:
+   header, payload and optional trailer.  A "GATT value" is the value of
+   one characteristic notification or write.  A "fragment" is one GATT
+   value carrying part of one OCP frame.
+
+3.  The Model
+
+   A BLE GATT connection carries exactly one OCP session.  It is one
+   peer pair, exactly as one TCP connection is one peer pair in
+   [RFC0004], Section 7.1.  There is no connection or session identifier
+   in the binding and no multiplexing: a peer that needs several
+   sessions opens several BLE connections, or uses tunnels for
+   sub-streams.
+
+   The GATT central is the OCP initiator: it connects, discovers the
+   service, subscribes and sends HELLO.  The GATT peripheral is the OCP
+   responder: it advertises the service and answers HELLO with WELCOME.
+   This is a mapping of the usual client/server roles and not a
+   restriction on which product has which role: a phone MAY be the
+   central to a robot peripheral, and a device that initiates an OCP
+   session to another device follows the same rule.
+
+   The transport is a reliable, ordered stream of octets after
+   reassembly (Section 6).  It is therefore bound by the stream rules of
+   [RFC0004], Section 7.1: frames are written back to back with no
+   padding, and a receiver parses by the length in the frame header.
+   The datagram rules of [RFC0004], Section 7.2 do not apply: the
+   F_ACK flag, ACK frames, datagram retransmission and the 1200-octet
+   datagram budget are not used on this binding.
+
+4.  Device Identification and URI Scheme
+
+   The URI scheme of this binding is
+
+      ocpb://<device>
+
+   where <device> is either a Bluetooth device address in the form
+   AA:BB:CC:DD:EE:FF (hexadecimal, case-insensitive) or a local name
+   advertised by the peripheral.  There is no port: BLE has no
+   transport port, and the RECOMMENDED ports of [RFC0004] and
+   [RFC0010] do not apply.
+
+   The URI scheme is used by configuration files, tools and logs, and by
+   the host language's connect() ([RFC0003], Section 9.2).  It is a
+   configuration convention, not part of the wire protocol: neither
+   endpoint parses it at run time.
+
+   A peripheral MUST advertise the OCP service UUID of Section 5 in its
+   advertising data or scan response, so that a central can filter its
+   scan by service.  A central MAY also match a device by address or
+   local name; a deployment SHOULD prefer the address or a deployment-
+   assigned name over a generic advertised name shared by many devices.
+
+   BLE privacy addresses rotate.  A deployment that identifies devices
+   by address SHOULD use a stable identity address, or resolve the
+   current address out of band; a rotating address is not a stable
+   identity and an OCP authentication exchange (Section 9) is what
+   establishes identity when it matters.
+
+5.  The GATT Service
+
+   The binding defines one primary service and two characteristics.
+
+   +====================+===============================================+
+   |Item                |UUID                                           |
+   +====================+===============================================+
+   |OCP service         |6f63702d-626c-6500-8000-000000000000           |
+   +--------------------+-----------------------------------------------+
+   |OCP -> Device       |6f63702d-626c-6500-8000-000000000001           |
+   |(host writes)       |                                               |
+   +--------------------+-----------------------------------------------+
+   |Device -> OCP       |6f63702d-626c-6500-8000-000000000002           |
+   |(device notifies)   |                                               |
+   +--------------------+-----------------------------------------------+
+
+                       Table 1: GATT UUIDs
+
+   The OCP -> Device characteristic is written by the central and read by
+   the peripheral.  It MUST support GATT Write (write with response).
+   It MAY also support Write Without Response; a central MUST NOT use
+   that weaker form for OCP (Section 8).
+
+   The Device -> OCP characteristic is sent by the peripheral and
+   received by the central.  It MUST support GATT Notify, and it MAY
+   also support Indicate.  A central MUST subscribe to it before it
+   sends HELLO, and MUST accept both notifications and indications.  A
+   peripheral MAY use indications instead of notifications when its
+   stack or the link requires an acknowledged ATT transaction; the OCP
+   octets are identical either way.
+
+   No characteristic descriptor is required.  In particular the binding
+   does not use the Client Characteristic Configuration Descriptor
+   directly: GATT Subscribe and Unsubscribe operations manage it.
+
+   The service can be discovered by UUID alone; a central does not need
+   to read a version characteristic or exchange an OCP-level capability
+   before HELLO.  A peripheral that exposes an older version of the
+   service keeps the UUIDs of this document; a changed wire format
+   would need a new revision of this document.
+
+6.  Fragmentation
+
+   GATT delivers values whose size is bounded by ATT_MTU.  The maximum
+   value length of a characteristic operation is ATT_MTU - 3 octets
+   (one octet of opcode and two octets of attribute handle are outside
+   the value).  One octet of every value is the fragment header, so one
+   fragment carries at most ATT_MTU - 4 octets of the OCP stream.
+
+      +--------+------------------------------------------------------+
+      | Flags  | OCP octets                                           |
+      | 1 octet| up to ATT_MTU - 4 octets                             |
+      +--------+------------------------------------------------------+
+
+                       Figure 1: Fragment Format
+
+   Flags:
+
+      bit 0 (0x01)  FIRST: this value is the first fragment of an OCP
+                    frame.
+
+      bit 1 (0x02)  LAST: this value is the last fragment of an OCP
+                    frame.
+
+      bits 2-7       Reserved.  A sender MUST set them to zero and a
+                    receiver MUST reject a value in which any is set.
+
+   A frame that fits one value has both FIRST and LAST set in its only
+   fragment.  A frame that spans several values has FIRST on the first,
+   LAST on the last, and neither on the middle fragments.  One value
+   carries exactly one fragment of exactly one frame; a sender MUST NOT
+   mix two frames in one value and MUST NOT put a frame boundary inside
+   a value.
+
+   The fragments of a frame are sent in order.  Because the BLE link
+   layer is reliable and ordered (Section 8), a receiver treats a
+   missing or out-of-order fragment as a broken transport, not as a
+   lost frame.  It MUST close the connection and fail the OCP session;
+   it MUST NOT attempt an OCP-level retransmission.
+
+   A receiver assembles the OCP octets of the fragments between FIRST
+   and LAST and then parses the frame exactly as [RFC0004] requires.
+   The OCP frame header's declared length is authoritative: a fragment
+   group whose assembled octets do not contain exactly the frame the
+   header declares is malformed.  A frame larger than the receiver's
+   maximum is an error and the connection is closed; implementations
+   SHOULD use the OCP max_payload negotiation of [RFC0004] to keep
+   frames within their capacity, but fragmentation makes the binding
+   independent of ATT_MTU.
+
+   A sender SHOULD fill every non-final fragment to the full value
+   capacity (ATT_MTU - 3 octets) and SHOULD use one GATT write or
+   notification per fragment, so that a small control frame is not
+   delayed behind a tunnel's fragments.  A frame MAY be fragmented even
+   when it would fit one value; the FIRST/LAST bits, not the size,
+   define the grouping.
+
+   Worked example: ATT_MTU 247, value capacity 244, fragment data
+   capacity 243.  A 500-octet frame is three fragments: FIRST with 243
+   octets, a middle fragment with 243 octets, and LAST with 14 octets.
+
+7.  Session Establishment and Lifecycle
+
+   The central:
+
+   1.  scans for the service UUID (or for a known address/name);
+   2.  connects and discovers the service and its two characteristics;
+   3.  subscribes to the Device -> OCP characteristic;
+   4.  sends OCP HELLO on the OCP -> Device characteristic, fragmented
+       as Section 6 requires; and
+   5.  pumps the session as [RFC0004], Section 6.1 specifies.
+
+   The peripheral advertises the service, accepts a connection,
+   subscribes nothing (it is the notifier), and answers HELLO with
+   WELCOME.  The OCP handshake is the only handshake: there is no
+   transport-level negotiation, no ALPN analogue, and no BLE-level
+   "OCP version" exchange.  A peer that cannot speak this binding simply
+   does not expose the service, and the central does not send HELLO to
+   it.
+
+   A BLE disconnection ends the OCP session.  The same rule as a closed
+   TCP stream applies: the session is dead, outstanding calls fail with
+   SessionExpired (or the mapped transport error), and a later
+   connect() opens a new session with a new HELLO.  There is no
+   resumption and no implicit reconnection at the binding layer; the
+   host language MAY make the reconnection decision of [RFC0003],
+   Section 9.2.
+
+   The BLE ATT_MTU and the OCP max_payload are independent: ATT_MTU
+   bounds a fragment, and OCP max_payload bounds a frame's payload as
+   [RFC0004], Section 3.3 and [RFC0011], Section 10 specify.
+   Fragmentation lets any legal OCP frame run over any legal ATT_MTU.
+   A responder that already has a small OCP max_payload (an Air peer,
+   for example) keeps it unchanged.
+
+8.  Reliability, Ordering and Flow Control
+
+   The BLE link layer delivers data packets reliably and in order.  This
+   binding therefore uses OCP's stream mode, not its datagram mode:
+   ACK frames and F_ACK are not used, and the session is not configured
+   for datagram retransmission.
+
+   The central uses GATT Write (write with response) for every fragment
+   it sends.  The ATT response is the sender's flow-control credit: at
+   most one write is outstanding, and a failed write ends the session.
+   A central MUST NOT use Write Without Response for OCP.
+
+   The peripheral sends one notification or indication per fragment.
+   ATT's notification flow control and the BLE controller's buffers
+   bound how far it may run ahead.  A peripheral MUST NOT drop an OCP
+   fragment while a central is subscribed: a stack that cannot queue a
+   notification uses an indication, which is acknowledged, or closes the
+   connection.  A central MUST keep pumping; one that stops reading
+   eventually causes the peripheral's queue to fill, and the peripheral
+   MAY then disconnect rather than lose a fragment.
+
+   The binding adds no sequence number and no acknowledgement of its
+   own.  A fragment lost in the link layer is a link failure, surfaced
+   as a disconnected session; it is never repaired by OCP.
+
+9.  Security Considerations
+
+   This binding provides no OCP-layer confidentiality, integrity or
+   authentication.  It MUST NOT use the frame-layer security of
+   [RFC0009] (F_ENC, F_ITG, F_ZTR, the extended header or a frame
+   secret), and it is not a secure transport under [RFC0010]: there is
+   no TLS, DTLS or QUIC underneath, no "ocp/1" ALPN and no exporter for
+   the "tls-exporter" channel binding.  A program that asks connect()
+   for either on ocpb:// is refused rather than silently downgraded.
+
+   Confidentiality and integrity, when required, are the BLE link's:
+   the deployment SHOULD use an encrypted and authenticated link (LE
+   Security Connections pairing, or an equivalent link-layer policy)
+   and SHOULD require it before exposing the OCP service to writes.
+   The binding cannot verify that policy on the wire; it is a
+   deployment responsibility, and an endpoint that needs a proof SHOULD
+   use OCP authentication (the "token" method of [RFC0004], Section
+   6.2) in addition to, never instead of, link security.  The "hmac"
+   method is not used on this binding because it also yields the
+   keying material of [RFC0009], which Section 9 above excludes.
+
+   An address or local name is an identifier, not an identity: a nearby
+   device can advertise the same name and a privacy address can rotate.
+   The security of a deployment therefore comes from BLE pairing and
+   link security and, when a peer must be identified, from an OCP
+   authentication exchange -- not from the text in the URI.
+
+   The BLE service exposes no unauthenticated administrative surface:
+   its only writable characteristic carries OCP frames, and every OCP
+   rule of [RFC0004] applies to them.
+
+10. Error Mapping
+
+   A GATT error, a disconnected link, a malformed fragment or a
+   reassembly failure is a transport failure, not an OCP protocol
+   error.  The host closes the session and reports the failure the way
+   it reports a closed TCP stream: outstanding calls fail with
+   SessionExpired or the host's transport-error kind, and a later
+   connect() starts a new session.
+
+   This binding defines no new OCP error codes.  The OCP codes of
+   [RFC0004], Appendix A remain the only errors on the wire; an ERROR
+   frame is carried and processed exactly as on any other transport.
+
+11. IANA Considerations
+
+   This document requests no IANA action.  The 128-bit UUIDs of
+   Section 5 are assigned by the deployment or the product; they are
+   not IANA registrations.  The "ocpb" URI scheme is a configuration
+   convention and is not registered with IANA.  There is no port to
+   assign.
+
+12. References
+
+12.1.  Normative References
+
+   [RFC0001]  Yang, S., "OpenOcto Standards Series (OOS): Index and
+              Document Conventions", RFC 0001, September 2026.
+
+   [RFC0003]  Yang, S., "The OctoScript Language", RFC 0003,
+              September 2026.
+
+   [RFC0004]  Yang, S., "Octopus Control Protocol (OCP)", RFC 0004,
+              September 2026.
+
+   [RFC0009]  Yang, S., "OCP with Frame-Level Security", RFC 0009,
+              September 2026.
+
+   [RFC0010]  Yang, S., "OCP over Secure Transport", RFC 0010,
+              September 2026.
+
+   [RFC0011]  Yang, S., "OCP Air: an OCP Subset for MCUs", RFC 0011,
+              September 2026.
+
+   [BLUETOOTH] Bluetooth SIG, "Bluetooth Core Specification", current
+              revision, https://www.bluetooth.com/specifications/.
+
+12.2.  Informative References
+
+   [RFC0007]  Yang, S., "OpenOcto Command-Line Tools and Interfaces",
+              RFC 0007, September 2026.
+
+Authors' Addresses
+
+   S. Yang
+   HFUT
+   Email: (see the OOSG)

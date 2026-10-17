@@ -120,30 +120,42 @@ Table of Contents
 
 2.  Document Series
 
-   +=====+=================================================+==========+
-   |RFC  |Title                                            |Category  |
-   +=====+=================================================+==========+
-   |0002 |OpenOcto Ecosystem Architecture                  |Standards |
-   +-----+-------------------------------------------------+----------+
-   |0003 |The OctoScript Language                          |Standards |
-   +-----+-------------------------------------------------+----------+
-   |0004 |Octopus Control Protocol (OCP)                   |Standards |
-   +-----+-------------------------------------------------+----------+
-   |0005 |The OpenOcto Device Descriptor Format            |Standards |
-   +-----+-------------------------------------------------+----------+
-   |0006 |OpenOcto Device Daemon Behaviour                 |Standards |
-   +-----+-------------------------------------------------+----------+
-   |0007 |OpenOcto Command-Line Tools and Interfaces       |Standards |
-   +-----+-------------------------------------------------+----------+
-   |0008 |OpenOcto Error Taxonomy and Diagnostics          |Standards |
-   +-----+-------------------------------------------------+----------+
+   +======+===================================================+===============+
+   | RFC  | Title                                             | Category      |
+   +======+===================================================+===============+
+   | 0002 | OpenOcto Ecosystem Architecture                   | Standards     |
+   +------+---------------------------------------------------+---------------+
+   | 0003 | The OctoScript Language                           | Standards     |
+   +------+---------------------------------------------------+---------------+
+   | 0004 | Octopus Control Protocol (OCP)                    | Standards     |
+   +------+---------------------------------------------------+---------------+
+   | 0005 | The OpenOcto Device Descriptor Format             | Standards     |
+   +------+---------------------------------------------------+---------------+
+   | 0006 | OpenOcto Device Daemon Behaviour                  | Standards     |
+   +------+---------------------------------------------------+---------------+
+   | 0007 | OpenOcto Command-Line Tools and Interfaces        | Standards     |
+   +------+---------------------------------------------------+---------------+
+   | 0008 | OpenOcto Error Taxonomy and Diagnostics           | Standards     |
+   +------+---------------------------------------------------+---------------+
+   | 0009 | OCP with Frame-Level Security                     | Standards     |
+   +------+---------------------------------------------------+---------------+
+   | 0010 | OCP over Secure Transport                         | Standards     |
+   +------+---------------------------------------------------+---------------+
+   | 0011 | OCP Air: an OCP Subset for MCUs                   | Informational |
+   +------+---------------------------------------------------+---------------+
+   | 0012 | Standard Library Extensions: the @octo Publisher  | Informational |
+   +------+---------------------------------------------------+---------------+
+   | 0013 | The OctoScript Package Manager                    | Informational |
+   +------+---------------------------------------------------+---------------+
+   | 0014 | OCP over Bluetooth Low Energy (BLE)               | Standards     |
+   +======+===================================================+===============+
 
                        Table 1: Document Series
 
-   The series is numbered RFC 0001 to RFC 0008; the number is the
+   The series is numbered RFC 0001 to RFC 0014; the number is the
    position of the document in the reading order.  RFC 0001 is this
-   index; RFC 0002 to RFC 0008 specify the areas of the ecosystem and
-   are listed in Table 2 in reading order.  Each document is a single
+   index; RFC 0002 to RFC 0014 specify the areas of the ecosystem and
+   are listed in Table 1 in reading order.  Each document is a single
    plain-text file in this directory, laid out like this document and
    named "OpenOcto-RFC<number>.txt", where <number> is the four-digit
    zero-padded position in the series (for example, the language
